@@ -1,0 +1,27 @@
+# Lifted from yggi/music-commons ci-template.yml @ 348d1a5: its verify command kept, its heavy input and step left out
+# (webmidi has no heavy suite: every test is in `npm run verify`).
+# A witness, not the gate: the gate is `npm run verify` in the pre-push hook, which costs no Actions minutes.
+name: ci
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  # One job: each job is billed rounded up to a whole minute, so the steps share one.
+  verify:
+    # The switch (yggi/music-commons CI-BUDGET.md): a pull request runs it only where Actions is free (a public
+    # repository) or turned on (the repository variable CI = on); elsewhere it is skipped before it asks for a runner.
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && (!github.event.repository.private || vars.CI == 'on'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run verify # the project's one gate

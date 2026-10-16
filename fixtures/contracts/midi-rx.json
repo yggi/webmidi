@@ -1,0 +1,155 @@
+{
+  "lifted": "Lifted from yggi/music-commons contracts/midi-rx/vectors.json @ 348d1a5",
+  "version": 1,
+  "title": "MIDI RX conformance vectors",
+  "about": [
+    "A pure-data contract, not shared code. Each vector is a byte stream and the",
+    "ordered list of messages a conformant receiver must deliver from it. Both",
+    "flow3r-aeiou and play-aeiou run this table against their OWN parser; neither",
+    "imports the other's. That is the boundary rule (values, never messages) and",
+    "it is why this is JSON rather than a Python module.",
+    "",
+    "It exists because all four MIDI defects found on 2026-08-27 -- two on each",
+    "side, see docs/handshake/midi-comparison.md -- would have been caught by it,",
+    "and a sync contract you cannot test is a wish. The running-status and",
+    "realtime-interleave vectors are exactly the two that adafruit_midi 1.6.0",
+    "fails, so a play-aeiou run of this table is expected to go RED until that",
+    "library is patched or pre-filtered. That red is the point: it is the interop",
+    "blocker made reproducible instead of described."
+  ],
+  "conventions": {
+    "bytes": "The RX stream, as integers 0..255, in wire order.",
+    "channel": "0-based (wire nibble). Channel 1 on a keyboard is 0 here.",
+    "expect": "Every message the stream completes, in order. A receiver that delivers fewer has LOST messages; one that delivers more has invented them.",
+    "note": "Absent fields are not asserted -- a vector constrains what it names."
+  },
+  "vectors": [
+    {
+      "name": "note_on",
+      "why": "The baseline. Nothing else means anything if this fails.",
+      "bytes": [144, 60, 100],
+      "expect": [{"type": "note_on", "channel": 0, "note": 60, "velocity": 100}]
+    },
+    {
+      "name": "note_off",
+      "why": "Release velocity is carried, not discarded -- it was discarded here until 2026-08-27.",
+      "bytes": [128, 60, 64],
+      "expect": [{"type": "note_off", "channel": 0, "note": 60, "velocity": 64}]
+    },
+    {
+      "name": "note_on_velocity_zero_is_still_a_note_on_at_the_wire",
+      "why": "The zero-velocity note-off convention is the CONSUMER's job. A parser that silently rewrites it to note_off makes the two indistinguishable, and a sender that means it cannot say so.",
+      "bytes": [144, 60, 0],
+      "expect": [{"type": "note_on", "channel": 0, "note": 60, "velocity": 0}]
+    },
+    {
+      "name": "note_below_the_piano_range",
+      "why": "Notes run 0-127; NOTE_CODE covered only 21-127, so note 0 raised KeyError out of poll() and crashed the reactor. play-aeiou's ghost note is NoteOn(0, 0), so this was reachable across the cable.",
+      "bytes": [144, 0, 1],
+      "expect": [{"type": "note_on", "channel": 0, "note": 0, "velocity": 1}]
+    },
+    {
+      "name": "channel_is_the_low_nibble",
+      "why": "A receiver that ignores the nibble answers every channel.",
+      "bytes": [153, 38, 90],
+      "expect": [{"type": "note_on", "channel": 9, "note": 38, "velocity": 90}]
+    },
+    {
+      "name": "two_control_changes_in_one_drain",
+      "why": "DEFECT 1 (ours). A single-slot store overwrites the first CC in place -- it is lost, not delayed. Pass poll(on_message) so each message is handled as it completes.",
+      "bytes": [176, 1, 20, 176, 74, 90],
+      "expect": [
+        {"type": "control_change", "channel": 0, "code": 1, "value": 20},
+        {"type": "control_change", "channel": 0, "code": 74, "value": 90}
+      ]
+    },
+    {
+      "name": "three_note_chord_in_one_drain",
+      "why": "DEFECT 1 again, and worse: a NoteStack that sees only the last note drops the gate on its release while two keys are still held.",
+      "bytes": [144, 60, 100, 144, 64, 100, 144, 67, 100],
+      "expect": [
+        {"type": "note_on", "channel": 0, "note": 60, "velocity": 100},
+        {"type": "note_on", "channel": 0, "note": 64, "velocity": 100},
+        {"type": "note_on", "channel": 0, "note": 67, "velocity": 100}
+      ]
+    },
+    {
+      "name": "running_status",
+      "why": "DEFECT 2 (adafruit_midi 1.6.0). The status byte is sent once and omitted on the following messages. Not optional: it is what keyboards do under load, and skipping it drops 4 bytes and 2 notes.",
+      "bytes": [144, 60, 100, 62, 100, 64, 100],
+      "expect": [
+        {"type": "note_on", "channel": 0, "note": 60, "velocity": 100},
+        {"type": "note_on", "channel": 0, "note": 62, "velocity": 100},
+        {"type": "note_on", "channel": 0, "note": 64, "velocity": 100}
+      ]
+    },
+    {
+      "name": "realtime_byte_inside_a_message",
+      "why": "DEFECT 3 (adafruit_midi 1.6.0), and the one that blocks sync.md: a clock tick may legally arrive BETWEEN the data bytes of another message. It must pass through without disturbing it. adafruit_midi destroys the host message AND loses the clock -- and it fires exactly when a transport is running.",
+      "bytes": [144, 60, 248, 100],
+      "expect": [
+        {"type": "timing_clock"},
+        {"type": "note_on", "channel": 0, "note": 60, "velocity": 100}
+      ]
+    },
+    {
+      "name": "active_sensing_inside_a_message",
+      "why": "Same rule, the other common real-time byte. Many keyboards send 0xFE continuously while idle.",
+      "bytes": [176, 74, 254, 90],
+      "expect": [
+        {"type": "active_sensing"},
+        {"type": "control_change", "channel": 0, "code": 74, "value": 90}
+      ]
+    },
+    {
+      "name": "pitch_bend_centre",
+      "why": "14-bit, LSB first. Centre is 8192, not 0 -- a receiver that concatenates the bytes the other way round bends the wrong way.",
+      "bytes": [224, 0, 64],
+      "expect": [{"type": "pitch_bend", "channel": 0, "bend": 8192}]
+    },
+    {
+      "name": "pitch_bend_full_up",
+      "why": "Both bytes at maximum is 16383, one below a clean power of two.",
+      "bytes": [224, 127, 127],
+      "expect": [{"type": "pitch_bend", "channel": 0, "bend": 16383}]
+    },
+    {
+      "name": "transport_start_then_clock_then_stop",
+      "why": "The sync contract's own alphabet. These are single-byte messages with no data and no channel.",
+      "bytes": [250, 248, 248, 252],
+      "expect": [
+        {"type": "start"},
+        {"type": "timing_clock"},
+        {"type": "timing_clock"},
+        {"type": "stop"}
+      ]
+    },
+    {
+      "name": "channel_aftertouch",
+      "why": "One data byte, not two -- a parser expecting two swallows the next status byte.",
+      "bytes": [208, 77, 144, 60, 100],
+      "expect": [
+        {"type": "channel_aftertouch", "channel": 0, "pressure": 77},
+        {"type": "note_on", "channel": 0, "note": 60, "velocity": 100}
+      ]
+    },
+    {
+      "name": "program_change",
+      "why": "The other one-data-byte message.",
+      "bytes": [192, 5],
+      "expect": [{"type": "program_change", "channel": 0, "program": 5}]
+    },
+    {
+      "name": "a_truncated_message_completes_nothing",
+      "why": "A cable pulled mid-message must not deliver a half-parsed note. Silence is the correct output.",
+      "bytes": [144, 60],
+      "expect": []
+    },
+    {
+      "name": "a_new_status_abandons_the_unfinished_one",
+      "why": "A status byte arriving where a data byte was expected means the previous message will never complete. Resync on it rather than folding it in as data.",
+      "bytes": [144, 60, 176, 74, 90],
+      "expect": [{"type": "control_change", "channel": 0, "code": 74, "value": 90}]
+    }
+  ]
+}

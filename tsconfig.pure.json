@@ -1,0 +1,9 @@
+{
+  // Lifted from yggi/cells tsconfig.pure.json @ 41ef16b. The purity gate: `core` typechecks with no host at all (no DOM,
+  // no Web MIDI, no Node, no timers), so it runs in a browser, a worker, node or a device's JavaScript alike; the host
+  // globals it may use are declared in src/core/host.d.ts. Tests are left out; the fakes they share are held to it too.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": [] },
+  "include": ["src/core/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}
