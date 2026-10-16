@@ -12,3 +12,4 @@ export * from './bend';
 export * from './rotation';
 export * from './out';
 export * from './clock-out';
+export * from './sysex';

@@ -1,6 +1,6 @@
 // Lifted from yggi/cell-studio src/midi/fixtures.ts @ 3813fbb (lifted there from yggi/jambot apps/web/src/midi/access.test.ts
 // @ 8cdb6b8): Web MIDI without a device. Its `installMidi` and `uninstallMidi` (a fake `navigator.requestMIDIAccess`)
-// come with `web`; `fakeConnection` is new, the adapter's part played over the same fake ports.
+// are `web`'s (web/fixtures.ts); `fakeConnection` is new, the adapter's part played over the same fake ports.
 import type { PortAccess } from './port';
 
 type Handler = ((event: { data: Uint8Array; timeStamp: number }) => void) | null;

@@ -16,3 +16,5 @@ export * from './bend';
 export * from './rotation';
 export * from './out';
 export * from './clock-out';
+// SysEx: whole messages out of a byte stream, as a device's protocol reads them.
+export * from './sysex';

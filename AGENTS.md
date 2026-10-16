@@ -7,22 +7,22 @@ webmidi is the family's MIDI layer, shared by [Cell studio](https://github.com/y
 Three, each a subpath export, the lower never importing the higher:
 
 - **`core`** (`src/core/`, `@yggi/webmidi/core`): pure. No DOM, no Web MIDI, no timers: ports and clocks come in as interfaces (`MidiPort`, `PortAccess`, `OutputClock`), and the only host global is the one in `src/core/host.d.ts` (`performance`).
-- **`web`** (`src/web/`, not yet written): the Web MIDI adapter (`requestMIDIAccess`, `onmidimessage`, the permission query). It may touch the browser.
+- **`web`** (`src/web/`, `@yggi/webmidi/web`): the Web MIDI adapter: access asked for (SysEx too), the permission query, the ports, an input listened to, a SysEx transport. It may touch the browser (the DOM's types, Web MIDI's), and nothing of Node's; it imports core and no package: a device's protocol (ep133-sysex's `Transport`) is met by its shape.
 - **`ui`** (`src/ui/`, not yet written): shared Svelte 5 components, shipped as source.
 
 **Nothing here imports `@yggi/cells` or a frontend, and cells never imports webmidi.** The language keeps its own MIDI aspects, MIDI files and *when* a piece's clock ticks (`mainMeter`, `ticksBetween`); webmidi takes the wire. A frontend hands core its own events: a note as `OutNote` (time, duration, key, velocity, channel, a drum flag, cents and bends), the clock as the times of its ticks.
 
 ## Tools
 
-- `npm run verify`: everything a push needs: `check` (the purity gate and the full typecheck), `lint`, `format:check`, `knip`, and the tests. A checkout with no `node_modules` (a fresh git worktree) is installed first (`tools/install-first.mjs`). A pre-push hook runs it (`.githooks/pre-push`; the first `npm run verify` in a clone points git at it, and so does the session-start hook: a `prepare` script would break a frontend's install, `tools/hooks.test.ts`) and blocks a push that fails, or one with an untracked file that verify would see and the commit lacks, keeping its whole output in the git directory (`webmidi-verify-failed.log`); a run that passes stamps its tree there (`tools/verified.sh`), so the push of that tree doesn't run it again, and the hook prints the count of tests that passed. Never bypass it with `--no-verify`.
+- `npm run verify`: everything a push needs: `check` (the purity gate, the web gate and the full typecheck), `lint`, `format:check`, `knip`, and the tests. A checkout with no `node_modules` (a fresh git worktree) is installed first (`tools/install-first.mjs`). A pre-push hook runs it (`.githooks/pre-push`; the first `npm run verify` in a clone points git at it, and so does the session-start hook: a `prepare` script would break a frontend's install, `tools/hooks.test.ts`) and blocks a push that fails, or one with an untracked file that verify would see and the commit lacks, keeping its whole output in the git directory (`webmidi-verify-failed.log`); a run that passes stamps its tree there (`tools/verified.sh`), so the push of that tree doesn't run it again, and the hook prints the count of tests that passed. Never bypass it with `--no-verify`.
 - `npm run types`: rewrites `types/` (the declarations a frontend typechecks against, through the `types` condition of `exports`) from `src/`; a test fails when it is stale. Run it with any change to an exported signature.
 - One file while iterating: `npx vitest run src/core/out.test.ts`.
 
 ## Rules
 
 Enforced (a failing check says so):
-- **Pure.** `src/core/` typechecks with no host types at all (`tsconfig.pure.json`); a host global beyond `src/core/host.d.ts` fails it.
-- **Layered.** `tools/layering.ts`: nothing imports the language or a frontend, `core` imports no package and nothing above it, a relative import never leaves `src/`.
+- **Pure.** `src/core/` typechecks with no host types at all (`tsconfig.pure.json`); a host global beyond `src/core/host.d.ts` fails it. `src/web/` typechecks with the browser's and not Node's (`tsconfig.web.json`).
+- **Layered.** `tools/layering.ts`: nothing imports the language or a frontend, `core` and `web` import no package and nothing above them, a relative import never leaves `src/`.
 - The hub's `midi-rx` vectors run against core's parser (`src/contracts.test.ts`), each passing or recorded with its reason.
 - `docs/INDEX.md` lists every page, relative links resolve, every decision is in `docs/MEMORY.md`'s list; the boot reading (this file and `docs/MEMORY.md`) stays under 16 KB (`tools/reading-list.ts`).
 - Prettier owns whitespace; ESLint has no errors; knip finds no unused files, exports or dependencies.

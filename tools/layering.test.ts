@@ -11,7 +11,7 @@ const sources = (dir: string): string[] =>
 const file = (path: string, ...specs: string[]) => ({ path, text: specs.map((s) => `import { x } from '${s}';`).join('\n') });
 
 describe('the layering', () => {
-  it('is shown firing: the language, each frontend, a package in core, a layer above, a path out of src/', () => {
+  it('is shown firing: the language, each frontend, a package in core or web, a layer above, a path out of src/', () => {
     const bad = [
       file('src/core/a.ts', '@yggi/cells'),
       file('src/web/a.ts', '@yggi/cells/engine/midi'),
@@ -24,6 +24,9 @@ describe('the layering', () => {
       file('src/web/e.ts', '../ui/Keys.svelte'),
       file('src/core/d.ts', '../../tools/layering'),
       file('src/core/e.ts', 'node:fs'),
+      file('src/web/f.ts', '@yggi/ep133-sysex'),
+      file('src/web/g.ts', 'node:fs'),
+      file('src/web/h.test.ts', 'some-package'),
     ];
     expect(violations(bad)).toHaveLength(bad.length);
     expect(FORBIDDEN).toHaveLength(5);
@@ -34,11 +37,12 @@ describe('the layering', () => {
     expect(importsOf(text)).toEqual(['@yggi/cells', './b', './c', './d', '../e']);
   });
 
-  it('lets a layer import itself and those below, and a core test its runner and Node', () => {
+  it('lets a layer import itself and those below, a core or web test its runner and Node, and ui a package', () => {
     const good = [
       file('src/core/a.ts', './b', './c.ts'),
       file('src/core/a.test.ts', 'vitest', 'node:fs', './a', './fixtures'),
       file('src/web/a.ts', '../core/out', './b'),
+      file('src/web/a.test.ts', 'vitest', 'node:fs', '../core/fixtures', './fixtures'),
       file('src/ui/a.ts', '../core/out', '../web/access', 'svelte'),
     ];
     expect(violations(good)).toEqual([]);
