@@ -15,3 +15,4 @@ export * from './clock';
 export * from './bend';
 export * from './rotation';
 export * from './out';
+export * from './clock-out';
