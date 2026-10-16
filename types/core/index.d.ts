@@ -5,3 +5,5 @@
 export * from './surfaces';
 export * from './keyboard';
 export * from './drum-presets';
+export * from './port';
+export * from './routing';

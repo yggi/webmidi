@@ -6,3 +6,6 @@
 export * from './surfaces';
 export * from './keyboard';
 export * from './drum-presets';
+// Ports: what a connection is, and adopting the ones chosen as they come and go.
+export * from './port';
+export * from './routing';
