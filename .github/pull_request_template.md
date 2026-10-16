@@ -1,15 +1,14 @@
-<!-- Lifted from yggi/cells .github/pull_request_template.md @ 41ef16b, which lifted it from yggi/cell-studio .github/pull_request_template.md @ 6de7ce4, with "What could this dissolve?" from yggi/jambot .github/pull_request_template.md @ 6cc0437. -->
+<!-- Lifted from yggi/cells .github/pull_request_template.md (yggi/cells#67), consolidated 2026-10-16 (yggi/music-commons#4) -->
 Closes #
 <!-- Or `Part of #n` for one rung of an epic; another repository's issue as `yggi/<repo>#n`. -->
 
 ## What and why
+<!-- What changes, and the reason, in the present tense. A change a reader of the CHANGELOG would notice adds its line under *Unreleased*. A change to what goes on the wire says so here, and was asked about first (AGENTS.md). -->
 
-<!-- What changes, and the reason, in the present tense. A change a frontend would notice adds its line to CHANGELOG.md under *Unreleased*; a change to what goes on the wire says so here, and was asked about first (AGENTS.md). -->
-
-**What could this dissolve?** <!-- A rule, a special case or a source of truth this change makes unnecessary or could contract into one form (the law of generalization), or "nothing seen". -->
+**What could this dissolve?** <!-- A rule, a special case or a source of truth this change makes unnecessary, or "nothing seen". -->
 
 ## Verified
-<!-- The commit that passed `npm run verify` and the test count the pre-push hook prints (`verify passed, N tests`); CI is a witness, not the gate. Anything else that ran on it (a frontend's tests against this branch, a device played). If not verified, say "unverified". -->
+<!-- The commit that passed the gate (`npm run verify`) and the test count the pre-push hook printed; anything else that ran (a frontend's tests against this branch, a device played). For anything audible, visual or about speed: how you know. Unverified: say so. CI is a witness, not the gate. -->
 
 ## Not done / follow-ups
-<!-- Findings outside this PR's scope are issues, not extra changes: link them. -->
+<!-- Findings outside this PR's scope are issues, not extra changes: link them. The land step files what is left here. -->

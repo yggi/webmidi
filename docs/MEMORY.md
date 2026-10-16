@@ -4,7 +4,7 @@ Entrypoint for humans and agents: slow-change, shared knowledge about webmidi, a
 
 ## The project
 
-The family's MIDI layer as a package, `@yggi/webmidi`, public, MIT. It came out of Cell studio's `src/midi/` and `src/layout/keyboard.ts` (at `3813fbb`), which had lifted Jambot's at `8cdb6b8` and gone further (pitch bend, MPE rotation, glides, Continue and Song Position, a replugged port found by name). The inventory and the plan are [yggi/cells#63](https://github.com/yggi/cells/issues/63); where it lives is [decision 001](decisions/001-a-midi-layer-of-its-own.md).
+The family's MIDI layer as a package, `@yggi/webmidi`, public, MIT. It came out of Cell studio's `src/midi/` and `src/layout/keyboard.ts` (at `3813fbb`), which had lifted Jambot's at `8cdb6b8` and gone further (pitch bend, MPE rotation, glides, Continue and Song Position, a replugged port found by name). The inventory is [yggi/cells#63](https://github.com/yggi/cells/issues/63) (closed); the frontends' moves are the epic [#3](https://github.com/yggi/webmidi/issues/3); where it lives is [decision 001](decisions/001-a-midi-layer-of-its-own.md).
 
 Its frontends: Cell studio and Jambot, then KO-Multitool. The language, [yggi/cells](https://github.com/yggi/cells), is a sibling, not a dependency: cells keeps MIDI files and when a piece's clock ticks, webmidi the wire.
 
