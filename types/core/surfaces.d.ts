@@ -2,6 +2,7 @@
 export interface ParsedNote {
     readonly on: boolean;
     readonly note: number;
+    /** A note-on's strike, 1–127; a note-off's release, 0–127 (64 from a keyboard that doesn't sense it); 0 for a note-on at 0. */
     readonly velocity: number;
     /** The status byte's low nibble, 0–15: channel 1 is 0, channel 10 is 9. */
     readonly channel: number;
@@ -9,8 +10,9 @@ export interface ParsedNote {
     readonly timeStamp?: number;
 }
 /**
- * A note-on or note-off, or null for anything else. A note-on with velocity 0 is a note-off, as the spec allows.
- * No running status: Web MIDI delivers whole messages, and a message cut short is nothing (the hub's midi-rx contract).
+ * A note-on or note-off, or null for anything else. A note-on with velocity 0 is a note-off, as the spec allows, and
+ * its velocity is 0; a note-off carries its own, the release velocity (the hub's midi-rx contract). No running status:
+ * Web MIDI delivers whole messages, and a message cut short is nothing (midi-rx too).
  */
 export declare function parseMidiMessage(data: ArrayLike<number>, timeStamp?: number): ParsedNote | null;
 /** The sustain pedal (CC 64) read off a raw message: down (64 … 127) or up, its channel; null for anything else, a message cut short too. */

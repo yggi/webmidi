@@ -42,7 +42,7 @@ const delivered = (bytes: readonly number[]): Message[] =>
   });
 
 /** Run, and passed. */
-const RUN = ['note_on', 'note_below_the_piano_range', 'channel_is_the_low_nibble', 'three_note_chord_in_one_drain', 'a_truncated_message_completes_nothing'];
+const RUN = ['note_on', 'note_off', 'note_below_the_piano_range', 'channel_is_the_low_nibble', 'three_note_chord_in_one_drain', 'a_truncated_message_completes_nothing'];
 
 /** Outside the layer core reads, and why. */
 const OUTSIDE: Record<string, string> = {
@@ -60,10 +60,8 @@ const OUTSIDE: Record<string, string> = {
   a_new_status_abandons_the_unfinished_one: 'framing: Web MIDI delivers no unfinished message; and core reads no CC 74',
 };
 
-/** Read by core, and not as the vector says. */
-const DIFFERS: Record<string, string> = {
-  note_off: 'a release carries velocity 0, not its own (64): a frontend has no use for it yet, and the lifted tests hold it at 0',
-};
+/** Read by core, and not as the vector says: none. */
+const DIFFERS: Record<string, string> = {};
 
 /** The vectors not run or recorded, and the names recorded twice or for no vector: both empty when each is recorded once. */
 const unrecorded = (names: readonly string[], recorded: readonly string[]) => ({
@@ -88,7 +86,7 @@ describe('the midi-rx contract (music-commons contracts/midi-rx, version 1)', ()
         recorded,
       ),
     ).toEqual({ missing: [], extra: [] });
-    expect([RUN.length, Object.keys(OUTSIDE).length, Object.keys(DIFFERS).length]).toEqual([5, 11, 1]);
+    expect([RUN.length, Object.keys(OUTSIDE).length, Object.keys(DIFFERS).length]).toEqual([6, 11, 0]);
   });
 
   it.each(RUN)('%s: core delivers every message the stream completes, in order, none lost and none invented', (name) => {
@@ -96,11 +94,6 @@ describe('the midi-rx contract (music-commons contracts/midi-rx, version 1)', ()
     const got = delivered(v.bytes);
     expect(got).toHaveLength(v.expect.length);
     v.expect.forEach((m, i) => expect(got[i], `${name} #${i}`).toMatchObject(m));
-  });
-
-  it('note_off: differs, recorded: a release, but with velocity 0 where the vector carries 64', () => {
-    expect(delivered(vector('note_off').bytes)).toEqual([{ type: 'note_off', channel: 0, note: 60, velocity: 0 }]);
-    expect(vector('note_off').expect).toEqual([{ type: 'note_off', channel: 0, note: 60, velocity: 64 }]);
   });
 
   it('a note-on at velocity 0: outside, a release to core, as the vector asks of the consumer', () => {
