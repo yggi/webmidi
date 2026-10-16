@@ -1,0 +1,9 @@
+# Lifted from yggi/cells .prettierignore @ 41ef16b. Prose: docs are written one sentence to a line, by hand.
+docs
+*.md
+# Data the hub's contracts hand over, kept as lifted; data a tool writes
+fixtures
+package-lock.json
+.claude
+node_modules
+types
