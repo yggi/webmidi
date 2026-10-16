@@ -1,13 +1,17 @@
 {
   "name": "@yggi/webmidi",
   "version": "0.0.0",
-  "description": "The family's MIDI layer: messages in, ports, the clock offset, note and clock out (core, pure); the Web MIDI adapter and shared Svelte components to come.",
+  "description": "The family's MIDI layer: messages in, ports, the clock offset, note and clock out (core, pure); the Web MIDI adapter, SysEx too (web); shared Svelte components to come.",
   "license": "MIT",
   "type": "module",
   "exports": {
     "./core": {
       "types": "./types/core/index.d.ts",
       "default": "./src/core/index.ts"
+    },
+    "./web": {
+      "types": "./types/web/index.d.ts",
+      "default": "./src/web/index.ts"
     },
     "./package.json": "./package.json"
   },
@@ -21,7 +25,7 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "check": "tsc -p tsconfig.pure.json && tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.pure.json && tsc -p tsconfig.web.json && tsc -p tsconfig.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

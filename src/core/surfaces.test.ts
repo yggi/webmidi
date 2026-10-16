@@ -50,13 +50,14 @@ describe('parseMidiMessage', () => {
   });
 });
 
-// Lifted from yggi/cell-studio src/midi/access.test.ts @ 3813fbb: its parser's cases.
+// Lifted from yggi/cell-studio src/midi/access.test.ts @ 3813fbb: its parser's cases, but for a note-off's velocity,
+// which is its own (64 here) where Cell studio's read 0: the hub's midi-rx contract.
 describe('parseMidiMessage', () => {
   it('reads a note-on with velocity 0 as a note-off, on every channel', () => {
     for (let c = 0; c < 16; c++) {
       expect(parseMidiMessage([0x90 | c, 60, 100])).toMatchObject({ on: true, note: 60, velocity: 100, channel: c });
       expect(parseMidiMessage([0x90 | c, 60, 0])).toMatchObject({ on: false, note: 60, velocity: 0, channel: c });
-      expect(parseMidiMessage([0x80 | c, 60, 64])).toMatchObject({ on: false, note: 60, velocity: 0, channel: c });
+      expect(parseMidiMessage([0x80 | c, 60, 64])).toMatchObject({ on: false, note: 60, velocity: 64, channel: c });
     }
   });
 

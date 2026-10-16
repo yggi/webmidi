@@ -3,9 +3,10 @@
  *
  * - Nothing imports the language, `@yggi/cells`, or a frontend (Cell studio, Jambot, KO-Multitool): webmidi sits below
  *   the frontends and beside cells, and cells never imports webmidi either (the owner's decision, 2026-10-16).
- * - `core` imports only `core`: no package at all (it has no runtime dependencies) and nothing of `web` or `ui`. Its
+ * - `core` imports only `core`, and `web` only `core` and `web`: no package at all (webmidi has no runtime dependencies,
+ *   so `web` meets a device's protocol, such as ep133-sysex's `Transport`, by its shape, not by importing it). Their
  *   tests may import their runner and Node's own modules besides.
- * - `web` may import `core`; `ui` may import `core` and `web`; neither the other way round.
+ * - `ui` may import `core` and `web`, and packages (Svelte); none of them the other way round.
  * - A relative import never leaves `src/`.
  *
  * The purity of `core` (no host types) is the typecheck's (tsconfig.pure.json); this is about where imports point.
@@ -17,6 +18,9 @@ export const FORBIDDEN: readonly RegExp[] = [/^@yggi\/cells(\/|$)/, /^cell-studi
 
 /** The layers, lowest first: a file may import its own layer and those below it. */
 const LAYERS = ['core', 'web', 'ui'] as const;
+
+/** The layers that import no package. */
+const NO_PACKAGES: readonly string[] = ['core', 'web'];
 
 /** What a test may import besides: its runner and Node's modules. */
 const TEST_ONLY = /^(vitest(\/|$)|node:)/;
@@ -49,7 +53,7 @@ export function violations(files: readonly { readonly path: string; readonly tex
         else if (layer && to && LAYERS.indexOf(to) > LAYERS.indexOf(layer)) bad(`${layer} imports ${to}, a layer above it`);
         continue;
       }
-      if (layer === 'core' && !(test && TEST_ONLY.test(spec))) bad('core imports no package: it has no runtime dependencies');
+      if (layer && NO_PACKAGES.includes(layer) && !(test && TEST_ONLY.test(spec))) bad(`${layer} imports no package: webmidi has no runtime dependencies`);
     }
   }
   return out;

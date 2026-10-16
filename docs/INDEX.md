@@ -2,7 +2,7 @@
 
 The full hierarchy of `docs/`. Start with [MEMORY.md](MEMORY.md).
 
-- [MEMORY.md](MEMORY.md) — entrypoint: the project, the family, the map, the gates, decisions
+- [MEMORY.md](MEMORY.md) — entrypoint: the project, the family, the maps of core and web, the gates, decisions
 
 ## Directories
 

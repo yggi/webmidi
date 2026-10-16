@@ -1,0 +1,9 @@
+{
+  // The web gate, beside the purity gate (tsconfig.pure.json): `web` typechecks with the browser's types (the DOM, Web
+  // MIDI) and nothing of Node's, so it runs in a page; it reads core as core is. Tests are left out; the fakes they share
+  // are held to it too.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": [], "lib": ["ES2022", "DOM", "DOM.Iterable"] },
+  "include": ["src/core/**/*.ts", "src/web/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}
