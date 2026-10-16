@@ -66,3 +66,12 @@ describe('parseMidiMessage', () => {
     expect(parseMidiMessage([])).toBeNull();
   });
 });
+
+// New: the hub's midi-rx contract asks that a message cut short completes nothing (src/contracts.test.ts).
+describe('a message cut short', () => {
+  it('is nothing: no note, no pedal', () => {
+    expect(parseMidiMessage([0x90, 60])).toBeNull();
+    expect(parseMidiMessage([0x80, 60])).toBeNull();
+    expect(parseSustain([0xb0, 64])).toBeNull();
+  });
+});

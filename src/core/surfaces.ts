@@ -15,13 +15,13 @@ export interface ParsedNote {
 
 /**
  * A note-on or note-off, or null for anything else. A note-on with velocity 0 is a note-off, as the spec allows.
- * No running status: Web MIDI delivers whole messages.
+ * No running status: Web MIDI delivers whole messages, and a message cut short is nothing (the hub's midi-rx contract).
  */
 export function parseMidiMessage(data: ArrayLike<number>, timeStamp?: number): ParsedNote | null {
   const status = data[0];
   const note = data[1];
-  const velocity = data[2] ?? 0;
-  if (status === undefined || note === undefined) return null;
+  const velocity = data[2];
+  if (status === undefined || note === undefined || velocity === undefined) return null;
   const command = status & 0xf0;
   const channel = status & 0x0f;
   if (command === 0x90 && velocity > 0) return { on: true, note, velocity, channel, timeStamp };
@@ -29,11 +29,12 @@ export function parseMidiMessage(data: ArrayLike<number>, timeStamp?: number): P
   return null;
 }
 
-/** The sustain pedal (CC 64) read off a raw message: down (64 … 127) or up, its channel; null for anything else. */
+/** The sustain pedal (CC 64) read off a raw message: down (64 … 127) or up, its channel; null for anything else, a message cut short too. */
 export function parseSustain(data: ArrayLike<number>): { readonly down: boolean; readonly channel: number } | null {
   const status = data[0];
-  if (status === undefined || (status & 0xf0) !== 0xb0 || data[1] !== 64) return null;
-  return { down: (data[2] ?? 0) >= 64, channel: status & 0x0f };
+  const value = data[2];
+  if (status === undefined || (status & 0xf0) !== 0xb0 || data[1] !== 64 || value === undefined) return null;
+  return { down: value >= 64, channel: status & 0x0f };
 }
 
 /** a–l for the white keys, w e t y u o for the black ones, C4 to D5. */

@@ -10,7 +10,7 @@ Its frontends: Cell studio and Jambot, then KO-Multitool. The language, [yggi/ce
 
 ## The family
 
-The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts; `midi-rx`, what a MIDI receiver must deliver from a byte stream, is the one core answers to.
+The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts. Core runs `midi-rx` version 1 (`src/contracts.test.ts`, the vectors copied into `fixtures/contracts/` with the hub's commit): 5 vectors pass, 11 are outside the layer core reads (framing is the browser's; core reads notes and the sustain pedal, and a frontend gets every other message raw), and 1 differs (a note-off's release velocity reads as 0). The pitch-bend and transport vectors are checked against what core writes. Cells writes pitch bends into MIDI files with its own copy of the encoding; the duplication is accepted, and the contract's bend vectors are the one encoding both are held to (core is checked here; cells doesn't run `midi-rx`).
 
 ## Map of src/core/
 
@@ -28,7 +28,7 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 
 ## Gates
 
-Gates that show themselves only by failing, and what fixes each: `types/` stale (`npm run types`); a host global in core (the purity typecheck: the code moves to `web`); an import of the language, a frontend or a layer above (`tools/layering.ts`: no command, the import goes); the boot set, `AGENTS.md` with this page, over 16 KB (`tools/reading-list.ts`: condense it, as a change of its own).
+Gates that show themselves only by failing, and what fixes each: `types/` stale (`npm run types`); a host global in core (the purity typecheck: the code moves to `web`); an import of the language, a frontend or a layer above (`tools/layering.ts`: no command, the import goes); a vector of the hub's `midi-rx` neither run nor recorded (`src/contracts.test.ts`: a decision, no command); the boot set, `AGENTS.md` with this page, over 16 KB (`tools/reading-list.ts`: condense it, as a change of its own).
 
 ## Decisions
 

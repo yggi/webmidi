@@ -10,10 +10,10 @@ export interface ParsedNote {
 }
 /**
  * A note-on or note-off, or null for anything else. A note-on with velocity 0 is a note-off, as the spec allows.
- * No running status: Web MIDI delivers whole messages.
+ * No running status: Web MIDI delivers whole messages, and a message cut short is nothing (the hub's midi-rx contract).
  */
 export declare function parseMidiMessage(data: ArrayLike<number>, timeStamp?: number): ParsedNote | null;
-/** The sustain pedal (CC 64) read off a raw message: down (64 … 127) or up, its channel; null for anything else. */
+/** The sustain pedal (CC 64) read off a raw message: down (64 … 127) or up, its channel; null for anything else, a message cut short too. */
 export declare function parseSustain(data: ArrayLike<number>): {
     readonly down: boolean;
     readonly channel: number;
