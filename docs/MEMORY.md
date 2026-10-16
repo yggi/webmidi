@@ -21,6 +21,8 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 - `drum-presets.ts` drum maps by General MIDI note (GM, Novation Circuit), `deviceNote` out and `gmNotesFor` back
 - `port.ts` what a port and a connection are (`MidiPort`, `PortOption`, `PortAccess`); `routing.ts` adopting the ports chosen, a replugged one by its name; `fixtures.ts` the tests' fake Web MIDI (not shipped)
 - `clock.ts` the audio clock against the page's (`clockOffset`): the pair estimate, its slew, jumps confirmed, a `leap` followed at once
+- `bend.ts` cents as 14-bit bends, a note's bends with ramps sampled; `rotation.ts` MPE channels
+- `out.ts` `MidiOut`: `OutNote`s to a port, timestamped, note-offs kept after their note-ons, retriggers, drum maps, silencing that cuts nothing sent since; a run (a glide) struck as the horizon reaches each note
 - `host.d.ts` the one host global core uses
 
 ## Gates
