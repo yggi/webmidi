@@ -16,6 +16,9 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 
 `index.ts` is the surface, `@yggi/webmidi/core`; every module is re-exported there.
 
+- `surfaces.ts` a raw message to a note or the sustain pedal; the computer's keys and drum keys; `ignoreKeyEvent` (a field, a repeat, a modifier), duck-typed
+- `keyboard.ts` the on-screen keyboard's layout, its keys' names, a strike's velocity by height
+- `drum-presets.ts` drum maps by General MIDI note (GM, Novation Circuit), `deviceNote` out and `gmNotesFor` back
 - `host.d.ts` the one host global core uses
 
 ## Gates
