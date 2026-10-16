@@ -9,3 +9,5 @@ export * from './drum-presets';
 // Ports: what a connection is, and adopting the ones chosen as they come and go.
 export * from './port';
 export * from './routing';
+// Time: the audio clock against the page's, which timestamps read.
+export * from './clock';
