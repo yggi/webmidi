@@ -27,6 +27,7 @@ Every comment posted from a session ends with a blank line, `---` and `_Generate
    `git fetch origin main && git checkout main && git merge --ff-only origin/main`, in a clone whose tree is clean.
 5. **Handle its issues.**
    **A text the owner wrote is never edited**: the session appends its footer to every body or comment it writes, so an edit would sign the owner's words as Claude's. Where a step below would edit one (a tick in the owner's epic, a reference in the owner's issue), post a comment instead. Epics and issues Claude wrote (they end with the footer) may still be edited.
+   **A text the owner wrote is never edited**: the session appends its footer to every body or comment it writes, so an edit would sign the owner's words as Claude's. Where a step below would edit one (a tick in the owner's epic, a reference in the owner's issue), post a comment instead.
    1. **Closed as said:** every `Closes #n` in the merged pull request closed its issue (`gh api repos/yggi/webmidi/issues/<n> --jq .state`).
       One that didn't (a `Closes yggi/<repo>#n` in another repository, a typo) is closed by hand, with a comment naming the pull request: `gh api -X PATCH repos/yggi/<repo>/issues/<n> -f state=closed -f state_reason=completed`.
    2. **Ticked:** a `Part of #n` epic's checklist line for this pull request is ticked, `- [x] … (#<pr>)`, by rewriting the epic's body with that one line changed (`gh api -X PATCH repos/yggi/webmidi/issues/<n> -F body=@<file>`).
