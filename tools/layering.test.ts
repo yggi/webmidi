@@ -11,7 +11,7 @@ const sources = (dir: string): string[] =>
 const file = (path: string, ...specs: string[]) => ({ path, text: specs.map((s) => `import { x } from '${s}';`).join('\n') });
 
 describe('the layering', () => {
-  it('is shown firing: the language, each frontend, a package in core or web, a layer above, a path out of src/', () => {
+  it('is shown firing: the language, each frontend, a package in core, web or testing, a layer above or beside, a fake outside a test, a path out of src/', () => {
     const bad = [
       file('src/core/a.ts', '@yggi/cells'),
       file('src/web/a.ts', '@yggi/cells/engine/midi'),
@@ -27,6 +27,13 @@ describe('the layering', () => {
       file('src/web/f.ts', '@yggi/ep133-sysex'),
       file('src/web/g.ts', 'node:fs'),
       file('src/web/h.test.ts', 'some-package'),
+      file('src/testing/a.ts', 'some-package'),
+      file('src/testing/b.ts', '../ui/Keys.svelte'),
+      file('src/ui/b.ts', '../testing'),
+      file('src/ui/c.ts', '@yggi/webmidi/testing'),
+      file('src/core/f.ts', './fixtures'),
+      file('src/web/i.ts', '../core/fixtures'),
+      file('src/web/j.ts', './fixtures.ts'),
     ];
     expect(violations(bad)).toHaveLength(bad.length);
     expect(FORBIDDEN).toHaveLength(5);
@@ -37,13 +44,16 @@ describe('the layering', () => {
     expect(importsOf(text)).toEqual(['@yggi/cells', './b', './c', './d', '../e']);
   });
 
-  it('lets a layer import itself and those below, a core or web test its runner and Node, and ui a package', () => {
+  it('lets a layer import itself and those below, a core or web test its runner and Node, ui a package, testing core and web, and a test or a fake a fake', () => {
     const good = [
       file('src/core/a.ts', './b', './c.ts'),
       file('src/core/a.test.ts', 'vitest', 'node:fs', './a', './fixtures'),
       file('src/web/a.ts', '../core/out', './b'),
       file('src/web/a.test.ts', 'vitest', 'node:fs', '../core/fixtures', './fixtures'),
       file('src/ui/a.ts', '../core/out', '../web/access', 'svelte'),
+      file('src/testing/index.ts', '../core/fixtures', '../web/fixtures'),
+      file('src/web/fixtures.ts', '../core/fixtures', './transport'),
+      file('src/ui/a.test.ts', '../testing', '@yggi/webmidi/testing'),
     ];
     expect(violations(good)).toEqual([]);
   });

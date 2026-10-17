@@ -1,9 +1,9 @@
 {
   // Lifted from yggi/cells tsconfig.types.json @ 41ef16b. The declarations a consumer typechecks against (`types/`,
   // committed; `npm run types` writes them, a test fails when they are stale): a frontend with stricter settings than
-  // these reads webmidi's types, not its sources: core's and web's (which name the DOM's Web MIDI types). The tests' fakes
-  // are not shipped.
+  // these reads webmidi's types, not its sources: core's, web's (which name the DOM's Web MIDI types) and testing's, the
+  // fakes a frontend's tests drive.
   "extends": "./tsconfig.web.json",
   "compilerOptions": { "noEmit": false, "declaration": true, "emitDeclarationOnly": true, "rootDir": "src", "outDir": "types" },
-  "exclude": ["src/**/*.test.ts", "src/**/fixtures.ts"]
+  "exclude": ["src/**/*.test.ts"]
 }

@@ -19,7 +19,7 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 - `surfaces.ts` a raw message to a note or the sustain pedal; the computer's keys and drum keys; `ignoreKeyEvent` (a field, a repeat, a modifier), duck-typed
 - `keyboard.ts` the on-screen keyboard's layout, its keys' names, a strike's velocity by height
 - `drum-presets.ts` drum maps by General MIDI note (GM, Novation Circuit), `deviceNote` out and `gmNotesFor` back
-- `port.ts` what a port and a connection are (`MidiPort`, `PortOption`, `PortAccess`); `routing.ts` adopting the ports chosen, a replugged one by its name; `fixtures.ts` the tests' fake Web MIDI (not shipped)
+- `port.ts` what a port and a connection are (`MidiPort`, `PortOption`, `PortAccess`); `routing.ts` adopting the ports chosen (`ChosenPorts`), a replugged one by its name; a frontend that keeps no port names passes `''` as `outPortName` and `inPortName`, and a port is adopted by its id alone; `fixtures.ts` the fake ports, access and connection, shipped through `@yggi/webmidi/testing`
 - `clock.ts` the audio clock against the page's (`clockOffset`): the pair estimate, its slew, jumps confirmed, a `leap` followed at once
 - `bend.ts` cents as 14-bit bends, a note's bends with ramps sampled; `rotation.ts` MPE channels
 - `out.ts` `MidiOut`: `OutNote`s to a port, timestamped, note-offs kept after their note-ons, retriggers, drum maps, silencing that cuts nothing sent since; a run (a glide) struck as the horizon reaches each note
@@ -34,11 +34,15 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 - `access.ts` `requestAccess(sysex)` (the browser's `MIDIAccess`, or a throw) and `MidiAccess.connect` (a connection, or in words why none: never throws), the permission query (`granted`), the ports plugged in (a disconnected one isn't listed), an input listened to (notes parsed, every message raw), `close`; `readEnvironment` for a diagnostic. `MidiAccess` is core's `PortAccess`, so `connectMidi` and `adoptPorts` take it.
 - `ports.ts` every port in full, unplugged ones too (`listPorts`), and `guessPort` by patterns a frontend gives (KO-Multitool keeps the EP-133's)
 - `transport.ts` `SysexTransport`, the shape a device's protocol needs (ep133-sysex's `Transport`, met structurally: `transport.test.ts` holds it to a copy), and `MidiTransport` over an input (by `addEventListener`, so `onmidimessage` stays `MidiAccess`'s) and an output, capturing each message and counting how the browser delivered it
-- `fixtures.ts` the tests' fake `navigator.requestMIDIAccess` (not shipped)
+- `fixtures.ts` the fake `navigator.requestMIDIAccess` and a listened input, shipped through `@yggi/webmidi/testing`
+
+## src/testing/
+
+`index.ts` is `@yggi/webmidi/testing`, for tests only: core's and web's `fixtures.ts` re-exported, so a frontend's tests drive the fakes webmidi's own do (yggi/webmidi#6). `testing.test.ts` holds it to its surface, to the web gate and to `npm pack`.
 
 ## Gates
 
-Gates that show themselves only by failing, and what fixes each: `types/` stale (`npm run types`); a host global in core (the purity typecheck: the code moves to `web`); a Node global in web (`tsconfig.web.json`: the browser's instead); an import of the language, a frontend, a layer above, or a package in core or web (`tools/layering.ts`: no command, the import goes); a vector of the hub's `midi-rx` neither run nor recorded (`src/contracts.test.ts`: a decision, no command); the boot set, `AGENTS.md` with this page, over 16 KB (`tools/reading-list.ts`: condense it, as a change of its own).
+Gates that show themselves only by failing, and what fixes each: `types/` stale (`npm run types`); a host global in core (the purity typecheck: the code moves to `web`); a Node global in web (`tsconfig.web.json`: the browser's instead); an import of the language, a frontend, a layer above or beside, a package in core, web or testing, or a fake outside a test (`tools/layering.ts`: no command, the import goes); a vector of the hub's `midi-rx` neither run nor recorded (`src/contracts.test.ts`: a decision, no command); the boot set, `AGENTS.md` with this page, over 16 KB (`tools/reading-list.ts`: condense it, as a change of its own).
 
 ## Decisions
 
