@@ -9,7 +9,7 @@ The family's MIDI layer: what [Cell studio](https://github.com/yggi/cell-studio)
 It doesn't depend on the cells language, nor cells on it. A frontend depends on a tag:
 
 ```json
-"@yggi/webmidi": "github:yggi/webmidi#vX.Y.Z"
+"@yggi/webmidi": "github:yggi/webmidi#v0.1.0"
 ```
 
 No tag is cut yet. Start with [docs/MEMORY.md](https://github.com/yggi/webmidi/blob/main/docs/MEMORY.md) (an absolute link: the package ships no `docs/`). MIT.
