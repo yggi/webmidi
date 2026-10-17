@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
+Nothing has changed since `v0.1.1`.
+
+## v0.1.1 — 2026-10-17
+
+The fakes for a frontend's tests, `@yggi/webmidi/testing`, and the v0.1.0 notes corrected. Nothing on the wire changes, and nothing breaks a frontend's code, so it is a patch.
+
 ### Added
 - **`@yggi/webmidi/testing`**, the fake Web MIDI for a frontend's tests (yggi/webmidi#6): `fakeInput`, `fakePort`, `fakeAccess` and `fakeConnection` (core's), `installMidi`, `uninstallMidi` and `fakeListenedInput` (web's), typed in `types/testing/`, where `files` left them out before. Nothing on the wire changes. A frontend that keeps its own copy of the fakes (Cell studio's `src/midi/fixtures.ts`) can import these instead; only its tests may (`tools/layering.ts` holds webmidi's own sources to it).
 
