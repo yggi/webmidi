@@ -16,6 +16,7 @@ Three, each a subpath export, the lower never importing the higher:
 
 - `npm run verify`: everything a push needs: `check` (the purity gate, the web gate and the full typecheck), `lint`, `format:check`, `knip`, and the tests. A checkout with no `node_modules` (a fresh git worktree) is installed first (`tools/install-first.mjs`). A pre-push hook runs it (`.githooks/pre-push`; the first `npm run verify` in a clone points git at it, and so does the session-start hook: a `prepare` script would break a frontend's install, `tools/hooks.test.ts`) and blocks a push that fails, or one with an untracked file that verify would see and the commit lacks, keeping its whole output in the git directory (`webmidi-verify-failed.log`); a run that passes stamps its tree there (`tools/verified.sh`), so the push of that tree doesn't run it again, and the hook prints the count of tests that passed. Never bypass it with `--no-verify`.
 - `npm run types`: rewrites `types/` (the declarations a frontend typechecks against, through the `types` condition of `exports`) from `src/`; a test fails when it is stale. Run it with any change to an exported signature.
+- Skills (`.claude/skills/`): `land` (a pull request merged by squash on the owner's word, then its issues: closed, its epic ticked, its follow-ups filed; no deploy).
 - One file while iterating: `npx vitest run src/core/out.test.ts`.
 
 ## Rules
