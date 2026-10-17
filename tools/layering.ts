@@ -7,6 +7,9 @@
  *   so `web` meets a device's protocol, such as ep133-sysex's `Transport`, by its shape, not by importing it). Their
  *   tests may import their runner and Node's own modules besides.
  * - `ui` may import `core` and `web`, and packages (Svelte); none of them the other way round.
+ * - `testing` (`@yggi/webmidi/testing`, the fakes shipped for tests) may import `core` and `web`, and no package; any
+ *   layer's tests may import it. Nothing but a test, a fixtures module or `testing` itself imports a fake (`testing`,
+ *   `core/fixtures.ts`, `web/fixtures.ts`): a page that reached one would play into nothing.
  * - A relative import never leaves `src/`.
  *
  * The purity of `core` (no host types) is the typecheck's (tsconfig.pure.json); this is about where imports point.
@@ -16,11 +19,22 @@ import { posix } from 'node:path';
 /** The packages no file here may import: the language, and the frontends by their package names. */
 export const FORBIDDEN: readonly RegExp[] = [/^@yggi\/cells(\/|$)/, /^cell-studio(\/|$)/, /^jambot(\/|$)/, /^@jambot\//, /^ko133-multitool(\/|$)/];
 
-/** The layers, lowest first: a file may import its own layer and those below it. */
-const LAYERS = ['core', 'web', 'ui'] as const;
+/** The layers, lowest first: a file may import its own layer and those below it, except that `ui` and `testing` sit side by side above `web`, neither importing the other. */
+const LAYERS = ['core', 'web', 'ui', 'testing'] as const;
+
+/** Which layers each may import. */
+const IMPORTS: Readonly<Record<(typeof LAYERS)[number], readonly string[]>> = {
+  core: ['core'],
+  web: ['core', 'web'],
+  ui: ['core', 'web', 'ui'],
+  testing: ['core', 'web', 'testing'],
+};
 
 /** The layers that import no package. */
-const NO_PACKAGES: readonly string[] = ['core', 'web'];
+const NO_PACKAGES: readonly string[] = ['core', 'web', 'testing'];
+
+/** A module that holds fakes: the shipped `testing` surface, and the fixtures modules it re-exports. */
+const isFake = (path: string) => /^src\/testing(\/|$)/.test(path) || /(^|\/)fixtures(\.ts)?$/.test(path);
 
 /** What a test may import besides: its runner and Node's modules. */
 const TEST_ONLY = /^(vitest(\/|$)|node:)/;
@@ -32,7 +46,7 @@ export function importsOf(text: string): string[] {
   return out;
 }
 
-const layerOf = (path: string) => LAYERS.find((layer) => path.startsWith(`src/${layer}/`));
+const layerOf = (path: string) => LAYERS.find((layer) => path === `src/${layer}` || path.startsWith(`src/${layer}/`));
 
 /** Each import that breaks the layering, as `file → specifier: why`; none for files that keep it. Paths are from the root. */
 export function violations(files: readonly { readonly path: string; readonly text: string }[]): string[] {
@@ -46,11 +60,16 @@ export function violations(files: readonly { readonly path: string; readonly tex
         bad('the language or a frontend, which webmidi never imports');
         continue;
       }
+      if (spec === '@yggi/webmidi/testing' && !test && !isFake(path)) {
+        bad('a fake, which only a test imports');
+        continue;
+      }
       if (spec.startsWith('.')) {
         const target = posix.normalize(posix.join(posix.dirname(path), spec));
         const to = layerOf(target);
         if (!target.startsWith('src/')) bad('outside src/');
-        else if (layer && to && LAYERS.indexOf(to) > LAYERS.indexOf(layer)) bad(`${layer} imports ${to}, a layer above it`);
+        else if (layer && to && !IMPORTS[layer].includes(to) && !(test && to === 'testing')) bad(`${layer} imports ${to}, a layer above it or beside it`);
+        else if (isFake(target) && !test && !isFake(path)) bad('a fake, which only a test imports');
         continue;
       }
       if (layer && NO_PACKAGES.includes(layer) && !(test && TEST_ONLY.test(spec))) bad(`${layer} imports no package: webmidi has no runtime dependencies`);

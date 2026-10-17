@@ -10,6 +10,8 @@ Three, each a subpath export, the lower never importing the higher:
 - **`web`** (`src/web/`, `@yggi/webmidi/web`): the Web MIDI adapter: access asked for (SysEx too), the permission query, the ports, an input listened to, a SysEx transport. It may touch the browser (the DOM's types, Web MIDI's), and nothing of Node's; it imports core and no package: a device's protocol (ep133-sysex's `Transport`) is met by its shape.
 - **`ui`** (`src/ui/`, not yet written): shared Svelte 5 components, shipped as source.
 
+Beside them, **`testing`** (`src/testing/`, `@yggi/webmidi/testing`): the fake Web MIDI (core's `fixtures.ts`, web's `fixtures.ts`) for a frontend's tests and webmidi's own; held to the web gate, importing core and web, and imported by tests only.
+
 **Nothing here imports `@yggi/cells` or a frontend, and cells never imports webmidi.** The language keeps its own MIDI aspects, MIDI files and *when* a piece's clock ticks (`mainMeter`, `ticksBetween`); webmidi takes the wire. A frontend hands core its own events: a note as `OutNote` (time, duration, key, velocity, channel, a drum flag, cents and bends), the clock as the times of its ticks.
 
 ## Tools
@@ -23,7 +25,7 @@ Three, each a subpath export, the lower never importing the higher:
 
 Enforced (a failing check says so):
 - **Pure.** `src/core/` typechecks with no host types at all (`tsconfig.pure.json`); a host global beyond `src/core/host.d.ts` fails it. `src/web/` typechecks with the browser's and not Node's (`tsconfig.web.json`).
-- **Layered.** `tools/layering.ts`: nothing imports the language or a frontend, `core` and `web` import no package and nothing above them, a relative import never leaves `src/`.
+- **Layered.** `tools/layering.ts`: nothing imports the language or a frontend, `core`, `web` and `testing` import no package and nothing above or beside them, only a test imports a fake, a relative import never leaves `src/`.
 - The hub's `midi-rx` vectors run against core's parser (`src/contracts.test.ts`), each passing or recorded with its reason.
 - `docs/INDEX.md` lists every page, relative links resolve, every decision is in `docs/MEMORY.md`'s list; the boot reading (this file and `docs/MEMORY.md`) stays under 16 KB (`tools/reading-list.ts`).
 - Prettier owns whitespace; ESLint has no errors; knip finds no unused files, exports or dependencies.

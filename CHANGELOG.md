@@ -8,7 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
-Nothing has changed since `v0.1.0`.
+### Added
+- **`@yggi/webmidi/testing`**, the fake Web MIDI for a frontend's tests (yggi/webmidi#6): `fakeInput`, `fakePort`, `fakeAccess` and `fakeConnection` (core's), `installMidi`, `uninstallMidi` and `fakeListenedInput` (web's), typed in `types/testing/`, where `files` left them out before. Nothing on the wire changes. A frontend that keeps its own copy of the fakes (Cell studio's `src/midi/fixtures.ts`) can import these instead; only its tests may (`tools/layering.ts` holds webmidi's own sources to it).
+
+### Corrected: what the v0.1.0 notes left out
+The v0.1.0 entry spoke for Cell studio's move; Cell studio and Jambot, moving onto it, found more that a frontend sees. Nothing here changed since v0.1.0: the notes did.
+- **`MidiOut` has no `setRoute`**: routing stays with the frontend, which turns its own notes into `OutNote`s, one per place its route sends a note.
+- **`MidiOut.play` takes a run** (an array of `OutNote`s) for a glide, the first struck now and the others as `advance`'s horizon reaches each (or a single `OutNote`).
+- **A pitch no key plays is dropped inside `play`** (outside 0–127, or not a whole number), so a frontend passes it on, and a run keeps its other notes' places.
+- **A note's timestamp is `ParsedNote.timeStamp`** (ms on the page's clock), not a third argument of the handler: `onNote(note, source)`; `onMessage(data, source, timeStamp)` keeps its raw form.
+- **`MidiAccess.connect({ onNote, onMessage, onChange }, { sysex })`**: the handlers first, the request second.
+- **`ChosenPorts` needs `outPortName` and `inPortName`** beside the ids: a replugged port is found by its name; a frontend that keeps no names passes `''`, and a port is adopted by its id alone, as before.
 
 ## v0.1.0 — 2026-10-17
 
