@@ -9,6 +9,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 ## Unreleased
 
 ### Added
+- **`MidiAccess.listen` (and `PortAccess.listen`) takes several inputs** (yggi/webmidi#27): `Listened`, an id, `'all'`, `'none'`, or a list of ports (a setup's `heard`), each found by its id, else by its name, and listened to anew when the ports change; `isListened` says whether an input is among them. The string form works as before, and a frontend's own fake that listens by one id still types. A frontend that listened to all and filtered by name (Cell studio) can pass its heard inputs. Nothing on the wire changes.
 - **A kit member's drum note is editable in `PatchMatrix`** (yggi/webmidi#24): a number 0–127 per output where the kit is routed, written to that device's profile (`withProfile`, no custom variant); its own General MIDI note again drops the entry. Cell studio's and Jambot's own drum-note editors can go at their next pin. Nothing on the wire changes.
 - **`MidiStatus` takes its connect button's name** (yggi/webmidi#31): `connectLabel` (default "Connect") and `connectingLabel` (default "Connecting…"), so Jambot keeps "Connect MIDI". Additive; nothing on the wire changes.
 

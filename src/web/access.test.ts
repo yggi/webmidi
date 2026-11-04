@@ -74,6 +74,32 @@ describe('MidiAccess', () => {
     expect(pads.onmidimessage).toBeNull();
   });
 
+  it('listens to several inputs, a setup’s heard, each by id or else by name (yggi/webmidi#27)', async () => {
+    const keys = fakeInput('in-1', 'Keys');
+    const pads = fakeInput('in-2', 'Pads');
+    const knobs = fakeInput('in-3', 'Knobs');
+    const access = fakeAccess([keys, pads, knobs]);
+    installMidi(access);
+    const notes: string[] = [];
+    const midi = await connected({ onNote: (_, source) => notes.push(source) });
+    midi.listen([
+      { id: 'in-1', name: 'Keys' },
+      { id: 'in-9', name: 'Pads' },
+    ]);
+    for (const input of [keys, pads, knobs]) input.play([0x90, 60, 100]);
+    expect(notes).toEqual(['Keys', 'Pads']);
+    expect(knobs.onmidimessage).toBeNull();
+    // replugged under another id: found by its name, and listened to anew
+    const again = fakeInput('in-7', 'Keys');
+    access.inputs.delete('in-1');
+    access.inputs.set('in-7', again);
+    access.change();
+    again.play([0x90, 61, 100]);
+    expect(notes).toEqual(['Keys', 'Pads', 'Keys']);
+    midi.listen([]);
+    expect([again.onmidimessage, pads.onmidimessage]).toEqual([null, null]);
+  });
+
   it('hands on every message raw (a CC too), and the time the port saw it', async () => {
     const keys = fakeInput('in-1', 'Keys');
     installMidi(fakeAccess([keys]));
