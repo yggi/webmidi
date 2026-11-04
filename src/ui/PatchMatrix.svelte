@@ -82,7 +82,7 @@
   /** What every input without its own choice plays, in words, for an input's "as every input" option. */
   const everyInput = $derived.by(() => {
     const c = choiceOf(setup, ANY_INPUT);
-    return c === 'none' ? 'not heard' : c === 'default' ? 'default' : (playable.find((r) => r.id === c.row)?.label ?? c.row);
+    return c === 'none' ? 'none' : c === 'default' ? 'default' : (playable.find((r) => r.id === c.row)?.label ?? c.row);
   });
 
   let picking: { row: MatrixRow; key: string; name: string; anchor: DOMRect } | null = $state(null);
@@ -203,10 +203,11 @@
                         {value}
                         onchange={(e) => choosePlays(row.id, e.currentTarget.value)}
                       >
-                        {#if row.id !== ANY_INPUT && Object.hasOwn(setup.plays, ANY_INPUT)}<option value="">As every input: {everyInput}</option>{/if}
+                        <!-- (short, as a closed select shows them in a narrow drawer, #48: what it is says its label) -->
+                        {#if row.id !== ANY_INPUT && Object.hasOwn(setup.plays, ANY_INPUT)}<option value="" title="As every input: {everyInput}">All: {everyInput}</option>{/if}
                         <option value="none">Not heard</option>
-                        <option value="default">Plays the default</option>
-                        {#each playable as r (r.id)}<option value={r.id}>Plays {r.label}</option>{/each}
+                        <option value="default" title="Plays the default">Default</option>
+                        {#each playable as r (r.id)}<option value={r.id} title="Plays {r.label}">{r.label}</option>{/each}
                       </select>
                     {/if}
                   </span>
@@ -564,7 +565,10 @@
     outline: 2px solid var(--_accent);
     outline-offset: 2px;
   }
+  /* on a line of its own under the name and IN, the name's whole width, so a short label is shown whole (#48) */
   .plays {
+    flex: 1 1 100%;
+    width: 100%;
     max-width: 100%;
     min-height: 26px;
     padding: 0 4px;

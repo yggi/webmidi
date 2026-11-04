@@ -11,6 +11,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 ### Added
 - **`MatrixRow.playable`** (found moving Jambot onto what an input plays, yggi/jambot#560): a row that says `false` isn't offered in an input's Plays choice, and a preset doesn't assign an input to it; by default a voice or a kit can be played, as before. Jambot plays along on its lead and drums alone, so its bass, pad, stab and keys' rows say `false`. Additive: nothing breaks at a frontend's next pin, and nothing on the wire changes.
 
+### Fixed
+- **An input's Plays choice is shown whole in a narrow drawer** (yggi/webmidi#48): its closed labels are short, *Default*, *Not heard*, the row's own name, *All: …* for every input's choice, each option's full meaning in its title; and the select takes the row name's whole width, on its own line under the name and IN. At Cell studio's 347 px drawer, the widest label takes 52 of 79 px. Nothing on the wire changes.
+
 ## v0.2.0 — 2026-11-04
 
 What an input plays (decision 003, yggi/webmidi#43): one mechanism for whether an input is heard and which of the frontend's parts it plays, kept in the setup by row and role, filled in by preset (keyboard → lead, pads → drums), and sent as played (#29). It breaks a frontend's code, `Setup.heard` and `withHeard` gone, so it is a minor version: the migration is under *Changed*. A setup's file is now version 2, which a frontend still on 0.1 refuses in words. Nothing on the wire changes.

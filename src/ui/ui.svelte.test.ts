@@ -313,7 +313,7 @@ describe('PatchMatrix', () => {
     expect(crossingOf(props.book, 'piece:a', inputRow(keystep), 'o2')).toBe(AS_PLAYED);
     expect(rowCells('KeyStep 37')).toEqual(['·', '=', '·']);
     const plays = () => one('select.plays') as HTMLSelectElement;
-    expect([plays().value, [...plays().options].map((o) => o.textContent)]).toEqual(['none', ['Not heard', 'Plays the default', 'Plays &lead', 'Plays &pad', 'Plays Kit']]);
+    expect([plays().value, [...plays().options].map((o) => o.textContent)]).toEqual(['none', ['Not heard', 'Default', '&lead', '&pad', 'Kit']]);
     change(plays(), 'lead');
     expect(activeSetup(props.book).plays).toEqual({ 'in:KeyStep 37': { row: 'lead', role: 'lead' } });
     change(plays(), 'default');
@@ -322,7 +322,7 @@ describe('PatchMatrix', () => {
     props.book = withPlays(withPlays(props.book, 'in:*', 'default'), 'in:KeyStep 37', undefined);
     flushSync();
     expect(plays().value).toBe('');
-    expect(plays().options[0]!.textContent).toBe('As every input: default');
+    expect(plays().options[0]!.textContent).toBe('All: default');
     expect(rowCells('All inputs')).toEqual(['·', '·', '·']);
     change(plays(), 'none');
     expect(activeSetup(props.book).plays).toEqual({ 'in:*': 'default', 'in:KeyStep 37': 'none' });
@@ -333,7 +333,7 @@ describe('PatchMatrix', () => {
     const pads = { id: 'in-2', name: 'MPD218' };
     const { props } = matrix(home(), { rows, inputs: [keystep, pads], preset: DEFAULT_PRESET });
     const options = [...(all('select.plays')[0] as HTMLSelectElement).options].map((o) => o.textContent);
-    expect(options).toEqual(['Not heard', 'Plays the default', 'Plays &lead']);
+    expect(options).toEqual(['Not heard', 'Default', '&lead']);
     expect(all('button').some((b) => b.textContent?.startsWith('Assign inputs'))).toBe(true);
     click('Assign inputs: Keyboard to lead, pads to drums');
     expect(activeSetup(props.book).plays).toEqual({});
