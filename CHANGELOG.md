@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
+Nothing has changed since `v0.2.1`.
+
+## v0.2.1 — 2026-11-04
+
+What the frontends' moves onto what an input plays found: a row an input can't play isn't offered (`MatrixRow.playable`, for Jambot's play-along parts), and an input's Plays choice is shown whole in a narrow drawer (Cell studio's). Nothing on the wire changes, and nothing breaks a frontend's code, so it is a patch; a frontend's test that reads a Plays option's text sees the short labels.
+
 ### Added
 - **`MatrixRow.playable`** (found moving Jambot onto what an input plays, yggi/jambot#560): a row that says `false` isn't offered in an input's Plays choice, and a preset doesn't assign an input to it; by default a voice or a kit can be played, as before. Jambot plays along on its lead and drums alone, so its bass, pad, stab and keys' rows say `false`. Additive: nothing breaks at a frontend's next pin, and nothing on the wire changes.
 

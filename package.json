@@ -1,6 +1,6 @@
 {
   "name": "@yggi/webmidi",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "The family's MIDI layer: messages in, ports, the clock offset, note and clock out (core, pure); the Web MIDI adapter, SysEx too (web); the patchbay's shared Svelte 5 components (ui).",
   "license": "MIT",
   "type": "module",
