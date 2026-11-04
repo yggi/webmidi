@@ -8,9 +8,9 @@
    */
   import { deviceNote } from '../core/drum-presets';
   import type { PortOption } from '../core/port';
-  import { activeSetup, addOutput, AS_PLAYED, inputRow, profileOf, withClock, withCrossing, withHeard, type Crossing, type SetupBook } from '../core/setups';
+  import { activeSetup, addOutput, AS_PLAYED, inputRow, profileOf, withClock, withCrossing, withHeard, withProfile, type Crossing, type SetupBook } from '../core/setups';
   import ChannelPicker from './ChannelPicker.svelte';
-  import { channelHue } from './channels';
+  import { channelHue, clamp } from './channels';
   import { inputRows, type MatrixRow } from './rows';
 
   interface Props {
@@ -78,6 +78,19 @@
     onselect?.(key);
   }
 
+  /**
+   * A kit member's note on an output typed: its device's drum map sends the General MIDI note `gm` as it (0–127), the
+   * entry dropped when it is `gm` again. A device's profile, so no custom variant (decision 002; yggi/webmidi#24).
+   */
+  function setNote(e: Event & { currentTarget: HTMLInputElement }, name: string, gm: number) {
+    const drums: Record<number, number> = { ...profileOf(book, name).drums };
+    const n = clamp(e.currentTarget.valueAsNumber, 0, 127, drums[gm] ?? gm);
+    e.currentTarget.value = String(n);
+    if (n === gm) delete drums[gm];
+    else drums[gm] = n;
+    onchange(withProfile(book, name, { drums }));
+  }
+
   const outLabel = (o: { id: string; name: string }) => (o.id === 'none' ? 'No device' : o.name || o.id);
 </script>
 
@@ -140,7 +153,18 @@
                 {#if row.kind === 'member'}
                   {#if kitHere(o.key) && row.note !== undefined}
                     {@const n = deviceNote(profileOf(book, o.name).drums, row.note)}
-                    <span class="note" class:mapped={n !== row.note} title="General MIDI {row.note} goes out as {n}">{n}</span>
+                    {@const gm = row.note}
+                    <input
+                      type="number"
+                      class="note"
+                      class:mapped={n !== gm}
+                      min="0"
+                      max="127"
+                      value={n}
+                      aria-label="{row.label} on {outLabel(o)}: General MIDI {gm} goes out as"
+                      title="General MIDI {gm} goes out as {n}"
+                      onchange={(e) => setNote(e, o.name, gm)}
+                    />
                   {/if}
                 {:else}
                   {@const chip = value === undefined ? null : value === AS_PLAYED ? '=' : String(value)}
@@ -430,8 +454,11 @@
   }
   .note {
     display: inline-block;
-    min-width: 44px;
-    padding: 3px 8px;
+    width: 56px;
+    min-height: 28px;
+    padding: 2px 6px;
+    color: var(--_text);
+    text-align: center;
     border: 1px solid var(--_line);
     border-radius: 6px;
     background: var(--_panel-2);
@@ -440,6 +467,10 @@
   .note.mapped {
     border-color: var(--_accent);
     color: var(--_accent);
+  }
+  .note:focus-visible {
+    outline: 2px solid var(--_accent);
+    outline-offset: 2px;
   }
   .ear {
     margin-left: 6px;

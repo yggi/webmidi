@@ -13,6 +13,7 @@ import {
   inputRow,
   newBook,
   overwrite,
+  profileOf,
   renameSetup,
   saveAs,
   withCrossing,
@@ -231,7 +232,7 @@ function matrix(book: SetupBook, over: Record<string, unknown> = {}) {
 }
 const rowCells = (label: string) => {
   const row = all('tbody tr').find((r) => r.querySelector('th')?.textContent?.includes(label))!;
-  return [...row.querySelectorAll('td')].map((td) => td.textContent!.trim() || '·');
+  return [...row.querySelectorAll('td')].map((td) => td.querySelector('input')?.value ?? (td.textContent!.trim() || '·'));
 };
 const jack = (label: string, out: string) => all('.jack').find((j) => j.getAttribute('aria-label')?.startsWith(`${label} to ${out}`)) as HTMLButtonElement;
 
@@ -250,7 +251,18 @@ describe('PatchMatrix', () => {
       ['60', '·', '·'],
       ['38', '·', '·'],
     ]);
-    expect(one('.note.mapped').textContent).toBe('60');
+    expect((one('.note.mapped') as HTMLInputElement).value).toBe('60');
+  });
+
+  it('a member’s note typed changes the device’s drum map, clamped, and back to its own note drops the entry (yggi/webmidi#24)', () => {
+    const { props } = matrix(home());
+    change(all('input.note')[1] as HTMLInputElement, '62');
+    expect(profileOf(props.book, 'Circuit Tracks').drums).toEqual({ 36: 60, 38: 62 });
+    expect(activeSetup(props.book).name).toBe('Home');
+    change(all('input.note')[1] as HTMLInputElement, '300');
+    expect(profileOf(props.book, 'Circuit Tracks').drums[38]).toBe(127);
+    change(all('input.note')[0] as HTMLInputElement, '36');
+    expect(profileOf(props.book, 'Circuit Tracks').drums).toEqual({ 38: 127 });
   });
 
   it('a channel picked changes the book, as the named setup’s custom variant', () => {
