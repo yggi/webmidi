@@ -9,9 +9,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 ## Unreleased
 
 ### Added
-<<<<<<< HEAD
 - **What an input row's crossing sends, in one place** (yggi/webmidi#32), `core/forward.ts`: `forwardsOf(book, context, row, data)` gives each output's bytes for a raw message, a channel voice message (0x80–0xEF) with its channel replaced, or kept for `AS_PLAYED`, and nothing for a system message (0xF0–0xFF) or a message with no status byte; `forwardsOfInput` adds every input's row (`ANY_INPUT`), the same bytes to one output once. The frontend sends the bytes with its own timestamp. Cell studio's and Jambot's own forwarding can go; what each passes on then agrees. Nothing a frontend sends changes until it adopts it.
-=======
 - **A setup's ports as plugged in now** (yggi/webmidi#28), `core/setup-ports.ts`: `portsOf(setup, access)` resolves each output to its live port, by id, else by name after a replug, and gives its heard inputs to listen to, changing nothing kept; `namePorts(book, plugged)` names the ports a store from before kept by id alone (Jambot's, through `fromJambot`), in every setup, their input rows too, and makes no custom variant. A frontend's own port adoption for a setup (Cell studio's) and its naming of ports (Jambot's `nameByPorts`) can go. `adoptPorts` stays for one port. Nothing on the wire changes.
 - **`MidiAccess.listen` (and `PortAccess.listen`) takes several inputs** (yggi/webmidi#27): `Listened`, an id, `'all'`, `'none'`, or a list of ports (a setup's `heard`), each found by its id, else by its name, and listened to anew when the ports change; `isListened` says whether an input is among them. The string form works as before, and a frontend's own fake that listens by one id still types. A frontend that listened to all and filtered by name (Cell studio) can pass its heard inputs. Nothing on the wire changes.
 - **A kit member's drum note is editable in `PatchMatrix`** (yggi/webmidi#24): a number 0–127 per output where the kit is routed, written to that device's profile (`withProfile`, no custom variant); its own General MIDI note again drops the entry. Cell studio's and Jambot's own drum-note editors can go at their next pin. Nothing on the wire changes.
@@ -23,7 +21,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ### Fixed
 - **The kit's "GM" mark on channel 10 shows only on an output whose drum map is General MIDI** (yggi/webmidi#30), where it showed beside a Circuit's map too. Nothing on the wire changes.
->>>>>>> origin/main
 
 ## v0.1.3 — 2026-11-04
 
