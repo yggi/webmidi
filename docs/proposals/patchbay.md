@@ -113,4 +113,4 @@ It would be the first thing webmidi deploys.
 4. **Setups are shared between devices as a file** to export and import now. Later, users may share setups with each other, for example through Jambot's lobby (an issue when it starts).
 5. **The inputs are rows of the matrix in every mode**, as in the standalone page: thru becomes a crossing (section 1, Rows).
 
-A decision record (`docs/decisions/002-…`) is written with rung 1.
+The decision record is [002](../decisions/002-setups-device-profiles-and-inputs-as-rows.md), written with rung 1.

@@ -24,6 +24,7 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 - `bend.ts` cents as 14-bit bends, a note's bends with ramps sampled; `rotation.ts` MPE channels
 - `out.ts` `MidiOut`: `OutNote`s to a port, timestamped, note-offs kept after their note-ons, retriggers, drum maps, silencing that cuts nothing sent since; a run (a glide) struck as the horizon reaches each note
 - `clock-out.ts` `ClockOut`: 24 ticks a beat from the times a frontend passes in, Start, Stop, Continue and Song Position
+- `setups.ts` the patchbay's book (decision 002): device profiles by port name, named setups with their outputs, heard inputs and routes per context (inputs as rows, `AS_PLAYED`), a setup's fit to the ports plugged in, a setup as a file; `setups-from.ts` Cell studio's and Jambot's stores migrated once
 - `sysex.ts` whole SysEx messages out of a byte stream (`SysexAssembler`, lifted from ep133-sysex)
 - `host.d.ts` the one host global core uses
 
@@ -34,6 +35,7 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 - `access.ts` `requestAccess(sysex)` (the browser's `MIDIAccess`, or a throw) and `MidiAccess.connect` (a connection, or in words why none: never throws), the permission query (`granted`), the ports plugged in (a disconnected one isn't listed), an input listened to (notes parsed, every message raw), `close`; `readEnvironment` for a diagnostic. `MidiAccess` is core's `PortAccess`, so `connectMidi` and `adoptPorts` take it.
 - `ports.ts` every port in full, unplugged ones too (`listPorts`), and `guessPort` by patterns a frontend gives (KO-Multitool keeps the EP-133's)
 - `transport.ts` `SysexTransport`, the shape a device's protocol needs (ep133-sysex's `Transport`, met structurally: `transport.test.ts` holds it to a copy), and `MidiTransport` over an input (by `addEventListener`, so `onmidimessage` stays `MidiAccess`'s) and an output, capturing each message and counting how the browser delivered it
+- `book-store.ts` `localBookStore`: the book in `localStorage`, nothing thrown when storage is refused
 - `fixtures.ts` the fake `navigator.requestMIDIAccess` and a listened input, shipped through `@yggi/webmidi/testing`
 
 ## src/testing/
@@ -49,3 +51,4 @@ Gates that show themselves only by failing, and what fixes each: `types/` stale 
 One line each; the record has the rationale. → [decisions/](decisions/README.md)
 
 - 001 · A MIDI layer of its own: a repository beside cells, three layers (`core` pure, `web`, `ui`), never importing cells; cells keeps MIDI files and its ticks · → decisions/001-a-midi-layer-of-its-own.md
+- 002 · Setups: a device's profile by port name, shared by every setup; the routes in the setup, by context; the inputs as rows of the matrix, thru a crossing · → decisions/002-setups-device-profiles-and-inputs-as-rows.md
