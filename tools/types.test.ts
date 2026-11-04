@@ -1,5 +1,5 @@
 // Lifted from yggi/cells tools/types.test.ts @ 41ef16b.
-// types/ is what `npm run types` writes from src/ (tsconfig.types.json): a consumer typechecks against it, so it must not
+// types/ is what `npm run types` writes from src/ (tsconfig.types.json, and tools/ui-types.mjs for ui's components): a consumer typechecks against it, so it must not
 // lag the source. Written into a scratch directory here and compared file by file.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -12,6 +12,7 @@ const files = (dir: string): string[] => readdirSync(dir).flatMap((f) => (statSy
 it('types/ is what npm run types writes from src/', () => {
   const out = mkdtempSync(join(tmpdir(), 'webmidi-types-'));
   execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.types.json', '--outDir', out]);
+  execFileSync(process.execPath, ['tools/ui-types.mjs', out]);
   const fresh = files(out)
     .map((f) => relative(out, f))
     .sort();
