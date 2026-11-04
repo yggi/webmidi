@@ -134,15 +134,16 @@ export function readProfile(v: unknown, base: DeviceProfile = DEFAULT_PROFILE): 
   };
 }
 
+/** A context's routes kept, junk dropped; built by fromEntries, so a row named `__proto__` is a row, not the object's prototype. */
 function routes(v: unknown): Routes {
-  const out: Record<string, Record<string, Crossing>> = {};
-  if (!isRecord(v)) return out;
-  for (const [row, crossings] of Object.entries(v)) {
-    if (!isRecord(crossings)) continue;
-    const kept = Object.fromEntries(Object.entries(crossings).filter((e): e is [string, number] => isInt(e[1], 0, 16)));
-    if (Object.keys(kept).length) out[row] = kept;
-  }
-  return out;
+  if (!isRecord(v)) return {};
+  return Object.fromEntries(
+    Object.entries(v).flatMap(([row, crossings]) => {
+      if (!isRecord(crossings)) return [];
+      const kept = Object.fromEntries(Object.entries(crossings).filter((e): e is [string, number] => isInt(e[1], 0, 16)));
+      return Object.keys(kept).length ? [[row, kept] as const] : [];
+    }),
+  );
 }
 
 function readSetup(v: unknown): Setup | null {
@@ -263,9 +264,18 @@ function withActive(book: SetupBook, change: (s: Setup) => Setup): SetupBook {
   if (changed === active) return book;
   if (active.base !== undefined) return { ...book, setups: book.setups.map((s) => (s.id === active.id ? changed : s)) };
   const old = book.setups.find((s) => s.base === active.id);
-  const variant: Setup = { ...changed, id: old?.id ?? `${active.id}~`, name: active.name + CUSTOM, base: active.id };
+  const variant: Setup = { ...changed, id: old?.id ?? freeVariantId(book, active.id), name: active.name + CUSTOM, base: active.id };
   const setups = old ? book.setups.map((s) => (s === old ? variant : s)) : book.setups.flatMap((s) => (s === active ? [s, variant] : [s]));
   return { ...book, setups, active: variant.id };
+}
+
+/** An id for a named setup's first custom variant: `<id>~`, or `<id>~2`, `<id>~3` … when a setup has it already (a variant `readBook` kept as named). */
+function freeVariantId(book: SetupBook, id: string): string {
+  const taken = (x: string) => book.setups.some((s) => s.id === x);
+  if (!taken(`${id}~`)) return `${id}~`;
+  let n = 2;
+  while (taken(`${id}~${n}`)) n++;
+  return `${id}~${n}`;
 }
 
 /** The named setup the one in use is a custom variant of, or null: the one in use is as saved. */
@@ -429,8 +439,9 @@ export function importSetup(book: SetupBook, text: string): SetupBook | string {
   const read = readSetup(kept.setup);
   if (!read) return 'This MIDI setup is damaged: it has no setup in it.';
   const id = freeId(book);
-  const devices = { ...book.devices };
-  if (isRecord(kept.devices)) for (const [name, p] of Object.entries(kept.devices)) if (!own(devices, name)) devices[name] = readProfile(p, book.defaults);
+  // the file's profiles added as own keys (fromEntries), so a device named `__proto__` is a device, not the object's prototype
+  const added = isRecord(kept.devices) ? Object.entries(kept.devices).filter(([name]) => !own(book.devices, name)) : [];
+  const devices = Object.fromEntries([...Object.entries(book.devices), ...added.map(([name, p]) => [name, readProfile(p, book.defaults)] as const)]);
   const setup: Setup = { ...unbased(read), id, name: freeName(book, read.name) };
   return { ...book, devices, setups: [...book.setups, setup], active: id };
 }

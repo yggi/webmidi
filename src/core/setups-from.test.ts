@@ -89,3 +89,16 @@ describe('fromJambot', () => {
     expect(activeSetup(fromJambot(undefined, ports))).toMatchObject({ outputs: [{ key: 'o1', id: 'none', name: '' }], heard: [], routes: { band: {} } });
   });
 });
+
+describe('a key named __proto__ (yggi/webmidi#15)', () => {
+  it('is a row and a device of its own, and Object.prototype stays as it was', () => {
+    const stored = JSON.parse('{"outputs":[{"key":"o1","id":"p","name":"X"}],"routes":{"t":{"o1":{"__proto__":2}}},"drums":{"__proto__":{"36":60}}}');
+    const book = fromCellStudio(stored);
+    expect(({} as Record<string, unknown>).o1).toBeUndefined();
+    const routes = activeSetup(book).routes['piece:t']!;
+    expect([Object.hasOwn(routes, '__proto__'), Object.getPrototypeOf(routes)]).toEqual([true, Object.prototype]);
+    expect(crossingOf(book, 'piece:t', '__proto__', 'o1')).toBe(2);
+    expect([Object.hasOwn(book.devices, '__proto__'), Object.getPrototypeOf(book.devices)]).toEqual([true, Object.prototype]);
+    expect(profileOf(book, '__proto__').drums).toEqual({ 36: 60 });
+  });
+});

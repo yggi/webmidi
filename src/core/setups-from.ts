@@ -40,25 +40,27 @@ export function fromCellStudio(stored: unknown): SetupBook {
 
   const routes: Record<string, Routes> = {};
   for (const [title, byOutput] of Object.entries(record(s.routes))) {
-    const rows: Record<string, Record<string, number>> = {};
-    for (const [key, byRow] of Object.entries(record(byOutput))) for (const [row, ch] of Object.entries(record(byRow))) if (isInt(ch, 1, 16)) (rows[row] ??= {})[key] = ch;
-    if (Object.keys(rows).length) routes[`piece:${title}`] = rows;
+    // kept in maps, made objects by fromEntries, which defines own keys: a row named `__proto__` is a row
+    const rows = new Map<string, Map<string, number>>();
+    for (const [key, byRow] of Object.entries(record(byOutput)))
+      for (const [row, ch] of Object.entries(record(byRow))) if (isInt(ch, 1, 16)) (rows.get(row) ?? rows.set(row, new Map()).get(row)!).set(key, ch);
+    if (rows.size) routes[`piece:${title}`] = Object.fromEntries([...rows].map(([row, c]) => [row, Object.fromEntries(c)]));
   }
 
   const defaults = readProfile({ bend: s.bendRange, mpe: s.rotate ?? null }, DEFAULT_PROFILE);
   const [drums, bends, rotates, clock] = [record(s.drums), record(s.bends), record(s.rotates), record(s.clock)];
   const names = new Set([...Object.keys(drums), ...Object.keys(bends), ...Object.keys(rotates)]);
-  const devices: Record<string, DeviceProfile> = {};
+  const devices = new Map<string, DeviceProfile>();
   for (const name of names) {
     const kept: Record<string, unknown> = {};
     if (Object.hasOwn(drums, name)) kept.drums = drums[name];
     if (Object.hasOwn(bends, name)) kept.bend = bends[name];
     if (Object.hasOwn(rotates, name)) kept.mpe = rotates[name] ?? null;
-    devices[name] = readProfile(kept, defaults);
+    devices.set(name, readProfile(kept, defaults));
   }
 
   const clocked = outputs.filter((o) => o.id !== 'none' && Object.hasOwn(clock, o.name) && clock[o.name] === true).map((o) => o.key);
-  return book({ id: 's1', name: 'Cell studio', outputs, heard: heardOf(portOf(s.in)), routes, clock: clocked }, devices, defaults);
+  return book({ id: 's1', name: 'Cell studio', outputs, heard: heardOf(portOf(s.in)), routes, clock: clocked }, Object.fromEntries(devices), defaults);
 }
 
 /** The row of what is played on Jambot's own keys (on screen and the computer's), which its thru passed on too. */
