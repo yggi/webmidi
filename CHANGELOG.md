@@ -8,7 +8,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
-Nothing has changed since `v0.1.3`.
+### Changed
+- **`PatchMatrix` fits a narrow container** (yggi/webmidi#23): the matrix is a size container. A row's name wraps within at most 36 % of its width (96 px at least), with its tags (`IN`, Heard, a seat's part) on a line under it, and under 480 px the output heads are narrower. At 360 px with an input named 24 characters, two outputs show without scrolling, where none did. A frontend's own override for wrapping names (Cell studio's) can go. Nothing on the wire changes.
 
 ## v0.1.3 — 2026-11-04
 
