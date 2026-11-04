@@ -154,6 +154,8 @@
   .chip small { font: 600 10px var(--font-label); letter-spacing: 0.06em; opacity: 0.75; }
   .chip.keep { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
   .chip.lit { filter: brightness(1.25) saturate(1.3); transform: scale(1.08); }
+  .ear { margin-left: 4px; font: 600 11px/1 var(--font-label); letter-spacing: 0.05em; text-transform: uppercase; padding: 4px 7px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--faint); }
+  .ear[aria-pressed="true"] { border-color: var(--live); color: var(--live); background: color-mix(in oklab, var(--live) 12%, transparent); }
   .jack.locked { cursor: default; }
   .jack.locked .chip { opacity: 0.85; box-shadow: none; }
   .jack.off .hole { opacity: 0.35; }
@@ -255,8 +257,6 @@
     <aside class="card insp" data-c="<DeviceInspector>" aria-labelledby="insp-title" id="insp"></aside>
   </div>
 
-  <div class="card io" data-c="<InputStrip>" id="io"></div>
-
   <label class="notes-toggle"><input type="checkbox" id="notes"> Show which shared component each part is</label>
   <p class="foot">Mockup for a proposal in yggi/webmidi. The devices, setups and pieces are examples. Channel colours follow the channel number in every view, so a cable to channel 10 looks the same in the matrix, the picker and the activity meter.</p>
 </div>
@@ -282,11 +282,12 @@
   const DRUM_MAPS = { GM: { 36: 36, 38: 38, 42: 42, 46: 46, 39: 39 }, Circuit: { 36: 60, 38: 62, 42: 64, 46: 65, 39: 62 } };
   const deviceOf = (name) => (devices[name] ??= { clock: false, drums: 'GM', bend: 2, mpe: null, latency: 0 });
 
-  // ---- the rows each frontend hands the matrix ----
+  // ---- the rows each frontend hands the matrix; the inputs are rows in every mode (webmidi adds them) ----
+  const inputRows = (group = true) => PLUGGED_IN.map((name, i) => ({ id: `in:${name}`, label: name, kind: 'input', group: group && i === 0 }));
   const ROWS = {
     studio: {
       title: 'Patch · electroswing.cells',
-      hint: 'The piece’s voices down, the setup’s outputs across. Tap a jack for its channel.',
+      hint: 'The piece’s voices and the inputs down, the setup’s outputs across. Tap a jack for its channel.',
       rows: [
         { id: 'lead', label: '&lead', kind: 'voice' },
         { id: 'bass', label: '&bass', kind: 'voice' },
@@ -297,41 +298,40 @@
         { id: 'sd', label: '&sd', kind: 'member', gm: 38 },
         { id: 'hh', label: '&hh', kind: 'member', gm: 42 },
         { id: 'oh', label: '&oh', kind: 'member', gm: 46 },
+        ...inputRows(),
       ],
+      heardBy: 'the keys and learn',
     },
     jambot: {
       title: 'Patch · the band’s seats',
-      hint: 'Sixteen seats that stay put; the band seats its parts in them (jambot#108).',
+      hint: 'Sixteen seats that stay put (jambot#108), and the inputs, down; the outputs across.',
       rows: Array.from({ length: 16 }, (_, i) => {
         const n = i + 1;
         const part = { 1: 'Lead', 2: 'Bass', 3: 'Pad', 4: 'Stab', 10: 'Drums' }[n];
         return { id: `s${n}`, label: `Seat ${n}`, sub: part ?? '', kind: part ? (n === 10 ? 'kit' : 'voice') : 'empty' };
-      }),
+      }).concat(inputRows()),
+      heardBy: 'the Muse',
     },
     bay: {
       title: 'Patch · inputs to outputs',
       hint: 'Each input down, each output across. “=” passes the channel as played; a number moves it there.',
-      rows: [
-        { id: 'in:KeyStep 37', label: 'KeyStep 37', kind: 'input' },
-        { id: 'in:Circuit Tracks', label: 'Circuit Tracks', kind: 'input' },
-        { id: 'in:IAC Bus 1', label: 'IAC Bus 1', kind: 'input' },
-        { id: 'clock', label: 'Clock', sub: '120 bpm', kind: 'clock', group: true },
-      ],
+      rows: [...inputRows(false), { id: 'clock', label: 'Clock', sub: '120 bpm', kind: 'clock', group: true }],
+      heardBy: null,
     },
   };
 
   // ---- setups: outputs in order, the input, and routes per context (core: Setup) ----
   const setups = [
     {
-      id: 'home', name: 'Home studio', outputs: ['Circuit Tracks', 'Minilogue xd', 'IAC Bus 1'], input: 'KeyStep 37', thru: true, thruCh: 1,
+      id: 'home', name: 'Home studio', outputs: ['Circuit Tracks', 'Minilogue xd', 'IAC Bus 1'], heard: ['KeyStep 37'],
       routes: {
-        studio: { lead: { 'Minilogue xd': 1 }, bass: { 'Circuit Tracks': 2 }, pad: { 'Circuit Tracks': 1, 'IAC Bus 1': 3 }, stab: { 'IAC Bus 1': 4 }, '*': { 'Circuit Tracks': 10 } },
-        jambot: { s1: { 'Minilogue xd': 1 }, s2: { 'Circuit Tracks': 2 }, s3: { 'Circuit Tracks': 1 }, s4: { 'IAC Bus 1': 4 }, s10: { 'Circuit Tracks': 10 } },
+        studio: { lead: { 'Minilogue xd': 1 }, bass: { 'Circuit Tracks': 2 }, pad: { 'Circuit Tracks': 1, 'IAC Bus 1': 3 }, stab: { 'IAC Bus 1': 4 }, '*': { 'Circuit Tracks': 10 }, 'in:KeyStep 37': { 'Minilogue xd': 1 } },
+        jambot: { s1: { 'Minilogue xd': 1 }, s2: { 'Circuit Tracks': 2 }, s3: { 'Circuit Tracks': 1 }, s4: { 'IAC Bus 1': 4 }, s10: { 'Circuit Tracks': 10 }, 'in:KeyStep 37': { 'Minilogue xd': 5 }, 'in:Circuit Tracks': { 'IAC Bus 1': 0 } },
         bay: { 'in:KeyStep 37': { 'Minilogue xd': 0, 'IAC Bus 1': 0 }, 'in:Circuit Tracks': { 'IAC Bus 1': 0 }, clock: { 'Circuit Tracks': 0 } },
       },
     },
     {
-      id: 'summit', name: 'Summit · venue', outputs: ['Circuit Tracks', 'MicroFreak', 'TD-3', 'Fireface UFX'], input: 'none', thru: false, thruCh: 1,
+      id: 'summit', name: 'Summit · venue', outputs: ['Circuit Tracks', 'MicroFreak', 'TD-3', 'Fireface UFX'], heard: ['KeyStep 37', 'Circuit Tracks'],
       routes: {
         studio: { lead: { MicroFreak: 1 }, bass: { 'TD-3': 1 }, pad: { 'Fireface UFX': 3 }, '*': { 'Circuit Tracks': 10 } },
         jambot: { s1: { MicroFreak: 1 }, s2: { 'TD-3': 1 }, s3: { 'Fireface UFX': 3 }, s4: { 'Fireface UFX': 4 }, s10: { 'Circuit Tracks': 10 } },
@@ -339,7 +339,7 @@
       },
     },
     {
-      id: 'laptop', name: 'Laptop only', outputs: ['IAC Bus 1'], input: 'IAC Bus 1', thru: false, thruCh: 1,
+      id: 'laptop', name: 'Laptop only', outputs: ['IAC Bus 1'], heard: ['IAC Bus 1'],
       routes: { studio: { lead: { 'IAC Bus 1': 1 }, bass: { 'IAC Bus 1': 2 }, pad: { 'IAC Bus 1': 3 }, stab: { 'IAC Bus 1': 4 }, '*': { 'IAC Bus 1': 10 } }, jambot: {}, bay: {} },
     },
   ];
@@ -449,14 +449,20 @@
       <th scope="col"><button class="add-col" id="add-out">+ Output</button></th></tr></thead>`;
     const body = rows.map((r) => {
       const cls = [r.kind === 'member' ? 'member' : '', r.kind === 'empty' ? 'empty' : '', r.group ? 'group-start' : ''].join(' ');
-      const sub = r.sub ? `<span class="sub">${esc(r.sub)}</span>` : '';
+      let sub = r.sub ? `<span class="sub">${esc(r.sub)}</span>` : '';
+      if (r.kind === 'input') {
+        const heard = spec.heardBy && s.heard.includes(r.label);
+        sub = `<span class="sub">IN</span>` + (spec.heardBy
+          ? `<button class="ear" data-ear="${esc(r.label)}" aria-pressed="${!!heard}" title="${heard ? 'Heard by' : 'Not heard by'} ${spec.heardBy}">${heard ? 'Heard' : 'Not heard'}</button>` : '');
+      }
       return `<tr class="${cls}"><th scope="row"><span class="row">${esc(r.label)}${sub}</span></th>${s.outputs.map((o) => jack(r, o)).join('')}<td></td></tr>`;
     }).join('');
     $('grid').innerHTML = head + `<tbody>${body}</tbody>`;
     $('after-grid').innerHTML = state.mode === 'jambot'
       ? `<button class="btn ghost collapse" id="toggle-empty">${state.showEmpty ? 'Hide empty seats' : `Show ${hidden} empty seats`}</button>` : '';
     $('legend').innerHTML = `<span><span class="hole"></span> not sent</span><span><span class="chip" style="--h:${hue(1)}">1</span> channel</span>` +
-      (state.mode === 'bay' ? '<span><span class="chip keep">=</span> as played</span>' : '') +
+      '<span><span class="chip keep">=</span> an input’s channel as played</span>' +
+      (spec.heardBy ? `<span><span class="ear" aria-pressed="true" style="pointer-events:none">Heard</span> the input reaches ${spec.heardBy}</span>` : '') +
       (state.mode === 'studio' ? '<span><span class="note mapped" style="padding:1px 6px">60</span> drum note moved by the device’s map</span>' : '');
   }
 
@@ -477,7 +483,7 @@
     p.innerHTML = `<p><b style="color:var(--ink)">${esc(spec.label)}</b> → ${esc(out)}</p>
       <div class="pads">${Array.from({ length: 16 }, (_, i) => i + 1).map((c) =>
         `<button style="--h:${hue(c)}" data-ch="${c}" aria-pressed="${cur === c}" class="${busy.has(c) ? 'busy' : ''}" title="${busy.has(c) ? 'Another source already sends on this channel here' : ''}">${c}</button>`).join('')}</div>
-      <div class="row2">${state.mode === 'bay' ? '<button class="btn" data-ch="0">= As played</button>' : ''}<button class="btn" data-ch="-1">Not sent</button></div>
+      <div class="row2">${spec.kind === 'input' ? '<button class="btn" data-ch="0">= As played</button>' : ''}<button class="btn" data-ch="-1">Not sent</button></div>
       <p>• another source already uses it on this output</p>`;
     p.hidden = false;
     const r = btn.getBoundingClientRect();
@@ -585,29 +591,6 @@
     }
   });
 
-  // ---- the input strip ----
-  function renderIO() {
-    const s = setup();
-    const opts = ['none', 'all', ...PLUGGED_IN];
-    const label = (v) => (v === 'none' ? 'No MIDI input' : v === 'all' ? 'All inputs' : v);
-    if (state.mode === 'bay') {
-      $('io').innerHTML = `<span class="label">Input</span><span style="color:var(--muted);font-size:14px">Standalone, every input is a row of the patch: route each to any output, and its channel with it.</span>`;
-      return;
-    }
-    $('io').innerHTML = `<span class="label">Input</span>
-      <label>Listen to <select id="in-pick">${opts.map((o) => `<option value="${esc(o)}" ${o === s.input ? 'selected' : ''}>${esc(label(o))}</option>`).join('')}</select></label>
-      <label><input type="checkbox" class="switch" id="thru" ${s.thru ? 'checked' : ''}> Pass what you play on</label>
-      <label>to channel <input type="number" id="thru-ch" min="1" max="16" value="${s.thruCh}"></label>
-      <span class="grow"></span>
-      <span style="font-size:13px;color:var(--muted)">${state.mode === 'studio' ? 'MIDI learn and the keys stay Cell studio’s.' : 'The Muse hears what comes in.'}</span>`;
-  }
-  $('io').addEventListener('change', (e) => {
-    const s = setup();
-    if (e.target.id === 'in-pick') s.input = e.target.value;
-    if (e.target.id === 'thru') s.thru = e.target.checked;
-    if (e.target.id === 'thru-ch') s.thruCh = Math.max(1, Math.min(16, Number(e.target.value) || 1));
-    markDirty();
-  });
 
   // ---- activity ----
   function flashOut(out, ch) {
@@ -640,7 +623,7 @@
   });
 
   // ---- wiring ----
-  function renderAll() { renderStatus(); renderSetups(); renderGrid(); renderInspector(); renderIO(); }
+  function renderAll() { renderStatus(); renderSetups(); renderGrid(); renderInspector(); }
 
   document.querySelector('.modes').addEventListener('click', (e) => {
     const b = e.target.closest('[data-mode]');
@@ -677,6 +660,13 @@
   $('notes').addEventListener('change', (e) => document.body.classList.toggle('show-notes', e.target.checked));
 
   document.addEventListener('click', (e) => {
+    const ear = e.target.closest('[data-ear]');
+    if (ear) {
+      const s = setup();
+      const name = ear.dataset.ear;
+      s.heard = s.heard.includes(name) ? s.heard.filter((n) => n !== name) : [...s.heard, name];
+      markDirty(); renderGrid(); return;
+    }
     const col = e.target.closest('.col');
     if (col) { state.selected = col.dataset.out; renderInspector(); return; }
     const j = e.target.closest('.jack');
