@@ -8,3 +8,5 @@ export * from './access';
 export * from './ports';
 // SysEx to a device and back, whole messages, every one captured.
 export * from './transport';
+// The patchbay's book of setups, kept in localStorage.
+export * from './book-store';

@@ -8,7 +8,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
-Nothing has changed since `v0.1.1`.
+### Added
+- **Setups** (decision 002, yggi/webmidi#12): the model the patchbay's components will share, in `core` (`setups.ts`). It holds device profiles kept by port name (drum map, bend range, MPE, latency), named setups (outputs, the inputs heard, routes per context with the inputs as rows, the outputs sent clock), and the book that keeps them. A change to a named setup is kept as its custom variant ("Home - custom"), saved at once, until it overwrites the named setup (`overwrite`), is saved under a new name (`saveAs`) or is discarded (`discard`). It suggests a setup whose devices are all plugged in, and writes a setup as a file and reads it back. `fromCellStudio` and `fromJambot` migrate each frontend's store once; web's `localBookStore` keeps the book in `localStorage`. Nothing on the wire changes, and nothing changes for a frontend until it adopts the model.
 
 ## v0.1.1 — 2026-10-17
 

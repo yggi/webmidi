@@ -1,0 +1,735 @@
+<title>webmidi Patchbay</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: a rack. Status strip on top, the config bar under it, then the patch matrix (sources down, devices across)
+     with the device inspector docked right; on a phone the inspector drops under the matrix. */
+  :root {
+    --bg: #eceef2;
+    --panel: #f8f9fb;
+    --panel-2: #e2e5eb;
+    --line: #c9ced8;
+    --ink: #1c2029;
+    --muted: #5a6172;
+    --faint: #8b91a0;
+    --accent: #2f62d8;
+    --live: #1f9d55;
+    --warn: #c47a12;
+    --absent: #b8bdc8;
+    --chip-l: 0.72;
+    --chip-c: 0.13;
+    --chip-ink: #10131a;
+    --focus: #2f62d8;
+    --shadow: 0 1px 0 rgb(255 255 255 / 0.7) inset, 0 1px 2px rgb(20 24 34 / 0.08);
+    --font-ui: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --font-label: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+    --font-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --r: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15171c; --panel: #1d2027; --panel-2: #262a33; --line: #343945; --ink: #e9ebf0; --muted: #a2a8b6;
+      --faint: #6c7282; --accent: #7aa2ff; --live: #3fd17f; --warn: #f0a63a; --absent: #4a505e; --chip-l: 0.68;
+      --chip-c: 0.14; --chip-ink: #0d0f14; --focus: #7aa2ff; --shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 1px 2px rgb(0 0 0 / 0.4);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15171c; --panel: #1d2027; --panel-2: #262a33; --line: #343945; --ink: #e9ebf0; --muted: #a2a8b6;
+    --faint: #6c7282; --accent: #7aa2ff; --live: #3fd17f; --warn: #f0a63a; --absent: #4a505e; --chip-l: 0.68;
+    --chip-c: 0.14; --chip-ink: #0d0f14; --focus: #7aa2ff; --shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 1px 2px rgb(0 0 0 / 0.4);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink); font: 15px/1.45 var(--font-ui);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 20px 40px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 14px; }
+  h1, h2, h3 { margin: 0; text-wrap: balance; }
+  .label { font: 600 12px/1 var(--font-label); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+  button, select, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :is(button, select, input, [tabindex]):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .btn {
+    min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r);
+    background: var(--panel); font: 600 14px var(--font-label); letter-spacing: 0.02em; box-shadow: var(--shadow);
+  }
+  .btn:hover { border-color: var(--faint); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+  .btn.ghost { background: transparent; box-shadow: none; border-color: transparent; color: var(--muted); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  select, input[type="number"] {
+    min-height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+  }
+  input[type="number"] { width: 70px; font-family: var(--font-num); font-size: 14px; }
+
+  /* the head: name and the mode switch */
+  .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+  .head h1 { font: 700 26px/1.1 var(--font-label); letter-spacing: 0.01em; }
+  .head h1 small { display: block; font: 500 14px var(--font-ui); color: var(--muted); letter-spacing: 0; margin-top: 4px; }
+  .modes { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 3px; background: var(--panel-2); gap: 2px; flex-wrap: wrap; }
+  .modes button { border: 0; background: transparent; padding: 6px 12px; border-radius: 6px; font: 600 14px var(--font-label); color: var(--muted); }
+  .modes button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+
+  /* a strip: the connection, and the config bar */
+  .strip {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
+  }
+  .led { width: 9px; height: 9px; border-radius: 50%; background: var(--absent); flex: none; }
+  .led.on { background: var(--live); box-shadow: 0 0 0 3px color-mix(in oklab, var(--live) 22%, transparent); }
+  .led.warn { background: var(--warn); }
+  .led.flash { background: var(--live); box-shadow: 0 0 8px var(--live); }
+  .status-text { flex: 1 1 220px; min-width: 0; color: var(--muted); }
+  .status-text b { color: var(--ink); font-weight: 600; }
+  .grow { flex: 1 1 auto; }
+
+  .configs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 520px; min-width: 0; }
+  .cfg {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px 0 10px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel-2); font: 600 14px var(--font-label);
+  }
+  .cfg[aria-pressed="true"] { background: var(--panel); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .cfg .fit { font: 500 12px var(--font-num); color: var(--muted); }
+  .cfg .fit.full { color: var(--live); }
+  .cfg .dirty { color: var(--warn); font-weight: 700; }
+  .cfg-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .suggest { flex-basis: 100%; font-size: 14px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .suggest[hidden] { display: none; }
+  .cfg.custom { border-style: dashed; }
+  .savemenu { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px; border-radius: 8px; background: var(--panel-2); font-size: 14px; }
+  .savemenu input { min-height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); min-width: 0; flex: 1 1 160px; }
+  .savemenu .sep { color: var(--faint); }
+
+  /* the rack: matrix and inspector */
+  .rack { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .rack { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); min-width: 0; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 14px 0; }
+  .card-head h2 { font: 700 15px var(--font-label); letter-spacing: 0.06em; text-transform: uppercase; }
+  .card-head p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .matrix { overflow-x: auto; padding: 10px 6px 12px; }
+  table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+  th, td { padding: 0; }
+  thead th { vertical-align: bottom; padding: 0 4px 8px; }
+  .col {
+    width: 118px; min-width: 104px; display: grid; gap: 4px; text-align: left; padding: 8px 9px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel-2); position: relative;
+  }
+  .col[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: var(--panel); }
+  .col .top { display: flex; align-items: center; gap: 6px; }
+  .col .slot { font: 700 12px var(--font-num); color: var(--muted); }
+  .col .name { font: 600 14px/1.15 var(--font-label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .col .facts { display: flex; gap: 4px; flex-wrap: wrap; min-height: 18px; }
+  .tag { font: 600 11px/1 var(--font-label); letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 5px; border-radius: 4px; background: var(--bg); color: var(--muted); }
+  .col.absent .name { color: var(--faint); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .col.absent .tag.gone { background: color-mix(in oklab, var(--warn) 18%, transparent); color: var(--warn); }
+  .add-col { width: 96px; min-height: 84px; border: 1px dashed var(--line); border-radius: 8px; background: transparent; color: var(--muted); font: 600 14px var(--font-label); }
+
+  tbody th {
+    position: sticky; left: 0; z-index: 1; background: var(--panel); text-align: left; padding: 3px 10px 3px 8px;
+    font: 600 15px var(--font-num); white-space: nowrap; min-width: 128px;
+  }
+  tbody th .row { display: flex; align-items: center; gap: 8px; }
+  tbody th .sub { font: 500 12px var(--font-ui); color: var(--muted); margin-left: 2px; }
+  tbody tr.member th { padding-left: 26px; font-size: 14px; color: var(--muted); }
+  tbody tr.empty th { color: var(--faint); font-weight: 500; }
+  tbody tr + tr td, tbody tr + tr th { border-top: 1px solid color-mix(in oklab, var(--line) 55%, transparent); }
+  tbody tr.group-start td, tbody tr.group-start th { border-top: 1px solid var(--line); }
+  td { text-align: center; padding: 4px; }
+
+  /* a crossing: a jack. Empty, a channel chip, or a note (a kit member) */
+  .jack {
+    width: 100%; min-width: 64px; height: 36px; border-radius: 8px; border: 1px dashed transparent; background: transparent;
+    display: grid; place-items: center; position: relative;
+  }
+  .jack:hover { border-color: var(--line); }
+  .jack .hole { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); background: var(--bg); }
+  .jack.set { border: 0; }
+  .chip {
+    --h: 0; min-width: 46px; height: 28px; padding: 0 8px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    background: oklch(var(--chip-l) var(--chip-c) var(--h)); color: var(--chip-ink); font: 700 14px var(--font-num);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.35) inset, 0 1px 2px rgb(0 0 0 / 0.2); transition: transform 0.08s, filter 0.08s;
+  }
+  .chip small { font: 600 10px var(--font-label); letter-spacing: 0.06em; opacity: 0.75; }
+  .chip.keep { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
+  .chip.lit { filter: brightness(1.25) saturate(1.3); transform: scale(1.08); }
+  .ear { margin-left: 4px; font: 600 11px/1 var(--font-label); letter-spacing: 0.05em; text-transform: uppercase; padding: 4px 7px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--faint); }
+  .ear[aria-pressed="true"] { border-color: var(--live); color: var(--live); background: color-mix(in oklab, var(--live) 12%, transparent); }
+  .jack.locked { cursor: default; }
+  .jack.locked .chip { opacity: 0.85; box-shadow: none; }
+  .jack.off .hole { opacity: 0.35; }
+  .note { font: 600 14px var(--font-num); color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; min-width: 44px; }
+  .note.mapped { border-color: var(--accent); color: var(--accent); }
+  .collapse { margin: 6px 10px 0; font-size: 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0 14px 14px; color: var(--muted); font-size: 13px; align-items: center; }
+  .legend .chip { min-width: 34px; height: 22px; font-size: 12px; }
+  .legend .hole { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); vertical-align: -2px; }
+
+  /* the channel picker: sixteen pads */
+  .picker {
+    position: fixed; z-index: 20; width: 236px; padding: 10px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.25); display: grid; gap: 8px;
+  }
+  .picker .pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .picker .pads button { height: 38px; border: 0; border-radius: 7px; font: 700 14px var(--font-num); color: var(--chip-ink); background: oklch(var(--chip-l) var(--chip-c) var(--h)); }
+  .picker .pads button[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .picker .pads button.busy::after { content: "•"; margin-left: 2px; }
+  .picker .row2 { display: flex; gap: 6px; }
+  .picker .row2 .btn { flex: 1; }
+  .picker p { margin: 0; font-size: 13px; color: var(--muted); }
+
+  /* the inspector */
+  .insp { display: grid; gap: 0; }
+  .insp section { padding: 12px 14px; display: grid; gap: 10px; }
+  .insp section + section { border-top: 1px solid var(--line); }
+  .field { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+  .field > span { font-size: 14px; }
+  .field > span small { display: block; color: var(--muted); font-size: 12px; }
+  .switch { appearance: none; width: 40px; height: 22px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); position: relative; cursor: pointer; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--faint); transition: left 0.12s; }
+  .switch:checked { background: color-mix(in oklab, var(--accent) 30%, var(--panel)); border-color: var(--accent); }
+  .switch:checked::after { left: 20px; background: var(--accent); }
+  .scope { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .scope .tag { background: color-mix(in oklab, var(--accent) 14%, transparent); color: var(--accent); }
+  .meter { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; }
+  .meter i { height: 16px; border-radius: 3px; background: var(--panel-2); position: relative; }
+  .meter i.on { background: oklch(var(--chip-l) var(--chip-c) var(--h)); }
+  .meter-axis { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; font: 500 10px var(--font-num); color: var(--faint); text-align: center; }
+
+  /* the input strip and the component notes */
+  .io { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 12px 14px; }
+  .io label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+  .notes-toggle { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); }
+  body.show-notes [data-c] { position: relative; outline: 1.5px dashed color-mix(in oklab, var(--accent) 70%, transparent); outline-offset: 3px; }
+  body.show-notes [data-c]::before {
+    content: attr(data-c); position: absolute; top: -11px; right: 10px; z-index: 5; padding: 2px 6px; border-radius: 4px;
+    background: var(--accent); color: var(--panel); font: 700 11px/1.2 var(--font-num); white-space: nowrap; pointer-events: none;
+  }
+  .foot { color: var(--muted); font-size: 13px; }
+  .toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--panel); padding: 8px 14px; border-radius: 8px; font-size: 14px; z-index: 30; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  @media (prefers-reduced-motion: reduce) { .chip, .switch::after { transition: none; } }
+  @media (max-width: 520px) { .head h1 { font-size: 22px; } .cfg-actions .btn { padding: 0 9px; } }
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <h1>Patchbay<small>Mockup of webmidi's shared MIDI components. Example devices, nothing is sent.</small></h1>
+    <div class="modes" role="group" aria-label="Who shows the panel">
+      <button id="m-studio" data-mode="studio" aria-pressed="true">In Cell studio</button>
+      <button id="m-jambot" data-mode="jambot" aria-pressed="false">In Jambot</button>
+      <button id="m-bay" data-mode="bay" aria-pressed="false">Standalone</button>
+    </div>
+  </header>
+
+  <div class="strip" data-c="<MidiStatus>">
+    <span class="led on" id="conn-led" aria-hidden="true"></span>
+    <p class="status-text" id="conn" role="status"></p>
+    <button class="btn" id="refresh">Refresh ports</button>
+    <button class="btn" id="panic">All notes off</button>
+    <button class="btn" id="demo" aria-pressed="false">Play demo</button>
+  </div>
+
+  <div class="strip" data-c="<SetupPicker>">
+    <span class="label">Setup</span>
+    <div class="configs" id="configs" role="group" aria-label="Saved setups"></div>
+    <div class="cfg-actions">
+      <button class="btn" id="save" disabled aria-expanded="false" aria-controls="savemenu">Save…</button>
+      <button class="btn ghost" id="export">Export</button>
+      <button class="btn ghost" id="import">Import</button>
+    </div>
+    <p class="suggest" id="suggest" hidden></p>
+    <div class="savemenu" id="savemenu" hidden></div>
+  </div>
+
+  <div class="rack">
+    <div class="card" data-c="<PatchMatrix>">
+      <div class="card-head">
+        <h2 id="matrix-title">Patch</h2>
+        <p id="matrix-hint"></p>
+      </div>
+      <div class="matrix"><table id="grid" aria-describedby="matrix-hint"></table></div>
+      <div id="after-grid"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <aside class="card insp" data-c="<DeviceInspector>" aria-labelledby="insp-title" id="insp"></aside>
+  </div>
+
+  <label class="notes-toggle"><input type="checkbox" id="notes"> Show which shared component each part is</label>
+  <p class="foot">Mockup for a proposal in yggi/webmidi. The devices, setups and pieces are examples. Channel colours follow the channel number in every view, so a cable to channel 10 looks the same in the matrix, the picker and the activity meter.</p>
+</div>
+
+<div class="picker" id="picker" hidden role="dialog" aria-label="Choose a channel"></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(() => {
+  // ---- the world: what is plugged in (as Web MIDI would list it) ----
+  const PLUGGED_OUT = ['Circuit Tracks', 'Minilogue xd', 'MicroFreak', 'IAC Bus 1'];
+  const PLUGGED_IN = ['KeyStep 37', 'Circuit Tracks', 'IAC Bus 1'];
+
+  // ---- device facts: kept by port name, in every setup (core: DeviceProfile) ----
+  const devices = {
+    'Circuit Tracks': { drums: 'Circuit', bend: 2, mpe: null, latency: 6 },
+    'Minilogue xd': { drums: 'GM', bend: 12, mpe: null, latency: 4 },
+    'MicroFreak': { drums: 'GM', bend: 2, mpe: { from: 2, to: 5 }, latency: 3 },
+    'IAC Bus 1': { drums: 'GM', bend: 48, mpe: null, latency: 0 },
+    'TD-3': { drums: 'GM', bend: 2, mpe: null, latency: 5 },
+    'Fireface UFX': { drums: 'GM', bend: 2, mpe: null, latency: 2 },
+  };
+  const DRUM_MAPS = { GM: { 36: 36, 38: 38, 42: 42, 46: 46, 39: 39 }, Circuit: { 36: 60, 38: 62, 42: 64, 46: 65, 39: 62 } };
+  const deviceOf = (name) => (devices[name] ??= { drums: 'GM', bend: 2, mpe: null, latency: 0 });
+
+  // ---- the rows each frontend hands the matrix; the inputs are rows in every mode (webmidi adds them) ----
+  const inputRows = (group = true) => PLUGGED_IN.map((name, i) => ({ id: `in:${name}`, label: name, kind: 'input', group: group && i === 0 }));
+  const CLOCK_ROW = { id: 'clock', label: 'Clock', sub: '24 ppq', kind: 'clock', group: true };
+  const ROWS = {
+    studio: {
+      title: 'Patch · electroswing.cells',
+      hint: 'The piece’s voices and the inputs down, the setup’s outputs across. Tap a jack for its channel.',
+      rows: [
+        { id: 'lead', label: '&lead', kind: 'voice' },
+        { id: 'bass', label: '&bass', kind: 'voice' },
+        { id: 'pad', label: '&pad', kind: 'voice' },
+        { id: 'stab', label: '&stab', kind: 'voice' },
+        { id: '*', label: 'Kit', kind: 'kit', group: true },
+        { id: 'bd', label: '&bd', kind: 'member', gm: 36 },
+        { id: 'sd', label: '&sd', kind: 'member', gm: 38 },
+        { id: 'hh', label: '&hh', kind: 'member', gm: 42 },
+        { id: 'oh', label: '&oh', kind: 'member', gm: 46 },
+        ...inputRows(),
+        CLOCK_ROW,
+      ],
+      heardBy: 'the keys and learn',
+    },
+    jambot: {
+      title: 'Patch · the band’s seats',
+      hint: 'Sixteen seats that stay put (jambot#108), and the inputs, down; the outputs across.',
+      rows: Array.from({ length: 16 }, (_, i) => {
+        const n = i + 1;
+        const part = { 1: 'Lead', 2: 'Bass', 3: 'Pad', 4: 'Stab', 10: 'Drums' }[n];
+        return { id: `s${n}`, label: `Seat ${n}`, sub: part ?? '', kind: part ? (n === 10 ? 'kit' : 'voice') : 'empty' };
+      }).concat(inputRows(), [CLOCK_ROW]),
+      heardBy: 'the Muse',
+    },
+    bay: {
+      title: 'Patch · inputs to outputs',
+      hint: 'Each input down, each output across. “=” passes the channel as played; a number moves it there.',
+      rows: [...inputRows(false), CLOCK_ROW],
+      heardBy: null,
+    },
+  };
+
+  // ---- setups: outputs in order, the input, and routes per context (core: Setup) ----
+  const setups = [
+    {
+      id: 'home', name: 'Home studio', outputs: ['Circuit Tracks', 'Minilogue xd', 'IAC Bus 1'], heard: ['KeyStep 37'], clock: ['Circuit Tracks', 'IAC Bus 1'],
+      routes: {
+        studio: { lead: { 'Minilogue xd': 1 }, bass: { 'Circuit Tracks': 2 }, pad: { 'Circuit Tracks': 1, 'IAC Bus 1': 3 }, stab: { 'IAC Bus 1': 4 }, '*': { 'Circuit Tracks': 10 }, 'in:KeyStep 37': { 'Minilogue xd': 1 } },
+        jambot: { s1: { 'Minilogue xd': 1 }, s2: { 'Circuit Tracks': 2 }, s3: { 'Circuit Tracks': 1 }, s4: { 'IAC Bus 1': 4 }, s10: { 'Circuit Tracks': 10 }, 'in:KeyStep 37': { 'Minilogue xd': 5 }, 'in:Circuit Tracks': { 'IAC Bus 1': 0 } },
+        bay: { 'in:KeyStep 37': { 'Minilogue xd': 0, 'IAC Bus 1': 0 }, 'in:Circuit Tracks': { 'IAC Bus 1': 0 } },
+      },
+    },
+    {
+      id: 'summit', name: 'Summit · venue', outputs: ['Circuit Tracks', 'MicroFreak', 'TD-3', 'Fireface UFX'], heard: ['KeyStep 37', 'Circuit Tracks'], clock: ['Circuit Tracks', 'TD-3'],
+      routes: {
+        studio: { lead: { MicroFreak: 1 }, bass: { 'TD-3': 1 }, pad: { 'Fireface UFX': 3 }, '*': { 'Circuit Tracks': 10 } },
+        jambot: { s1: { MicroFreak: 1 }, s2: { 'TD-3': 1 }, s3: { 'Fireface UFX': 3 }, s4: { 'Fireface UFX': 4 }, s10: { 'Circuit Tracks': 10 } },
+        bay: {},
+      },
+    },
+    {
+      id: 'laptop', name: 'Laptop only', outputs: ['IAC Bus 1'], heard: ['IAC Bus 1'], clock: ['IAC Bus 1'],
+      routes: { studio: { lead: { 'IAC Bus 1': 1 }, bass: { 'IAC Bus 1': 2 }, pad: { 'IAC Bus 1': 3 }, stab: { 'IAC Bus 1': 4 }, '*': { 'IAC Bus 1': 10 } }, jambot: {}, bay: {} },
+    },
+  ];
+
+  const state = { mode: 'studio', active: 'home', selected: 'Circuit Tracks', showEmpty: false, demo: null, lit: new Set(), litCh: new Map() };
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const hue = (ch) => ((ch - 1) * 22.5 + 12) % 360;
+  const setup = () => setups.find((s) => s.id === state.active);
+  const plugged = (name) => PLUGGED_OUT.includes(name);
+  const fitOf = (s) => s.outputs.filter(plugged).length;
+  const routesHere = () => (setup().routes[state.mode] ??= {});
+  const channelAt = (rowId, out) => routesHere()[rowId]?.[out];
+  const kitOuts = () => {
+    const kitRow = ROWS[state.mode].rows.find((r) => r.kind === 'kit');
+    return kitRow ? Object.keys(routesHere()[kitRow.id] ?? {}) : [];
+  };
+
+  function toast(text) {
+    const t = $('toast');
+    t.textContent = text;
+    t.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => (t.hidden = true), 2200);
+  }
+
+  /** Before a change to a setup: a named one stays as saved, and the change goes to its custom variant, put in use. */
+  function edit() {
+    const s = setup();
+    if (s.base) return;
+    const old = setups.findIndex((x) => x.base === s.id);
+    const variant = { ...structuredClone(s), id: s.id + '~', name: s.name + ' - custom', base: s.id };
+    if (old >= 0) setups[old] = variant; else setups.splice(setups.indexOf(s) + 1, 0, variant);
+    state.active = variant.id;
+  }
+  function markDirty() {
+    renderSetups();
+  }
+
+  // ---- the connection strip ----
+  function renderStatus() {
+    const s = setup();
+    const missing = s.outputs.filter((n) => !plugged(n));
+    $('conn').innerHTML = `<b>Web MIDI connected</b> · ${PLUGGED_IN.length} inputs, ${PLUGGED_OUT.length} outputs` +
+      (missing.length ? ` · <span style="color:var(--warn)">${missing.length} of this setup’s devices not plugged in</span>` : '');
+    $('conn-led').className = 'led ' + (missing.length ? 'warn' : 'on');
+  }
+
+  // ---- the setups ----
+  function renderSetups() {
+    $('configs').innerHTML = setups.map((s) => {
+      const fit = fitOf(s);
+      const full = fit === s.outputs.length;
+      return `<button class="cfg ${s.base ? 'custom' : ''}" id="cfg-${CSS.escape(s.id)}" data-id="${esc(s.id)}" aria-pressed="${s.id === state.active}">
+        <span class="led ${full ? 'on' : fit ? 'warn' : ''}" aria-hidden="true"></span>${esc(s.name)}
+        ${s.base ? '<span class="dirty" title="Changed, saved as a custom variant">●</span>' : ''}
+        <span class="fit ${full ? 'full' : ''}" title="Devices plugged in">${fit}/${s.outputs.length}</span></button>`;
+    }).join('');
+    $('save').disabled = !setup().base;
+    if (!setup().base) closeSave();
+    const s = setup();
+    const best = setups.filter((x) => !x.base).sort((a, b) => fitOf(b) / b.outputs.length - fitOf(a) / a.outputs.length)[0];
+    const sug = $('suggest');
+    if (best.id !== s.id && fitOf(s) < s.outputs.length) {
+      sug.hidden = false;
+      sug.innerHTML = `<span class="led on" aria-hidden="true"></span>Every device of <b>${esc(best.name)}</b> is plugged in. <button class="btn" id="use-best" data-id="${best.id}">Switch to it</button>`;
+    } else sug.hidden = true;
+  }
+
+  // ---- the matrix ----
+  function colHead(name, i) {
+    const d = deviceOf(name);
+    const here = plugged(name);
+    const facts = [];
+    if (setup().clock.includes(name)) facts.push('<span class="tag">Clock</span>');
+    if (d.mpe) facts.push('<span class="tag">MPE</span>');
+    if (d.drums !== 'GM' && kitOuts().includes(name)) facts.push(`<span class="tag">${esc(d.drums)}</span>`);
+    if (!here) facts.unshift('<span class="tag gone">Not plugged in</span>');
+    return `<th scope="col"><button class="col ${here ? '' : 'absent'}" data-out="${esc(name)}" aria-pressed="${state.selected === name}" title="${esc(name)}: open its settings">
+      <span class="top"><span class="led ${here ? 'on' : ''}" data-led="${esc(name)}" aria-hidden="true"></span><span class="slot">OUT ${i + 1}</span></span>
+      <span class="name">${esc(name)}</span><span class="facts">${facts.join('')}</span></button></th>`;
+  }
+
+  function jack(row, out) {
+    const ch = channelAt(row.id, out);
+    const label = `${row.label} to ${out}`;
+    if (row.kind === 'member') {
+      if (!kitOuts().includes(out)) return '<td></td>';
+      const map = DRUM_MAPS[deviceOf(out).drums] ?? DRUM_MAPS.GM;
+      const n = map[row.gm] ?? row.gm;
+      return `<td><span class="note ${n !== row.gm ? 'mapped' : ''}" title="General MIDI ${row.gm} goes out as ${n} (${esc(deviceOf(out).drums)} map)">${n}</span></td>`;
+    }
+    if (row.kind === 'clock') {
+      const on = setup().clock.includes(out);
+      return `<td><button class="jack ${on ? 'set' : ''}" data-row="${row.id}" data-out="${esc(out)}" aria-label="Clock to ${esc(out)}: ${on ? 'sent' : 'not sent'}">${on ? '<span class="chip keep">CLK</span>' : '<span class="hole"></span>'}</button></td>`;
+    }
+    const id = `${row.id}|${out}`;
+    const lit = state.lit.has(id) ? 'lit' : '';
+    if (ch === undefined) return `<td><button class="jack" data-row="${row.id}" data-out="${esc(out)}" aria-label="${esc(label)}: not sent"><span class="hole"></span></button></td>`;
+    const chip = ch === 0 ? `<span class="chip keep ${lit}">=</span>` : `<span class="chip ${lit}" style="--h:${hue(ch)}">${ch}${ch === 10 ? '<small>GM</small>' : ''}</span>`;
+    return `<td><button class="jack set" data-row="${row.id}" data-out="${esc(out)}" aria-label="${esc(label)}: channel ${ch === 0 ? 'as played' : ch}">${chip}</button></td>`;
+  }
+
+  function renderGrid() {
+    const spec = ROWS[state.mode];
+    const s = setup();
+    $('matrix-title').textContent = spec.title;
+    $('matrix-hint').textContent = spec.hint;
+    let rows = spec.rows;
+    let hidden = 0;
+    if (state.mode === 'jambot' && !state.showEmpty) {
+      hidden = rows.filter((r) => r.kind === 'empty').length;
+      rows = rows.filter((r) => r.kind !== 'empty');
+    }
+    const head = `<thead><tr><th scope="col"><span class="sr">Source</span></th>${s.outputs.map(colHead).join('')}
+      <th scope="col"><button class="add-col" id="add-out">+ Output</button></th></tr></thead>`;
+    const body = rows.map((r) => {
+      const cls = [r.kind === 'member' ? 'member' : '', r.kind === 'empty' ? 'empty' : '', r.group ? 'group-start' : ''].join(' ');
+      let sub = r.sub ? `<span class="sub">${esc(r.sub)}</span>` : '';
+      if (r.kind === 'input') {
+        const heard = spec.heardBy && s.heard.includes(r.label);
+        sub = `<span class="sub">IN</span>` + (spec.heardBy
+          ? `<button class="ear" data-ear="${esc(r.label)}" aria-pressed="${!!heard}" title="${heard ? 'Heard by' : 'Not heard by'} ${spec.heardBy}">${heard ? 'Heard' : 'Not heard'}</button>` : '');
+      }
+      return `<tr class="${cls}"><th scope="row"><span class="row">${esc(r.label)}${sub}</span></th>${s.outputs.map((o) => jack(r, o)).join('')}<td></td></tr>`;
+    }).join('');
+    $('grid').innerHTML = head + `<tbody>${body}</tbody>`;
+    $('after-grid').innerHTML = state.mode === 'jambot'
+      ? `<button class="btn ghost collapse" id="toggle-empty">${state.showEmpty ? 'Hide empty seats' : `Show ${hidden} empty seats`}</button>` : '';
+    $('legend').innerHTML = `<span><span class="hole"></span> not sent</span><span><span class="chip" style="--h:${hue(1)}">1</span> channel</span>` +
+      '<span><span class="chip keep">=</span> an input’s channel as played</span>' +
+      '<span><span class="chip keep">CLK</span> sent clock</span>' +
+      (spec.heardBy ? `<span><span class="ear" aria-pressed="true" style="pointer-events:none">Heard</span> the input reaches ${spec.heardBy}</span>` : '') +
+      (state.mode === 'studio' ? '<span><span class="note mapped" style="padding:1px 6px">60</span> drum note moved by the device’s map</span>' : '');
+  }
+
+  // ---- the channel picker ----
+  let picking = null;
+  function openPicker(btn) {
+    const row = btn.dataset.row, out = btn.dataset.out;
+    const spec = ROWS[state.mode].rows.find((r) => r.id === row);
+    if (row === 'clock') {
+      edit();
+      const c = setup().clock;
+      setup().clock = c.includes(out) ? c.filter((x) => x !== out) : [...c, out];
+      markDirty(); renderGrid(); return;
+    }
+    picking = { row, out, btn };
+    const cur = channelAt(row, out);
+    const busy = new Set(Object.entries(routesHere()).filter(([k]) => k !== row).map(([, v]) => v[out]).filter((c) => c));
+    const p = $('picker');
+    p.innerHTML = `<p><b style="color:var(--ink)">${esc(spec.label)}</b> → ${esc(out)}</p>
+      <div class="pads">${Array.from({ length: 16 }, (_, i) => i + 1).map((c) =>
+        `<button style="--h:${hue(c)}" data-ch="${c}" aria-pressed="${cur === c}" class="${busy.has(c) ? 'busy' : ''}" title="${busy.has(c) ? 'Another source already sends on this channel here' : ''}">${c}</button>`).join('')}</div>
+      <div class="row2">${spec.kind === 'input' ? '<button class="btn" data-ch="0">= As played</button>' : ''}<button class="btn" data-ch="-1">Not sent</button></div>
+      <p>• another source already uses it on this output</p>`;
+    p.hidden = false;
+    const r = btn.getBoundingClientRect();
+    const w = 236, h = p.offsetHeight;
+    let x = Math.min(window.innerWidth - w - 12, Math.max(12, r.left + r.width / 2 - w / 2));
+    let y = r.bottom + 6;
+    if (y + h > window.innerHeight - 12) y = Math.max(12, r.top - h - 6);
+    p.style.left = x + 'px'; p.style.top = y + 'px';
+    p.querySelector('[aria-pressed="true"], button')?.focus();
+  }
+  function closePicker() { $('picker').hidden = true; picking?.btn?.focus(); picking = null; }
+  $('picker').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ch]');
+    if (!b || !picking) return;
+    const ch = Number(b.dataset.ch);
+    edit();
+    const r = (routesHere()[picking.row] ??= {});
+    if (ch < 0) delete r[picking.out]; else r[picking.out] = ch;
+    const sel = `[data-row="${CSS.escape(picking.row)}"][data-out="${CSS.escape(picking.out)}"]`;
+    $('picker').hidden = true; picking = null;
+    markDirty(); renderGrid(); renderInspector();
+    document.querySelector(sel)?.focus();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('picker').hidden) closePicker(); });
+  document.addEventListener('pointerdown', (e) => { if (!$('picker').hidden && !e.target.closest('#picker, .jack')) closePicker(); });
+
+  // ---- the inspector: one device ----
+  function renderInspector() {
+    const name = state.selected;
+    const s = setup();
+    if (!s.outputs.includes(name)) state.selected = s.outputs[0];
+    const n = state.selected;
+    const d = deviceOf(n);
+    const here = plugged(n);
+    const sends = Object.entries(routesHere()).filter(([, v]) => v[n] !== undefined && v[n] > 0).map(([, v]) => v[n]);
+    const slot = s.outputs.indexOf(n) + 1;
+    $('insp').innerHTML = `
+      <section>
+        <div style="display:flex;align-items:center;gap:8px"><span class="led ${here ? 'on' : ''}"></span><span class="label">Out ${slot}</span></div>
+        <h2 id="insp-title" style="font:700 20px var(--font-label)">${esc(n)}</h2>
+        <label class="field"><span>Port</span>
+          <select id="port-pick">${PLUGGED_OUT.map((p) => `<option ${p === n ? 'selected' : ''}>${esc(p)}</option>`).join('')}
+          ${here ? '' : `<option selected>${esc(n)} (not plugged in)</option>`}</select></label>
+        ${here ? '' : '<p style="margin:0;color:var(--warn);font-size:14px">Not plugged in: its routes are kept and come back when it is.</p>'}
+      </section>
+      <section>
+        <p class="scope"><span class="tag">Device</span> Kept with ${esc(n)}, in every setup</p>
+        <label class="field"><span>Drum map<small>General MIDI note to the device’s</small></span>
+          <select id="f-drums">${Object.keys(DRUM_MAPS).map((k) => `<option ${k === d.drums ? 'selected' : ''}>${k}</option>`).join('')}<option disabled>Custom…</option></select></label>
+        <label class="field"><span>Bend range<small>Semitones each way</small></span><input type="number" id="f-bend" min="1" max="96" value="${d.bend}"></label>
+        <label class="field"><span>A channel per note (MPE)<small>For microtonal pieces</small></span><input type="checkbox" class="switch" id="f-mpe" ${d.mpe ? 'checked' : ''}></label>
+        ${d.mpe ? `<div class="field"><span>Channels</span><span><input type="number" id="f-from" min="1" max="16" value="${d.mpe.from}" aria-label="First channel"> to <input type="number" id="f-to" min="1" max="16" value="${d.mpe.to}" aria-label="Last channel"></span></div>` : ''}
+        <label class="field"><span>Latency<small>Sent this much earlier, in ms (jambot#472)</small></span><input type="number" id="f-lat" min="0" max="200" value="${d.latency}"></label>
+      </section>
+      <section>
+        <p class="label">Channels on this output</p>
+        <div class="meter" aria-label="Channels in use and activity">${Array.from({ length: 16 }, (_, i) => {
+          const c = i + 1;
+          return `<i data-meter="${c}" style="--h:${hue(c)}" class="${sends.includes(c) ? 'on' : ''}" title="Channel ${c}${sends.includes(c) ? ': in use' : ''}"></i>`;
+        }).join('')}</div>
+        <div class="meter-axis" aria-hidden="true">${Array.from({ length: 16 }, (_, i) => `<span>${i + 1}</span>`).join('')}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="test-note" ${here ? '' : 'disabled'}>Test note</button>
+          <button class="btn" id="dev-panic" ${here ? '' : 'disabled'}>Notes off here</button>
+          <button class="btn ghost" id="remove-out" ${s.outputs.length < 2 ? 'disabled' : ''}>Remove output</button>
+        </div>
+      </section>`;
+    document.querySelectorAll('.col').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.out === n)));
+  }
+
+  $('insp').addEventListener('change', (e) => {
+    const d = deviceOf(state.selected);
+    const t = e.target;
+    const num = (lo, hi, v) => Math.max(lo, Math.min(hi, Math.round(Number(v) || lo)));
+    if (t.id === 'f-drums') d.drums = t.value;
+    if (t.id === 'f-bend') d.bend = t.value = num(1, 96, t.value);
+    if (t.id === 'f-mpe') d.mpe = t.checked ? { from: 2, to: 16 } : null;
+    if (t.id === 'f-from') d.mpe.from = num(1, 16, t.value);
+    if (t.id === 'f-to') d.mpe.to = num(1, 16, t.value);
+    if (t.id === 'f-lat') d.latency = num(0, 200, t.value);
+    if (t.id === 'port-pick') {
+      const name = t.value.replace(/ \(not plugged in\)$/, '');
+      if (name !== state.selected && !setup().outputs.includes(name)) {
+        edit();
+        const s = setup();
+        const old = state.selected;
+        s.outputs[s.outputs.indexOf(old)] = name;
+        for (const r of Object.values(s.routes)) for (const v of Object.values(r)) if (old in v) { v[name] = v[old]; delete v[old]; }
+        s.clock = s.clock.map((x) => (x === old ? name : x));
+        state.selected = name;
+        markDirty();
+      }
+    }
+    if (t.id !== 'port-pick') toast(`Kept with ${state.selected}`);
+    renderGrid(); renderInspector(); renderStatus();
+  });
+  $('insp').addEventListener('click', (e) => {
+    const id = e.target.id;
+    if (id === 'test-note') { flashOut(state.selected, 1); toast(`Middle C sent to ${state.selected}`); }
+    if (id === 'dev-panic') toast(`All notes off on ${state.selected}, 16 channels`);
+    if (id === 'remove-out') {
+      edit();
+      const s = setup();
+      s.outputs = s.outputs.filter((o) => o !== state.selected);
+      s.clock = s.clock.filter((o) => o !== state.selected);
+      state.selected = s.outputs[0];
+      markDirty(); renderAll();
+    }
+  });
+
+
+  // ---- activity ----
+  function flashOut(out, ch) {
+    const led = document.querySelector(`[data-led="${CSS.escape(out)}"]`);
+    if (led) { led.classList.add('flash'); setTimeout(() => led.classList.remove('flash'), 120); }
+    if (out === state.selected) {
+      const m = document.querySelector(`[data-meter="${ch}"]`);
+      if (m) { const was = m.classList.contains('on'); m.classList.add('on'); m.style.filter = 'brightness(1.35)'; setTimeout(() => { m.style.filter = ''; if (!was) m.classList.remove('on'); }, 140); }
+    }
+  }
+  function tick() {
+    const entries = [];
+    for (const [row, v] of Object.entries(routesHere())) for (const [out, ch] of Object.entries(v)) if (row !== 'clock' && plugged(out)) entries.push([row, out, ch]);
+    if (!entries.length) return;
+    const k = 1 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < k; i++) {
+      const [row, out, ch] = entries[Math.floor(Math.random() * entries.length)];
+      const id = `${row}|${out}`;
+      const el = document.querySelector(`[data-row="${CSS.escape(row)}"][data-out="${CSS.escape(out)}"] .chip`);
+      if (el) { el.classList.add('lit'); setTimeout(() => el.classList.remove('lit'), 110); }
+      flashOut(out, ch || 1);
+      void id;
+    }
+  }
+  $('demo').addEventListener('click', () => {
+    if (state.demo) { clearInterval(state.demo); state.demo = null; }
+    else state.demo = setInterval(tick, 125);
+    $('demo').setAttribute('aria-pressed', String(!!state.demo));
+    $('demo').textContent = state.demo ? 'Stop demo' : 'Play demo';
+  });
+
+  // ---- wiring ----
+  function renderAll() { renderStatus(); renderSetups(); renderGrid(); renderInspector(); }
+
+  document.querySelector('.modes').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mode]');
+    if (!b) return;
+    state.mode = b.dataset.mode;
+    document.querySelectorAll('.modes button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    try { localStorage.setItem('patchbay-mode', state.mode); } catch {}
+    renderAll();
+  });
+  $('configs').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-id]');
+    if (!b) return;
+    state.active = b.dataset.id;
+    toast(`${setup().name}: ${fitOf(setup())} of ${setup().outputs.length} devices plugged in`);
+    renderAll();
+  });
+  $('suggest').addEventListener('click', (e) => {
+    const b = e.target.closest('#use-best');
+    if (!b) return;
+    state.active = b.dataset.id; renderAll();
+  });
+  // ---- Save: overwrite the named setup with its custom variant, save it under a new name, or discard it ----
+  function closeSave() { const m = $('savemenu'); if (m) m.hidden = true; $('save').setAttribute('aria-expanded', 'false'); }
+  $('save').addEventListener('click', () => {
+    const v = setup();
+    const base = setups.find((x) => x.id === v.base);
+    if (!base) return;
+    const m = $('savemenu');
+    if (!m.hidden) { closeSave(); return; }
+    m.innerHTML = `<button class="btn primary" id="sv-over">Overwrite ${esc(base.name)}</button><span class="sep">or</span>
+      <input id="sv-name" aria-label="Name of the new setup" value="${esc(base.name)} 2"><button class="btn" id="sv-new">Save as new</button>
+      <span class="grow"></span><button class="btn ghost" id="sv-discard">Discard changes</button>`;
+    m.hidden = false;
+    $('save').setAttribute('aria-expanded', 'true');
+    $('sv-over').focus();
+  });
+  $('savemenu').addEventListener('click', (e) => {
+    const v = setup();
+    const base = setups.find((x) => x.id === v.base);
+    if (!base) return;
+    const drop = () => setups.splice(setups.indexOf(v), 1);
+    if (e.target.id === 'sv-over') {
+      Object.assign(base, { outputs: v.outputs, heard: v.heard, routes: v.routes, clock: v.clock });
+      drop(); state.active = base.id; toast(`Saved ${base.name}`);
+    } else if (e.target.id === 'sv-new') {
+      const want = $('sv-name').value.trim() || 'Setup';
+      let name = want, n = 2;
+      while (setups.some((x) => x.name === name)) name = `${want} ${n++}`;
+      const copy = { ...v, id: 'c' + setups.length + '-' + n, name };
+      delete copy.base;
+      drop(); setups.push(copy); state.active = copy.id; toast(`Saved as ${name}; ${base.name} is as it was`);
+    } else if (e.target.id === 'sv-discard') {
+      drop(); state.active = base.id; toast(`Back to ${base.name} as saved`);
+    } else return;
+    closeSave(); renderAll();
+  });
+  $('export').addEventListener('click', () => toast(`${setup().name} exported as a .midisetup.json file`));
+  $('import').addEventListener('click', () => toast('Choose a .midisetup.json file to add'));
+  $('refresh').addEventListener('click', () => toast(`${PLUGGED_IN.length} inputs, ${PLUGGED_OUT.length} outputs`));
+  $('panic').addEventListener('click', () => toast('All notes off, every output, 16 channels'));
+  $('notes').addEventListener('change', (e) => document.body.classList.toggle('show-notes', e.target.checked));
+
+  document.addEventListener('click', (e) => {
+    const ear = e.target.closest('[data-ear]');
+    if (ear) {
+      edit();
+      const s = setup();
+      const name = ear.dataset.ear;
+      s.heard = s.heard.includes(name) ? s.heard.filter((n) => n !== name) : [...s.heard, name];
+      markDirty(); renderGrid(); return;
+    }
+    const col = e.target.closest('.col');
+    if (col) { state.selected = col.dataset.out; renderInspector(); return; }
+    const j = e.target.closest('.jack');
+    if (j) { openPicker(j); return; }
+    if (e.target.id === 'toggle-empty') { state.showEmpty = !state.showEmpty; renderGrid(); return; }
+    if (e.target.id === 'add-out') {
+      const s = setup();
+      const free = PLUGGED_OUT.find((p) => !s.outputs.includes(p));
+      if (!free) { toast('Every plugged-in output is already in this setup'); return; }
+      edit();
+      setup().outputs.push(free); state.selected = free; markDirty(); renderAll();
+    }
+  });
+
+  try { const m = localStorage.getItem('patchbay-mode'); if (m && ROWS[m]) { state.mode = m; document.querySelectorAll('.modes button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.mode === m))); } } catch {}
+  renderAll();
+})();
+</script>

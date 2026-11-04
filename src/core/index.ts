@@ -18,3 +18,6 @@ export * from './out';
 export * from './clock-out';
 // SysEx: whole messages out of a byte stream, as a device's protocol reads them.
 export * from './sysex';
+// Setups: device profiles, named setups and their routes, the book that keeps them, and the frontends' stores migrated.
+export * from './setups';
+export * from './setups-from';
