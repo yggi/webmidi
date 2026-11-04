@@ -29,7 +29,10 @@
     selected?: string;
     /** The crossings sounding now, as `row|output key`. */
     lit?: ReadonlySet<string>;
-    /** Routed by the piece itself (its MIDI cards): shown, not changed. */
+    /**
+     * The frontend's rows routed by the piece itself (its MIDI cards): shown, not changed. The inputs and the clock stay
+     * the setup's, and editable; no output is added, since the outputs are the piece's (yggi/webmidi#22).
+     */
     locked?: boolean;
     /** Whether the clock row is shown: a frontend with no clock to send passes false. */
     clock?: boolean;
@@ -144,7 +147,7 @@
                   {/if}
                 {:else}
                   {@const chip = value === undefined ? null : value === AS_PLAYED ? '=' : String(value)}
-                  {#if locked}
+                  {#if locked && row.kind !== 'input'}
                     <span class="jack" aria-label="{row.label} to {outLabel(o)}: {chip ?? 'not sent'}">
                       {#if chip}<span class="chip" class:keep={value === AS_PLAYED} style:--h={channelHue(value ?? 1)}>{chip}</span>{:else}<span class="hole"></span>{/if}
                     </span>
@@ -174,15 +177,9 @@
             {#each setup.outputs as o (o.key)}
               {@const on = setup.clock.includes(o.key)}
               <td>
-                {#if locked}
-                  <span class="jack" aria-label="Clock to {outLabel(o)}: {on ? 'sent' : 'not sent'}"
-                    >{#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}</span
-                  >
-                {:else}
-                  <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
-                    {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
-                  </button>
-                {/if}
+                <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
+                  {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
+                </button>
               </td>
             {/each}
             {#if !locked}<td></td>{/if}

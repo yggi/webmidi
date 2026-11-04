@@ -314,11 +314,18 @@ describe('PatchMatrix', () => {
     expect(calls.select).toHaveBeenLastCalledWith('o1');
   });
 
-  it('locked (a piece routed by its cards): shown, no jack to press, no output to add', () => {
-    matrix(home(), { locked: true });
+  it('locked (a piece routed by its cards): its rows shown, not pressed, no output to add; the inputs and the clock still the setup’s (yggi/webmidi#22)', () => {
+    const { props } = matrix(home(), { locked: true });
     expect(rowCells('&lead')).toEqual(['·', '1']);
-    expect(all('button.jack').length).toBe(0);
+    expect([jack('&lead', 'Minilogue xd').tagName, jack('Kit', 'Circuit Tracks').tagName]).toEqual(['SPAN', 'SPAN']);
     expect(all('button').some((b) => b.textContent === '+ Output')).toBe(false);
+    jack('KeyStep 37', 'Minilogue xd').click();
+    flushSync();
+    click('= As played');
+    expect(crossingOf(props.book, 'piece:a', inputRow(keystep), 'o2')).toBe(AS_PLAYED);
+    jack('Clock', 'Minilogue xd').click();
+    flushSync();
+    expect(activeSetup(props.book).clock).toEqual(['o2']);
   });
 
   it('marks an output not plugged in, and lists an input the routes send from that isn’t', () => {
