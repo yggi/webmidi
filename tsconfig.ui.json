@@ -1,0 +1,7 @@
+{
+  // The ui gate, beside the purity gate and the web gate: `ui`'s components and modules typecheck with the browser's
+  // types and nothing of Node's (svelte-check reads the .svelte files), reading core and web as they are.
+  "extends": "./tsconfig.web.json",
+  "include": ["src/ui/**/*.ts", "src/ui/**/*.svelte"],
+  "exclude": ["src/**/*.test.ts"]
+}

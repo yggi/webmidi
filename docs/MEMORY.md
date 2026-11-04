@@ -38,6 +38,15 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 - `book-store.ts` `localBookStore`: the book in `localStorage`, nothing thrown when storage is refused
 - `fixtures.ts` the fake `navigator.requestMIDIAccess` and a listened input, shipped through `@yggi/webmidi/testing`
 
+## Map of src/ui/
+
+`index.ts` is the surface, `@yggi/webmidi/ui`: the patchbay's components (docs/proposals/patchbay.md), presentational. A frontend owns the connection and the book, and passes in what they say; a component calls back with what was asked. Colours come from `--wm-*` custom properties, falling back to a neutral palette in both themes.
+
+- `MidiStatus.svelte` the connection: a light, the message, Connect, or Refresh ports and All notes off; the setup's devices missing
+- `DeviceInspector.svelte` one output: its port (one not plugged in kept), its device's profile (clock, drum map, bend, MPE, latency), the channels routed to it, test note, notes off, remove
+- `ChannelMeter.svelte` the 16 channels of an output, used and sounding; `channels.ts` a channel's hue, the same in every component
+- `ui.svelte.test.ts` the components mounted in jsdom (`// @vitest-environment jsdom`; Svelte's browser build)
+
 ## src/testing/
 
 `index.ts` is `@yggi/webmidi/testing`, for tests only: core's and web's `fixtures.ts` re-exported, so a frontend's tests drive the fakes webmidi's own do (yggi/webmidi#6). `testing.test.ts` holds it to its surface, to the web gate and to `npm pack`.

@@ -8,7 +8,7 @@ Three, each a subpath export, the lower never importing the higher:
 
 - **`core`** (`src/core/`, `@yggi/webmidi/core`): pure. No DOM, no Web MIDI, no timers: ports and clocks come in as interfaces (`MidiPort`, `PortAccess`, `OutputClock`), and the only host global is the one in `src/core/host.d.ts` (`performance`).
 - **`web`** (`src/web/`, `@yggi/webmidi/web`): the Web MIDI adapter: access asked for (SysEx too), the permission query, the ports, an input listened to, a SysEx transport. It may touch the browser (the DOM's types, Web MIDI's), and nothing of Node's; it imports core and no package: a device's protocol (ep133-sysex's `Transport`) is met by its shape.
-- **`ui`** (`src/ui/`, not yet written): shared Svelte 5 components, shipped as source.
+- **`ui`** (`src/ui/`, `@yggi/webmidi/ui`): the patchbay's Svelte 5 components, shipped as source, Svelte a peer. It may import core, web and packages; it typechecks with the browser's types (`tsconfig.ui.json`, svelte-check), and its declarations come from svelte2tsx (`tools/ui-types.mjs`).
 
 Beside them, **`testing`** (`src/testing/`, `@yggi/webmidi/testing`): the fake Web MIDI (core's `fixtures.ts`, web's `fixtures.ts`) for a frontend's tests and webmidi's own; held to the web gate, importing core and web, and imported by tests only.
 
