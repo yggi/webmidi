@@ -45,7 +45,7 @@ The open issues ask more of this same model:
   `web` has the `localStorage` implementation, under a key the frontend gives.
   Tests use an in-memory one.
 - **Rows** come from the frontend as `{ id, label, kind: 'voice' | 'kit' | 'member' | 'empty', note?, group? }`.
-- **Clock is a row too, in every mode** (the owner, 2026-11-04): the setup's `clock`, the outputs it sends clock to, the same in every context.
+- **Clock is a row too, in every mode, the first** (the owner, 2026-11-04): the setup's `clock`, the outputs it sends clock to, the same in every context.
   webmidi doesn't know what a voice is (decision 001: it never imports cells).
 - **The inputs are rows too, in every mode** (the owner, 2026-11-04). webmidi adds a row `in:<port name>` for each input after the frontend's rows.
   An input row is routed like any other: to any outputs, each on a channel or "as played".

@@ -8,7 +8,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
-Nothing has changed since `v0.1.3`.
+### Changed
+- **The clock is the first row of `PatchMatrix`** (the owner, 2026-11-04), a rule under it, where it was the last. Nothing on the wire changes.
 
 ## v0.1.3 — 2026-11-04
 
