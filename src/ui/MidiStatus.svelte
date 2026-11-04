@@ -18,9 +18,23 @@
     onpanic?: () => void;
     /** Whether there is anything to silence. */
     canPanic?: boolean;
+    /** The connect button's name, before ("Connect MIDI", say) and while asking (yggi/webmidi#31). */
+    connectLabel?: string;
+    connectingLabel?: string;
   }
 
-  let { message, connected, connecting = false, missing = 0, onconnect, onrefresh, onpanic, canPanic = true }: Props = $props();
+  let {
+    message,
+    connected,
+    connecting = false,
+    missing = 0,
+    onconnect,
+    onrefresh,
+    onpanic,
+    canPanic = true,
+    connectLabel = 'Connect',
+    connectingLabel = 'Connecting…',
+  }: Props = $props();
 </script>
 
 <div class="wm-status">
@@ -30,7 +44,7 @@
   </p>
   <div class="actions">
     {#if !connected}
-      <button type="button" onclick={onconnect} disabled={connecting}>{connecting ? 'Connecting…' : 'Connect'}</button>
+      <button type="button" onclick={onconnect} disabled={connecting}>{connecting ? connectingLabel : connectLabel}</button>
     {:else}
       {#if onrefresh}<button type="button" onclick={onrefresh}>Refresh ports</button>{/if}
       {#if onpanic}<button type="button" onclick={onpanic} disabled={!canPanic}>All notes off</button>{/if}

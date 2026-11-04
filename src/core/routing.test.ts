@@ -119,3 +119,12 @@ describe('portsMessage', () => {
     expect(portsMessage({ inputs: [1, 2], outputs: [] })).toBe('MIDI connected: 2 inputs, 0 outputs.');
   });
 });
+
+describe('PortAccess.listen takes several inputs (yggi/webmidi#27)', () => {
+  it('still takes a frontend’s own fake that listens by one id, as before', () => {
+    const heard: string[] = [];
+    const fake: PortAccess = { inputs: [], outputs: [], outputPort: () => null, listen: (id: string) => void heard.push(id) };
+    adoptPorts(fake, chosen('none', '', 'in-1', 'Keys'));
+    expect(heard).toEqual(['in-1']);
+  });
+});
