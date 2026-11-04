@@ -14,4 +14,5 @@ export * from './out';
 export * from './clock-out';
 export * from './sysex';
 export * from './setups';
+export * from './setup-ports';
 export * from './setups-from';

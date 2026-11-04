@@ -24,7 +24,7 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 - `bend.ts` cents as 14-bit bends, a note's bends with ramps sampled; `rotation.ts` MPE channels
 - `out.ts` `MidiOut`: `OutNote`s to a port, timestamped, note-offs kept after their note-ons, retriggers, drum maps, silencing that cuts nothing sent since; a run (a glide) struck as the horizon reaches each note
 - `clock-out.ts` `ClockOut`: 24 ticks a beat from the times a frontend passes in, Start, Stop, Continue and Song Position
-- `setups.ts` the patchbay's book (decision 002): device profiles by port name, named setups with their outputs, heard inputs, routes per context (inputs as rows, `AS_PLAYED`) and the outputs sent clock, a setup's fit to the ports plugged in, a setup as a file; `setups-from.ts` Cell studio's and Jambot's stores migrated once
+- `setups.ts` the patchbay's book (decision 002): device profiles by port name, named setups with their outputs, heard inputs, routes per context (inputs as rows, `AS_PLAYED`) and the outputs sent clock, a setup's fit to the ports plugged in, a setup as a file; `setups-from.ts` Cell studio's and Jambot's stores migrated once; `setup-ports.ts` a setup's live ports by id or name (`portsOf`), and ports kept by id named once they're seen (`namePorts`), neither making a custom variant
 - `sysex.ts` whole SysEx messages out of a byte stream (`SysexAssembler`, lifted from ep133-sysex)
 - `host.d.ts` the one host global core uses
 
