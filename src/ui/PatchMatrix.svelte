@@ -6,7 +6,7 @@
    * sits in) wait behind a button; the last row is the clock, the outputs the setup sends it to, the same in every context. An output's head selects it (for the `DeviceInspector`). It takes the book and calls
    * back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
    */
-  import { deviceNote } from '../core/drum-presets';
+  import { deviceNote, presetNameOf } from '../core/drum-presets';
   import type { PortOption } from '../core/port';
   import { activeSetup, addOutput, AS_PLAYED, inputRow, profileOf, withClock, withCrossing, withHeard, type Crossing, type SetupBook } from '../core/setups';
   import ChannelPicker from './ChannelPicker.svelte';
@@ -160,7 +160,7 @@
                     >
                       {#if chip}
                         <span class="chip" class:keep={value === AS_PLAYED} class:lit={lit?.has(`${row.id}|${o.key}`)} style:--h={channelHue(value ?? 1)}
-                          >{chip}{#if value === 10 && row.kind === 'kit'}<small>GM</small>{/if}</span
+                          >{chip}{#if value === 10 && row.kind === 'kit' && presetNameOf(profileOf(book, o.name).drums) === 'GM'}<small>GM</small>{/if}</span
                         >
                       {:else}<span class="hole"></span>{/if}
                     </button>

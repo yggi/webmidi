@@ -86,6 +86,23 @@ describe('MidiStatus', () => {
   });
 });
 
+describe('MidiStatus’s connect button (yggi/webmidi#31)', () => {
+  it('takes the names it is given, before and while connecting', () => {
+    const props = show(MidiStatus, {
+      message: 'Not connected.',
+      connected: false,
+      onconnect: vi.fn(),
+      connecting: false,
+      connectLabel: 'Connect MIDI',
+      connectingLabel: 'Asking…',
+    });
+    expect(buttons()).toEqual(['Connect MIDI']);
+    props.connecting = true;
+    flushSync();
+    expect(buttons()).toEqual(['Asking…']);
+  });
+});
+
 describe('ChannelMeter', () => {
   it('marks the channels used and lit, each in its own hue', () => {
     show(ChannelMeter, { used: [10, 1], lit: new Set([10]) });
@@ -241,7 +258,13 @@ describe('PatchMatrix', () => {
     expect(all('thead .name').map((n) => n.textContent)).toEqual(['Circuit Tracks', 'Minilogue xd']);
     expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['&lead', '&pad', 'Kit', '&bd', '&sd', 'KeyStep 37', 'Clock']);
     expect(rowCells('&lead')).toEqual(['·', '1', '·']);
-    expect(rowCells('Kit')).toEqual(['10GM', '·', '·']);
+    expect(rowCells('Kit')).toEqual(['10', '·', '·']);
+  });
+
+  it('marks a kit on channel 10 "GM" only where the output’s drum map is General MIDI (yggi/webmidi#30)', () => {
+    const book = withCrossing(home(), 'piece:a', '*', 'o2', 10);
+    matrix(book);
+    expect(rowCells('Kit')).toEqual(['10', '10GM', '·']);
   });
 
   it('shows a kit member’s note as each output’s drum map sends it, where the kit is routed', () => {
