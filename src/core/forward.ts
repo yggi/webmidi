@@ -3,6 +3,7 @@
 // own timestamp.
 
 import type { PortOption } from './port';
+import { isHeard, playsOf, type PlayableRow } from './plays';
 import { activeSetup, ANY_INPUT, AS_PLAYED, inputRow, type SetupBook } from './setups';
 
 /** A message to send to one output of the setup in use, by its key. */
@@ -30,12 +31,25 @@ export function forwardsOf(book: SetupBook, context: string, row: string, data: 
 }
 
 /**
- * The messages a raw message from an input sends: by its own row (`in:<name>`) and by every input's (`ANY_INPUT`), the
- * same bytes to one output sent once.
+ * The messages a raw message from an input sends: by its own row (`in:<name>`), and by every input's (`ANY_INPUT`) if
+ * the input is heard, as `ANY_INPUT` is every input heard (decision 003); the same bytes to one output sent once.
  */
 export function forwardsOfInput(book: SetupBook, context: string, input: PortOption, data: ArrayLike<number>): Forward[] {
   const out: Forward[] = [];
-  for (const f of [...forwardsOf(book, context, inputRow(input), data), ...forwardsOf(book, context, ANY_INPUT, data)])
+  const every = isHeard(activeSetup(book), input) ? forwardsOf(book, context, ANY_INPUT, data) : [];
+  for (const f of [...forwardsOf(book, context, inputRow(input), data), ...every])
     if (!out.some((o) => o.output === f.output && o.data.length === f.data.length && o.data.every((b, i) => b === f.data[i]))) out.push(f);
   return out;
+}
+
+/**
+ * The messages a raw message from an input sends where the row it plays is sent (yggi/webmidi#29, decision 003): Cell
+ * studio's keys thru, the keys heard on the voice they play. The row is what `playsOf` says among the frontend's `rows`;
+ * playing the default, it is `defaultRow`, the frontend's (the open sheet's voice), or nothing without one; not heard,
+ * nothing. Each message is re-channelled by that row's crossings, as `forwardsOf` does.
+ */
+export function forwardsAsPlayed(book: SetupBook, context: string, input: PortOption, rows: readonly PlayableRow[], data: ArrayLike<number>, defaultRow?: string): Forward[] {
+  const played = playsOf(book, input, rows);
+  const row = played === 'default' ? defaultRow : played;
+  return row === undefined || row === null ? [] : forwardsOf(book, context, row, data);
 }

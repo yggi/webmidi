@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fakeAccess, fakeConnection, fakePort } from './fixtures';
 import { namePorts, portsOf } from './setup-ports';
 import { fromJambot } from './setups-from';
-import { activeSetup, addOutput, chooseDevice, newBook, overwrite, removeOutput, renameSetup, saveAs, withCrossing, withHeard, type SetupBook } from './setups';
+import { activeSetup, addOutput, chooseDevice, newBook, overwrite, removeOutput, renameSetup, saveAs, withCrossing, withPlays, type SetupBook } from './setups';
 
 const circuit = fakePort('out-1', 'Circuit Tracks');
 const mini = fakePort('out-2', 'Minilogue xd');
@@ -33,12 +33,16 @@ describe('portsOf (yggi/webmidi#28)', () => {
     expect(b.setups.map((s) => s.name)).toEqual(['Home', 'Venue']);
   });
 
-  it('gives no port for a slot with no device, or a device not plugged in, and the heard inputs to listen to', () => {
+  it('gives no port for a slot with no device, or a device not plugged in, and the inputs heard or routed to listen to', () => {
     let b = addOutput(book()).book;
-    b = withHeard(b, [{ id: 'in-1', name: 'Keys' }]);
+    b = withPlays(b, 'in:Keys', 'default');
+    b = withCrossing(b, 'band', 'in:Pads', 'o1', 3);
     const { outputs, listen } = portsOf(activeSetup(b), fakeConnection(fakeAccess([], [circuit])));
     expect(outputs.map((o) => o.port)).toEqual([null, null]);
-    expect(listen).toEqual([{ id: 'in-1', name: 'Keys' }]);
+    expect(listen).toEqual([
+      { id: 'Keys', name: 'Keys' },
+      { id: 'Pads', name: 'Pads' },
+    ]);
   });
 });
 
@@ -52,7 +56,7 @@ describe('namePorts (yggi/webmidi#28)', () => {
     const b = namePorts(unnamed, plugged);
     const known = fromJambot(jambot, plugged);
     expect(activeSetup(b).outputs).toEqual(activeSetup(known).outputs);
-    expect(activeSetup(b).heard).toEqual(activeSetup(known).heard);
+    expect(activeSetup(b).plays).toEqual(activeSetup(known).plays);
     expect(activeSetup(b).routes).toEqual(activeSetup(known).routes);
     expect(b.setups.map((s) => [s.id, s.base])).toEqual([['s1', undefined]]);
   });

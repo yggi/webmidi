@@ -8,7 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
-Nothing has changed since `v0.1.4`.
+### Changed
+- **What an input plays replaces what it heard: one mechanism** (yggi/webmidi#43, decision 003). This breaks a frontend's code, so the next release is a minor version.
+  - `Setup.plays`, by input row: `'none'` (not heard), `'default'`, or one of the frontend's rows kept with its role.
+  - `ANY_INPUT`'s choice is every input's without one of its own. It is the setup's, the same in every context.
+  - A book kept before reads its `heard` as the inputs playing the default (`'all'` as `ANY_INPUT`), so nothing a person chose is lost.
+  - `PatchMatrix`'s Heard switch is now a Plays choice on each input row.
+  - `forwardsOfInput` forwards by every input's row (`ANY_INPUT`) only an input that is heard.
+
+  **Migration:**
+  - `setup.heard` → `heardOf(setup)` (`'all'` or the ports), or `isHeard(setup, port)`;
+  - `withHeard(book, ports)` → `withPlays(book, inputRow(port), 'default' | 'none')`, and `withHeard(book, 'all')` → `withPlays(book, ANY_INPUT, 'default')`;
+  - `portsOf(...).listen` now gives the inputs heard and routed (`listenOf`).
+
+  Nothing on the wire changes.
+
+### Added
+- **Inputs assigned by preset, and sent as played** (yggi/webmidi#43, #29; decision 003):
+  - `playsOf(book, input, rows)` gives the row an input plays among the frontend's rows: its own, else the first of its role, else the default.
+  - `guessKind(name)` gives an input's kind (keyboard, pads, controller) from its port's name.
+  - `applyPreset(book, preset, inputs, rows)` fills in, by kind and the rows' roles (`DEFAULT_PRESET`: keyboard → lead, pads → drums), only the inputs with no choice. `PatchMatrix`'s `preset` prop shows its button.
+  - `MatrixRow.role` gives a row's role.
+  - `forwardsAsPlayed` sends an input's messages wherever the row it plays is sent (Cell studio's keys thru).
 
 ## v0.1.4 — 2026-11-04
 

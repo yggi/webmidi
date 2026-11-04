@@ -35,7 +35,16 @@ export declare const AS_PLAYED = 0;
 /** A context's routes: a row's id to its crossings, by output key. */
 export type Routes = Readonly<Record<string, Readonly<Record<string, Crossing>>>>;
 /**
- * A named setup: the outputs in order, the inputs the frontend hears, and the routes of each context it names. A change
+ * What an input plays (yggi/webmidi#43, decision 003): `'none'`, not heard at all; `'default'`, heard, playing what the
+ * frontend plays by default (the open sheet, the Muse's lead); or one of the frontend's rows, kept by its id and by its
+ * role (`'lead'`, `'drums'`), so a row a frontend doesn't have falls to its row of that role, else to the default.
+ */
+export type PlaysChoice = 'none' | 'default' | {
+    readonly row: string;
+    readonly role?: string;
+};
+/**
+ * A named setup: the outputs in order, what each input plays, and the routes of each context it names. A change
  * to a named setup is kept as its custom variant (`base`), saved at once, until the person overwrites the named setup
  * with it, saves it under a new name, or discards it (decision 002).
  */
@@ -46,8 +55,12 @@ export interface Setup {
     readonly base?: string;
     /** At least one; an output with id `'none'` is a slot with no device. */
     readonly outputs: readonly SetupOutput[];
-    /** The inputs the frontend listens to (its keys, MIDI learn, the Muse), or `'all'`. Routing an input is its row's. */
-    readonly heard: readonly PortOption[] | 'all';
+    /**
+     * What each input plays, by its row (`in:<name>`): one mechanism for whether it is heard and what it drives, the same
+     * in every context, as the clock is. `ANY_INPUT`'s is every input's without one of its own; an input with neither is
+     * not heard. Where an input's messages are sent is its row's crossings, apart from this.
+     */
+    readonly plays: Readonly<Record<string, PlaysChoice>>;
     /**
      * By context, a name the frontend chooses (`piece:<title>` in Cell studio, `band` in Jambot, `bay` standalone): its
      * routes. Rows are the frontend's, and the inputs' (`inputRow`).
@@ -128,8 +141,11 @@ export declare function removeOutput(book: SetupBook, key: string): SetupBook;
 export declare function withClock(book: SetupBook, key: string, on: boolean): SetupBook;
 /** Whether an output of the setup in use is sent clock. */
 export declare const sendsClock: (book: SetupBook, key: string) => boolean;
-/** The inputs the frontend hears, in the setup in use. */
-export declare const withHeard: (book: SetupBook, heard: readonly PortOption[] | "all") => SetupBook;
+/**
+ * What an input plays, by its row (`inputRow(port)`, or `ANY_INPUT` for every input's), in the setup in use: a choice,
+ * or undefined to drop its own and follow `ANY_INPUT`'s. A change to a named setup, as any.
+ */
+export declare function withPlays(book: SetupBook, input: string, choice: PlaysChoice | undefined): SetupBook;
 /** Another setup put in use (an id the book doesn't have: the book as it is). */
 export declare const useSetup: (book: SetupBook, id: string) => SetupBook;
 /** The setup in use saved as a named setup under a new name (made free), and put in use; a custom variant saved so goes. */

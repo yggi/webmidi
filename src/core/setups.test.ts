@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   activeSetup,
   addOutput,
+  ANY_INPUT,
   AS_PLAYED,
   changedFrom,
   chooseDevice,
@@ -27,7 +28,7 @@ import {
   useSetup,
   withClock,
   withCrossing,
-  withHeard,
+  withPlays,
   withProfile,
   type SetupBook,
 } from './setups';
@@ -225,9 +226,13 @@ describe('setups', () => {
     expect(removeSetup(book, 's1')).toBe(book);
   });
 
-  it('hear none, some or all inputs', () => {
-    expect(activeSetup(withHeard(home(), [keystep])).heard).toEqual([keystep]);
-    expect(activeSetup(withHeard(home(), 'all')).heard).toBe('all');
+  it('say what an input plays, every input’s too, and drop a choice to follow every input’s (decision 003)', () => {
+    let book = withPlays(home(), inputRow(keystep), { row: 'lead', role: 'lead' });
+    book = withPlays(book, ANY_INPUT, 'default');
+    expect(activeSetup(book).plays).toEqual({ 'in:KeyStep 37': { row: 'lead', role: 'lead' }, 'in:*': 'default' });
+    expect(activeSetup(book).name).toBe('Home - custom');
+    expect(withPlays(book, ANY_INPUT, 'default')).toBe(book);
+    expect(activeSetup(withPlays(book, inputRow(keystep), undefined)).plays).toEqual({ 'in:*': 'default' });
   });
 });
 
@@ -279,9 +284,30 @@ describe('a setup as a file', () => {
   });
 });
 
+describe('what an input plays, read back (decision 003)', () => {
+  it('keeps the three forms by input row, junk dropped, and reads a setup from before plays by what it heard', () => {
+    const kept = (plays: unknown, heard?: unknown) => activeSetup(readBook({ version: 1, setups: [{ id: 'a', name: 'A', plays, heard }] })).plays;
+    expect(
+      kept({ 'in:A': 'none', 'in:B': 'default', 'in:C': { row: 'lead', role: 'lead' }, 'in:D': { row: 'pad' }, lead: 'default', 'in:E': 'loud', 'in:F': { role: 'x' } }),
+    ).toEqual({
+      'in:A': 'none',
+      'in:B': 'default',
+      'in:C': { row: 'lead', role: 'lead' },
+      'in:D': { row: 'pad' },
+    });
+    expect(kept(undefined, 'all')).toEqual({ 'in:*': 'default' });
+    expect(kept(undefined, [keystep, 'k'])).toEqual({ 'in:KeyStep 37': 'default' });
+    expect(kept(undefined, undefined)).toEqual({});
+  });
+});
+
 describe('reading what was kept', () => {
   it('reads back what was saved', () => {
-    const book = withProfile(withCrossing(withHeard(saveAs(home(), 'Venue'), [keystep]), 'band', inputRow(keystep), 'o2', AS_PLAYED), circuit.name, { mpe: { from: 2, to: 5 } });
+    const book = withProfile(
+      withCrossing(withPlays(saveAs(home(), 'Venue'), inputRow(keystep), { row: 'lead', role: 'lead' }), 'band', inputRow(keystep), 'o2', AS_PLAYED),
+      circuit.name,
+      { mpe: { from: 2, to: 5 } },
+    );
     const store = memoryStore();
     store.save(book);
     expect(readBook(store.load())).toEqual(book);
@@ -305,7 +331,14 @@ describe('reading what was kept', () => {
     });
     expect(book.active).toBe('a');
     expect(profileOf(book, 'X')).toEqual({ ...DEFAULT_PROFILE, latency: 9, drums: { 36: 60 } });
-    expect(activeSetup(book)).toEqual({ id: 'a', name: 'a', outputs: [{ key: 'o1', id: 'p', name: 'X' }], heard: [keystep], routes: { band: { lead: { o1: 3 } } }, clock: [] });
+    expect(activeSetup(book)).toEqual({
+      id: 'a',
+      name: 'a',
+      outputs: [{ key: 'o1', id: 'p', name: 'X' }],
+      plays: { 'in:KeyStep 37': 'default' },
+      routes: { band: { lead: { o1: 3 } } },
+      clock: [],
+    });
   });
 
   it('loads what a store keeps; with nothing kept, migrates once and saves it', () => {

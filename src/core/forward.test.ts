@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { forwardsOf, forwardsOfInput } from './forward';
-import { addOutput, ANY_INPUT, AS_PLAYED, chooseDevice, inputRow, newBook, withCrossing, type SetupBook } from './setups';
+import { forwardsAsPlayed, forwardsOf, forwardsOfInput } from './forward';
+import { addOutput, ANY_INPUT, AS_PLAYED, chooseDevice, inputRow, newBook, withCrossing, withPlays, type SetupBook } from './setups';
 
 const keys = { id: 'in-1', name: 'Keys' };
 const row = inputRow(keys);
@@ -47,8 +47,8 @@ describe('forwardsOf (yggi/webmidi#32)', () => {
 });
 
 describe('forwardsOfInput', () => {
-  it('sends by the input’s own row and by every input’s, the same bytes to one output once', () => {
-    let b = book();
+  it('sends by the input’s own row and, heard, by every input’s, the same bytes to one output once', () => {
+    let b = withPlays(book(), ANY_INPUT, 'default');
     b = withCrossing(b, 'band', ANY_INPUT, 'o1', 5);
     b = withCrossing(b, 'band', ANY_INPUT, 'o2', 2);
     expect(forwardsOfInput(b, 'band', keys, [0x90, 60, 100])).toEqual([
@@ -60,5 +60,33 @@ describe('forwardsOfInput', () => {
       { output: 'o1', data: [0x94, 60, 100] },
       { output: 'o2', data: [0x91, 60, 100] },
     ]);
+  });
+
+  it('sends an input not heard by its own row only: every input’s row is every input heard (yggi/webmidi#43)', () => {
+    let b = withCrossing(book(), 'band', ANY_INPUT, 'o2', 2);
+    expect(forwardsOfInput(b, 'band', keys, [0x90, 60, 100])).toEqual([
+      { output: 'o1', data: [0x94, 60, 100] },
+      { output: 'o2', data: [0x90, 60, 100] },
+    ]);
+    b = withPlays(withPlays(b, ANY_INPUT, 'default'), row, 'none');
+    expect(forwardsOfInput(b, 'band', keys, [0x90, 60, 100]).length).toBe(2);
+    expect(forwardsOfInput(b, 'band', { id: 'in-2', name: 'Pads' }, [0x90, 60, 100])).toEqual([{ output: 'o2', data: [0x91, 60, 100] }]);
+  });
+});
+
+describe('forwardsAsPlayed (yggi/webmidi#29)', () => {
+  const rows = [
+    { id: 'lead', role: 'lead' },
+    { id: 'bass', role: 'bass' },
+  ];
+  it('sends an input’s message where the row it plays is sent, on that row’s channels; the default row, or nothing', () => {
+    let b = withCrossing(book(), 'band', 'lead', 'o1', 3);
+    b = withCrossing(b, 'band', 'bass', 'o2', 9);
+    expect(forwardsAsPlayed(b, 'band', keys, rows, [0x90, 60, 100])).toEqual([]);
+    b = withPlays(b, row, { row: 'lead', role: 'lead' });
+    expect(forwardsAsPlayed(b, 'band', keys, rows, [0x91, 60, 100])).toEqual([{ output: 'o1', data: [0x92, 60, 100] }]);
+    b = withPlays(b, row, 'default');
+    expect(forwardsAsPlayed(b, 'band', keys, rows, [0x90, 60, 100])).toEqual([]);
+    expect(forwardsAsPlayed(b, 'band', keys, rows, [0x90, 60, 100], 'bass')).toEqual([{ output: 'o2', data: [0x98, 60, 100] }]);
   });
 });

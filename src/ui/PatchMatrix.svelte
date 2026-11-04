@@ -2,13 +2,29 @@
   /**
    * The patch (docs/proposals/patchbay.md, `PatchMatrix`): the frontend's rows and the inputs down, the setup's outputs
    * across, each crossing a jack (empty, or a chip in its channel's hue). A jack opens the channel picker; a kit's members
-   * show the note each output's drum map sends them as; an input's row has its Heard switch; empty rows (seats no part
+   * show the note each output's drum map sends them as; an input's row has its Plays choice (decision 003: not heard,
+   * the default, or one of the frontend's rows), and a preset fills in the inputs with no choice; empty rows (seats no part
    * sits in) wait behind a button; the first row is the clock, the outputs the setup sends it to, the same in every context. An output's head selects it (for the `DeviceInspector`). It takes the book and calls
    * back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
    */
   import { deviceNote, presetNameOf } from '../core/drum-presets';
   import type { PortOption } from '../core/port';
-  import { activeSetup, addOutput, AS_PLAYED, inputRow, profileOf, withClock, withCrossing, withHeard, withProfile, type Crossing, type SetupBook } from '../core/setups';
+  import { applyPreset, type InputPreset } from '../core/input-kinds';
+  import { choiceOf, playsOf } from '../core/plays';
+  import {
+    activeSetup,
+    addOutput,
+    ANY_INPUT,
+    AS_PLAYED,
+    inputRow,
+    profileOf,
+    withClock,
+    withCrossing,
+    withPlays,
+    withProfile,
+    type Crossing,
+    type SetupBook,
+  } from '../core/setups';
   import ChannelPicker from './ChannelPicker.svelte';
   import { channelHue, clamp } from './channels';
   import { inputRows, type MatrixRow } from './rows';
@@ -23,8 +39,10 @@
     inputs?: readonly PortOption[];
     /** The outputs plugged in now. */
     outputs: readonly PortOption[];
-    /** Who hears an input ("the Muse"): each input's row gets its Heard switch; null for none (standalone). */
+    /** Who hears an input ("the Muse", "the keys"): each input's row gets its Plays choice; null for none (standalone). */
     heardBy?: string | null;
+    /** A preset to fill in what the inputs with no choice play (`DEFAULT_PRESET`), by the rows' roles; none: no button. */
+    preset?: InputPreset | null;
     /** The output selected, by key. */
     selected?: string;
     /** The crossings sounding now, as `row|output key`. */
@@ -40,18 +58,32 @@
     onselect?: (key: string) => void;
   }
 
-  let { book, context, rows, inputs = [], outputs, heardBy = null, selected, lit, locked = false, clock = true, onchange, onselect }: Props = $props();
+  let { book, context, rows, inputs = [], outputs, heardBy = null, preset = null, selected, lit, locked = false, clock = true, onchange, onselect }: Props = $props();
 
   const setup = $derived(activeSetup(book));
   const routes = $derived(Object.hasOwn(setup.routes, context) ? setup.routes[context]! : {});
   let showEmpty = $state(false);
   const empties = $derived(rows.filter((r) => r.kind === 'empty').length);
-  const shown = $derived([...rows.filter((r) => showEmpty || r.kind !== 'empty'), ...inputRows(inputs, routes)]);
+  const shown = $derived([...rows.filter((r) => showEmpty || r.kind !== 'empty'), ...inputRows(inputs, routes, setup.plays)]);
   const crossing = (row: string, key: string): Crossing | undefined => (Object.hasOwn(routes, row) && Object.hasOwn(routes[row]!, key) ? routes[row]![key] : undefined);
   const kitHere = (key: string) => rows.some((r) => r.kind === 'kit' && crossing(r.id, key) !== undefined);
   const isPlugged = (o: PortOption) => o.id !== 'none' && outputs.some((p) => p.id === o.id || (!!o.name && p.name === o.name));
   const spare = $derived(outputs.filter((p) => !setup.outputs.some((o) => o.id === p.id || (!!o.name && o.name === p.name))));
-  const heard = (row: MatrixRow) => setup.heard === 'all' || setup.heard.some((p) => inputRow(p) === row.id);
+  /** The rows an input can play: the frontend's voices and kits. */
+  const playable = $derived(rows.filter((r) => r.kind === 'voice' || r.kind === 'kit'));
+  /** Inputs plugged in with no choice of their own, which a preset would fill in. */
+  const unassigned = $derived(inputs.filter((p) => !Object.hasOwn(setup.plays, inputRow(p))));
+  /** An input row's Plays value: its own choice (a row as the row it finds here), else '' (as every input's), else none. */
+  function playsValue(row: string): string {
+    if (row !== ANY_INPUT && !Object.hasOwn(setup.plays, row)) return Object.hasOwn(setup.plays, ANY_INPUT) ? '' : 'none';
+    const played = playsOf(book, row, playable);
+    return played === null ? 'none' : played;
+  }
+  /** What every input without its own choice plays, in words, for an input's "as every input" option. */
+  const everyInput = $derived.by(() => {
+    const c = choiceOf(setup, ANY_INPUT);
+    return c === 'none' ? 'not heard' : c === 'default' ? 'default' : (playable.find((r) => r.id === c.row)?.label ?? c.row);
+  });
 
   let picking: { row: MatrixRow; key: string; name: string; anchor: DOMRect } | null = $state(null);
 
@@ -66,11 +98,12 @@
     return Object.entries(routes).flatMap(([r, c]) => (r !== row && Object.hasOwn(c, key) && c[key]! > 0 ? [c[key]!] : []));
   }
 
-  function toggleHeard(row: MatrixRow) {
-    const port = inputs.find((p) => inputRow(p) === row.id) ?? { id: row.id.slice(3), name: row.id.slice(3) };
-    const now = setup.heard === 'all' ? [...inputs] : [...setup.heard];
-    const on = now.some((p) => inputRow(p) === row.id);
-    onchange(withHeard(book, on ? now.filter((p) => inputRow(p) !== row.id) : [...now, port]));
+  /** What an input row plays, chosen: as every input (''), not heard, the default, or a row (kept with its role). */
+  function choosePlays(row: string, value: string) {
+    if (value === '') return onchange(withPlays(book, row, undefined));
+    if (value === 'none' || value === 'default') return onchange(withPlays(book, row, value));
+    const target = playable.find((r) => r.id === value);
+    if (target) onchange(withPlays(book, row, target.role ? { row: target.id, role: target.role } : { row: target.id }));
   }
 
   function add() {
@@ -162,9 +195,19 @@
                     {#if row.kind === 'input'}<span class="sub">IN</span>{/if}
                     {#if row.sub}<span class="sub">{row.sub}</span>{/if}
                     {#if row.kind === 'input' && heardBy}
-                      <button type="button" class="ear" aria-pressed={heard(row)} title="{heard(row) ? 'Heard by' : 'Not heard by'} {heardBy}" onclick={() => toggleHeard(row)}
-                        >{heard(row) ? 'Heard' : 'Not heard'}</button
+                      {@const value = playsValue(row.id)}
+                      <select
+                        class="plays"
+                        class:off={value === 'none'}
+                        aria-label="What {row.label} plays, heard by {heardBy}"
+                        {value}
+                        onchange={(e) => choosePlays(row.id, e.currentTarget.value)}
                       >
+                        {#if row.id !== ANY_INPUT && Object.hasOwn(setup.plays, ANY_INPUT)}<option value="">As every input: {everyInput}</option>{/if}
+                        <option value="none">Not heard</option>
+                        <option value="default">Plays the default</option>
+                        {#each playable as r (r.id)}<option value={r.id}>Plays {r.label}</option>{/each}
+                      </select>
                     {/if}
                   </span>
                 {/if}
@@ -218,8 +261,19 @@
       </tbody>
     </table>
   </div>
-  {#if empties}
-    <button type="button" class="more" onclick={() => (showEmpty = !showEmpty)}>{showEmpty ? 'Hide empty rows' : `Show ${empties} empty ${empties === 1 ? 'row' : 'rows'}`}</button>
+  {#if empties || (preset && heardBy && unassigned.length)}
+    <div class="below">
+      {#if empties}
+        <button type="button" class="more" onclick={() => (showEmpty = !showEmpty)}
+          >{showEmpty ? 'Hide empty rows' : `Show ${empties} empty ${empties === 1 ? 'row' : 'rows'}`}</button
+        >
+      {/if}
+      {#if preset && heardBy && unassigned.length}
+        <button type="button" class="more" title="Fills in what each input with no choice plays, by its kind" onclick={() => onchange(applyPreset(book, preset, inputs, playable))}
+          >Assign inputs: {preset.name}</button
+        >
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -378,7 +432,7 @@
     background: var(--wm-surface, var(--_panel));
     text-align: left;
   }
-  /* a name wraps within at most 36 % of the matrix (96 px at least), its tags (IN, Heard, a seat's part) on a line under it */
+  /* a name wraps within at most 36 % of the matrix (96 px at least), its tags (IN, Plays, a seat's part) on a line under it */
   .rowname {
     display: flex;
     flex-direction: column;
@@ -510,20 +564,26 @@
     outline: 2px solid var(--_accent);
     outline-offset: 2px;
   }
-  .ear {
-    padding: 4px 7px;
-    border: 1px solid var(--_line);
+  .plays {
+    max-width: 100%;
+    min-height: 26px;
+    padding: 0 4px;
+    border: 1px solid var(--_live);
     border-radius: 999px;
     background: transparent;
-    color: var(--_faint);
+    color: var(--_live);
     font: 600 11px/1 var(--wm-font, system-ui, sans-serif);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    letter-spacing: 0.03em;
     cursor: pointer;
   }
-  .ear[aria-pressed='true'] {
-    border-color: var(--_live);
-    color: var(--_live);
+  .plays.off {
+    border-color: var(--_line);
+    color: var(--_faint);
+  }
+  .below {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
   }
   .more {
     justify-self: start;
