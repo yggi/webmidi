@@ -8,7 +8,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
-Nothing has changed since `v0.2.0`.
+### Added
+- **`MatrixRow.playable`** (found moving Jambot onto what an input plays, yggi/jambot#560): a row that says `false` isn't offered in an input's Plays choice, and a preset doesn't assign an input to it; by default a voice or a kit can be played, as before. Jambot plays along on its lead and drums alone, so its bass, pad, stab and keys' rows say `false`. Additive: nothing breaks at a frontend's next pin, and nothing on the wire changes.
 
 ## v0.2.0 — 2026-11-04
 

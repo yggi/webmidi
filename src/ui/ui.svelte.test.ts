@@ -328,6 +328,17 @@ describe('PatchMatrix', () => {
     expect(activeSetup(props.book).plays).toEqual({ 'in:*': 'default', 'in:KeyStep 37': 'none' });
   });
 
+  it('offers an input only the rows it can play: a row the frontend says can’t be played isn’t offered, nor assigned by a preset', () => {
+    const rows: MatrixRow[] = ROWS.map((r) => (r.id === 'pad' ? { ...r, playable: false } : r.kind === 'kit' ? { ...r, role: 'drums', playable: false } : r));
+    const pads = { id: 'in-2', name: 'MPD218' };
+    const { props } = matrix(home(), { rows, inputs: [keystep, pads], preset: DEFAULT_PRESET });
+    const options = [...(all('select.plays')[0] as HTMLSelectElement).options].map((o) => o.textContent);
+    expect(options).toEqual(['Not heard', 'Plays the default', 'Plays &lead']);
+    expect(all('button').some((b) => b.textContent?.startsWith('Assign inputs'))).toBe(true);
+    click('Assign inputs: Keyboard to lead, pads to drums');
+    expect(activeSetup(props.book).plays).toEqual({});
+  });
+
   it('assigns the inputs with no choice by a preset, from the rows’ roles; no button when there is none to fill', () => {
     const pads = { id: 'in-2', name: 'MPD218' };
     const roled: MatrixRow[] = ROWS.map((r) => (r.kind === 'kit' ? { ...r, role: 'drums' } : r));

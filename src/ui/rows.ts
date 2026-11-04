@@ -20,6 +20,11 @@ export interface MatrixRow {
   readonly group?: boolean;
   /** What part it is (`'lead'`, `'drums'`), for an input that plays it to find it again elsewhere, and for a preset. */
   readonly role?: string;
+  /**
+   * Whether an input can play it (offered in an input's Plays choice): by default a voice or a kit can. A frontend
+   * that plays along on some parts alone says so (Jambot's bass, pad and stab, its keys' row: false).
+   */
+  readonly playable?: boolean;
 }
 
 /**
