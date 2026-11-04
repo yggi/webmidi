@@ -24,8 +24,8 @@ const book = (setup: Setup, devices: Record<string, DeviceProfile>, defaults: De
 
 /**
  * Cell studio's store as a book of one setup, "Cell studio": its outputs and input; each piece's matrix as the context
- * `piece:<title>` (a channel 0, not sent there, dropped: 0 is `AS_PLAYED` in the book); each device's drum map, clock,
- * bend range and rotation as its profile, and the ranges a device with none of its own took as the defaults.
+ * `piece:<title>` (a channel 0, not sent there, dropped: 0 is `AS_PLAYED` in the book); the outputs whose device it sent
+ * clock as the setup's clock; each device's drum map, bend range and rotation as its profile, and the ranges a device with none of its own took as the defaults.
  * The built-in sound (`internal`) stays Cell studio's.
  */
 export function fromCellStudio(stored: unknown): SetupBook {
@@ -47,18 +47,18 @@ export function fromCellStudio(stored: unknown): SetupBook {
 
   const defaults = readProfile({ bend: s.bendRange, mpe: s.rotate ?? null }, DEFAULT_PROFILE);
   const [drums, bends, rotates, clock] = [record(s.drums), record(s.bends), record(s.rotates), record(s.clock)];
-  const names = new Set([...Object.keys(drums), ...Object.keys(bends), ...Object.keys(rotates), ...Object.keys(clock)]);
+  const names = new Set([...Object.keys(drums), ...Object.keys(bends), ...Object.keys(rotates)]);
   const devices: Record<string, DeviceProfile> = {};
   for (const name of names) {
     const kept: Record<string, unknown> = {};
     if (Object.hasOwn(drums, name)) kept.drums = drums[name];
     if (Object.hasOwn(bends, name)) kept.bend = bends[name];
     if (Object.hasOwn(rotates, name)) kept.mpe = rotates[name] ?? null;
-    if (Object.hasOwn(clock, name)) kept.clock = clock[name];
     devices[name] = readProfile(kept, defaults);
   }
 
-  return book({ id: 's1', name: 'Cell studio', outputs, heard: heardOf(portOf(s.in)), routes }, devices, defaults);
+  const clocked = outputs.filter((o) => o.id !== 'none' && Object.hasOwn(clock, o.name) && clock[o.name] === true).map((o) => o.key);
+  return book({ id: 's1', name: 'Cell studio', outputs, heard: heardOf(portOf(s.in)), routes, clock: clocked }, devices, defaults);
 }
 
 /** The row of what is played on Jambot's own keys (on screen and the computer's), which its thru passed on too. */
@@ -70,9 +70,9 @@ const PARTS = ['lead', 'bass', 'pad', 'stab', 'drums'] as const;
 /**
  * Jambot's store as a book of one setup, "Jambot": its one output; the context `band`, each part a row on that output
  * at its channel; thru on, as the keys' row (`KEYS`) and the heard input's row (every input's, `ANY_INPUT`, when it
- * heard all), each sent there on the thru channel; the drum map and the clock as the output device's profile. Jambot keeps its ports by id alone, so
- * `ports` (the ports plugged in now) gives their names; a device whose name isn't found keeps its map and clock as the
- * defaults, for whichever device is chosen next. The built-in synth (`internal`) stays Jambot's.
+ * heard all), each sent there on the thru channel; clock on, as the output's clock; the drum map as the output device's profile.
+ * Jambot keeps its ports by id alone, so `ports` (the ports plugged in now) gives their names; a device whose name isn't
+ * found keeps its map as the defaults, for whichever device is chosen next. The built-in synth (`internal`) stays Jambot's.
  */
 export function fromJambot(stored: unknown, ports: { readonly inputs: readonly PortOption[]; readonly outputs: readonly PortOption[] }): SetupBook {
   const s = record(stored);
@@ -91,7 +91,11 @@ export function fromJambot(stored: unknown, ports: { readonly inputs: readonly P
     else if (heard.length) band[inputRow(heard[0]!)] = { o1: s.thruChannel };
   }
 
-  const profile = readProfile({ drums: s.drumMap, clock: s.clock }, DEFAULT_PROFILE);
+  const profile = readProfile({ drums: s.drumMap }, DEFAULT_PROFILE);
   const known = out.id !== 'none' && !!out.name;
-  return book({ id: 's1', name: 'Jambot', outputs: [{ key: 'o1', ...out }], heard, routes: { band } }, known ? { [out.name]: profile } : {}, known ? DEFAULT_PROFILE : profile);
+  return book(
+    { id: 's1', name: 'Jambot', outputs: [{ key: 'o1', ...out }], heard, routes: { band }, clock: s.clock === true ? ['o1'] : [] },
+    known ? { [out.name]: profile } : {},
+    known ? DEFAULT_PROFILE : profile,
+  );
 }

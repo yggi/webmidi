@@ -31,8 +31,9 @@ describe('fromCellStudio', () => {
     expect(crossingOf(book, 'piece:electroswing', 'pad', 'o1')).toBeUndefined();
   });
 
-  it('turns each device’s drums, bend, rotation and clock into its profile, and the ranges for any other into the defaults', () => {
-    expect(profileOf(book, 'Circuit Tracks')).toEqual({ ...DEFAULT_PROFILE, bend: 12, clock: true, drums: { 36: 60, 38: 62 } });
+  it('turns each device’s drums, bend and rotation into its profile, the ranges for any other into the defaults, and the devices sent clock into the clock row', () => {
+    expect(activeSetup(book).clock).toEqual(['o1']);
+    expect(profileOf(book, 'Circuit Tracks')).toEqual({ ...DEFAULT_PROFILE, bend: 12, drums: { 36: 60, 38: 62 } });
     expect(profileOf(book, 'Minilogue xd')).toEqual({ ...DEFAULT_PROFILE, bend: 24, mpe: { from: 2, to: 5 } });
     expect(book.defaults).toEqual({ ...DEFAULT_PROFILE, bend: 12 });
   });
@@ -73,12 +74,13 @@ describe('fromJambot', () => {
     expect([off[KEYS], off['in:KeyStep 37']]).toEqual([undefined, undefined]);
   });
 
-  it('keeps the drum map and the clock as the device’s profile, or as the defaults when its name isn’t found', () => {
+  it('keeps the drum map as the device’s profile, or as the defaults when its name isn’t found, and the clock as the output’s', () => {
     const book = fromJambot(jambot, ports);
-    expect([profileOf(book, 'Circuit Tracks'), book.defaults]).toEqual([{ ...DEFAULT_PROFILE, clock: true, drums: { 36: 60 } }, DEFAULT_PROFILE]);
+    expect([profileOf(book, 'Circuit Tracks'), book.defaults]).toEqual([{ ...DEFAULT_PROFILE, drums: { 36: 60 } }, DEFAULT_PROFILE]);
+    expect([activeSetup(book).clock, activeSetup(fromJambot({ ...jambot, clock: false }, ports)).clock]).toEqual([['o1'], []]);
     const unplugged = fromJambot(jambot, { inputs: [], outputs: [] });
     expect(activeSetup(unplugged).outputs).toEqual([{ key: 'o1', id: 'out-1', name: '' }]);
-    expect([unplugged.devices, unplugged.defaults]).toEqual([{}, { ...DEFAULT_PROFILE, clock: true, drums: { 36: 60 } }]);
+    expect([unplugged.devices, unplugged.defaults]).toEqual([{}, { ...DEFAULT_PROFILE, drums: { 36: 60 } }]);
   });
 
   it('reads back as itself, and makes a setup of a store with nothing in it', () => {

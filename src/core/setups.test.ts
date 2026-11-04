@@ -19,11 +19,13 @@ import {
   profileOf,
   readBook,
   removeOutput,
+  sendsClock,
   removeSetup,
   renameSetup,
   saveAs,
   suggestSetup,
   useSetup,
+  withClock,
   withCrossing,
   withHeard,
   withProfile,
@@ -83,7 +85,7 @@ describe('a change to a named setup', () => {
   it('changes nothing when the change changes nothing, nor for a device’s profile, shared by every setup', () => {
     const book = home();
     expect(removeOutput(book, 'o9')).toBe(book);
-    expect(withProfile(book, circuit.name, { clock: true }).setups).toBe(book.setups);
+    expect(withProfile(book, circuit.name, { bend: 12 }).setups).toBe(book.setups);
   });
 
   it('is renamed with its named setup, and removed with it; it can’t be renamed itself', () => {
@@ -166,11 +168,34 @@ describe('outputs', () => {
   });
 });
 
+describe('the clock row', () => {
+  it('sends clock to the outputs of the setup in use, in every context, a change to a named setup kept as its custom variant', () => {
+    let book = withClock(home(), 'o1', true);
+    expect([sendsClock(book, 'o1'), sendsClock(book, 'o2'), changedFrom(book)?.name]).toEqual([true, false, 'Home']);
+    expect(sendsClock(useSetup(book, 's1'), 'o1')).toBe(false);
+    book = withClock(book, 'o2', true);
+    expect(activeSetup(book).clock).toEqual(['o1', 'o2']);
+    expect(activeSetup(withClock(book, 'o1', false)).clock).toEqual(['o2']);
+  });
+
+  it('changes nothing for an output it has none of, or one already so; an output removed takes its clock with it', () => {
+    const book = withClock(home(), 'o1', true);
+    expect(withClock(book, 'o1', true)).toBe(book);
+    expect(withClock(book, 'o9', true)).toBe(book);
+    expect(activeSetup(removeOutput(book, 'o1')).clock).toEqual([]);
+  });
+
+  it('is read back keeping only outputs the setup has, once each', () => {
+    const kept = { version: 1, setups: [{ id: 'a', name: 'A', outputs: [{ key: 'o1', id: 'p', name: 'X' }], clock: ['o1', 'o1', 'o7', 3] }] };
+    expect(activeSetup(readBook(kept)).clock).toEqual(['o1']);
+  });
+});
+
 describe('device profiles', () => {
   it('are kept by port name and shared by every setup', () => {
-    let book = withProfile(home(), circuit.name, { clock: true, drums: { 36: 60 } });
+    let book = withProfile(home(), circuit.name, { bend: 12, drums: { 36: 60 } });
     book = saveAs(book, 'Venue');
-    expect(profileOf(book, circuit.name)).toMatchObject({ clock: true, drums: { 36: 60 } });
+    expect(profileOf(book, circuit.name)).toMatchObject({ bend: 12, drums: { 36: 60 } });
     expect(profileOf(book, 'Unknown synth')).toEqual(DEFAULT_PROFILE);
   });
 
@@ -267,7 +292,7 @@ describe('reading what was kept', () => {
     const book = readBook({
       version: 1,
       active: 'gone',
-      devices: { X: { bend: 'twelve', clock: true, drums: { 36: 60, 300: 1, a: 2 } } },
+      devices: { X: { bend: 'twelve', latency: 9, drums: { 36: 60, 300: 1, a: 2 } } },
       setups: [
         {
           id: 'a',
@@ -279,8 +304,8 @@ describe('reading what was kept', () => {
       ],
     });
     expect(book.active).toBe('a');
-    expect(profileOf(book, 'X')).toEqual({ ...DEFAULT_PROFILE, clock: true, drums: { 36: 60 } });
-    expect(activeSetup(book)).toEqual({ id: 'a', name: 'a', outputs: [{ key: 'o1', id: 'p', name: 'X' }], heard: [keystep], routes: { band: { lead: { o1: 3 } } } });
+    expect(profileOf(book, 'X')).toEqual({ ...DEFAULT_PROFILE, latency: 9, drums: { 36: 60 } });
+    expect(activeSetup(book)).toEqual({ id: 'a', name: 'a', outputs: [{ key: 'o1', id: 'p', name: 'X' }], heard: [keystep], routes: { band: { lead: { o1: 3 } } }, clock: [] });
   });
 
   it('loads what a store keeps; with nothing kept, migrates once and saves it', () => {

@@ -32,7 +32,7 @@ The open issues ask more of this same model:
 
 ### 1. The model, in `core` (pure, tested)
 
-- **`DeviceProfile`**, kept by port name: the drum map, clock out, bend range, MPE rotation, a latency offset in milliseconds, and later the tuning table (jambot#382).
+- **`DeviceProfile`**, kept by port name: the drum map, bend range, MPE rotation, a latency offset in milliseconds, and later the tuning table (jambot#382).
   A device's profile is the same in every setup, because it describes the hardware.
 - **`Setup`**, named: its outputs in order (port id and name, as `ChosenPorts` already keeps them), the inputs the app hears (`heard`), and the routes.
   Routes are kept **per context**, a string the frontend names (`piece:<title>` in Cell studio, `band` in Jambot, `bay` standalone).
@@ -44,7 +44,8 @@ The open issues ask more of this same model:
 - **`BookStore`**: an interface with `load` and `save`, so core touches no storage.
   `web` has the `localStorage` implementation, under a key the frontend gives.
   Tests use an in-memory one.
-- **Rows** come from the frontend as `{ id, label, kind: 'voice' | 'kit' | 'member' | 'clock' | 'empty', note?, locked? }`.
+- **Rows** come from the frontend as `{ id, label, kind: 'voice' | 'kit' | 'member' | 'empty', note?, group? }`.
+- **Clock is a row too, in every mode** (the owner, 2026-11-04): the setup's `clock`, the outputs it sends clock to, the same in every context.
   webmidi doesn't know what a voice is (decision 001: it never imports cells).
 - **The inputs are rows too, in every mode** (the owner, 2026-11-04). webmidi adds a row `in:<port name>` for each input after the frontend's rows.
   An input row is routed like any other: to any outputs, each on a channel or "as played".
@@ -63,7 +64,7 @@ The four components are named in the mockup ("Show which shared component each p
 | `<SetupPicker>` | The saved setups as chips, each showing how many of its devices are plugged in, with Save, Save as new, rename, delete, export and import; suggests a setup whose devices are all present | Nothing (new) |
 | `<PatchMatrix>` | Rows down (the frontend's, then the inputs), outputs across. Each crossing is a jack: an empty hole, or a chip in the channel's colour. A tap opens a picker of 16 channel pads, marking channels already used on that output. Kit members show the note each device's map sends. Rows can be read only (a piece routed by its MIDI cards). Activity flashes the chips. | Cell studio's matrix of `<select>`s; Jambot's 5 number fields |
 | ~~`<InputStrip>`~~ | Not a component: the inputs are rows of `<PatchMatrix>`, with their Heard switches | Both panels' input sections |
-| `<DeviceInspector>` | The selected output: its port, and its device facts (clock, drum map, bend, MPE, latency), marked as kept with the device in every setup. A meter shows the 16 channels in use and their activity. Test note, notes off on this output, remove the output | Cell studio's "Outputs" extras and its separate "Pitch" section; Jambot's output group |
+| `<DeviceInspector>` | The selected output: its port, and its device facts (drum map, bend, MPE, latency), marked as kept with the device in every setup. A meter shows the 16 channels in use and their activity. Test note, notes off on this output, remove the output | Cell studio's "Outputs" extras and its separate "Pitch" section; Jambot's output group |
 
 Rules for the components:
 - Svelte is a `peerDependency`, and the components ship as source.
@@ -112,6 +113,7 @@ It would be the first thing webmidi deploys.
 3. **The standalone page lives in this repository, in `site/`.** It is webmidi's first deploy.
 4. **A change to a named setup is kept as "NAME - custom"**, saved at once; Save marks it and offers to overwrite NAME or to save it under a new name (or discard it).
 5. **Setups are shared between devices as a file** to export and import now. Later, users may share setups with each other, for example through Jambot's lobby (an issue when it starts).
-6. **The inputs are rows of the matrix in every mode**, as in the standalone page: thru becomes a crossing (section 1, Rows).
+6. **Clock is a row of the matrix in every mode**, kept by the setup, not a device setting.
+7. **The inputs are rows of the matrix in every mode**, as in the standalone page: thru becomes a crossing (section 1, Rows).
 
 The decision record is [002](../decisions/002-setups-device-profiles-and-inputs-as-rows.md), written with rung 1.
