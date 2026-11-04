@@ -3,10 +3,30 @@
 import { readFileSync } from 'node:fs';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_PROFILE, type DeviceProfile } from '../core/setups';
+import {
+  activeSetup,
+  addOutput,
+  AS_PLAYED,
+  chooseDevice,
+  crossingOf,
+  DEFAULT_PROFILE,
+  inputRow,
+  newBook,
+  overwrite,
+  renameSetup,
+  saveAs,
+  withCrossing,
+  withHeard,
+  withProfile,
+  type DeviceProfile,
+  type SetupBook,
+} from '../core/setups';
 import ChannelMeter from './ChannelMeter.svelte';
 import DeviceInspector from './DeviceInspector.svelte';
 import MidiStatus from './MidiStatus.svelte';
+import PatchMatrix from './PatchMatrix.svelte';
+import SetupPicker from './SetupPicker.svelte';
+import { inputRows, type MatrixRow } from './rows';
 import { channelHue, clamp } from './channels';
 
 let mounted: Record<string, unknown>[] = [];
@@ -155,7 +175,7 @@ describe('DeviceInspector', () => {
 });
 
 describe('the palette', () => {
-  const sources = ['MidiStatus', 'DeviceInspector', 'ChannelMeter'].map((name) => readFileSync(`src/ui/${name}.svelte`, 'utf8'));
+  const sources = ['MidiStatus', 'DeviceInspector', 'ChannelMeter', 'ChannelPicker', 'PatchMatrix', 'SetupPicker'].map((name) => readFileSync(`src/ui/${name}.svelte`, 'utf8'));
   /** A component's palette, its root's selector left out. */
   const palette = (text: string) => /\/\* palette:[\s\S]*?\/\* end palette \*\//.exec(text)?.[0].replace(/\.wm-[a-z]+/g, '.root');
 
@@ -167,5 +187,224 @@ describe('the palette', () => {
 
   it('uses no light-dark(): a bundler’s CSS minifier (Vite’s lightningcss) rewrites it into a polyfill that needs a color-scheme declared beside it', () => {
     for (const text of sources) expect(text).not.toMatch(/light-dark\(/);
+  });
+});
+
+const circuit = { id: 'out-1', name: 'Circuit Tracks' };
+const minilogue = { id: 'out-2', name: 'Minilogue xd' };
+const keystep = { id: 'in-1', name: 'KeyStep 37' };
+
+/** "Home": the Circuit (o1) and the Minilogue (o2), saved; the kit on the Circuit at 10, the lead on the Minilogue at 1. */
+function home(): SetupBook {
+  let book = renameSetup(newBook(), 's1', 'Home');
+  book = chooseDevice(book, 'o1', circuit);
+  book = addOutput(book, minilogue).book;
+  book = withCrossing(book, 'piece:a', 'lead', 'o2', 1);
+  book = withCrossing(book, 'piece:a', '*', 'o1', 10);
+  return withProfile(overwrite(book), circuit.name, { drums: { 36: 60 } });
+}
+
+const ROWS: MatrixRow[] = [
+  { id: 'lead', label: '&lead', kind: 'voice' },
+  { id: 'pad', label: '&pad', kind: 'voice' },
+  { id: '*', label: 'Kit', kind: 'kit', group: true },
+  { id: 'bd', label: '&bd', kind: 'member', note: 36 },
+  { id: 'sd', label: '&sd', kind: 'member', note: 38 },
+  { id: 's5', label: 'Seat 5', kind: 'empty' },
+];
+
+/** The matrix over `book`, each change kept as the frontend would keep it. */
+function matrix(book: SetupBook, over: Record<string, unknown> = {}) {
+  const calls = { select: vi.fn() };
+  const props = show(PatchMatrix, {
+    book,
+    context: 'piece:a',
+    rows: ROWS,
+    inputs: [keystep],
+    outputs: [circuit, minilogue],
+    heardBy: 'the keys',
+    onchange: (next: SetupBook) => (props.book = next),
+    onselect: calls.select,
+    ...over,
+  });
+  return { props, calls };
+}
+const rowCells = (label: string) => {
+  const row = all('tbody tr').find((r) => r.querySelector('th')?.textContent?.includes(label))!;
+  return [...row.querySelectorAll('td')].map((td) => td.textContent!.trim() || '·');
+};
+const jack = (label: string, out: string) => all('.jack').find((j) => j.getAttribute('aria-label')?.startsWith(`${label} to ${out}`)) as HTMLButtonElement;
+
+describe('PatchMatrix', () => {
+  it('draws the rows, the inputs and the clock down, the outputs across, each crossing its channel', () => {
+    matrix(home());
+    expect(all('thead .name').map((n) => n.textContent)).toEqual(['Circuit Tracks', 'Minilogue xd']);
+    expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['&lead', '&pad', 'Kit', '&bd', '&sd', 'KeyStep 37', 'Clock']);
+    expect(rowCells('&lead')).toEqual(['·', '1', '·']);
+    expect(rowCells('Kit')).toEqual(['10GM', '·', '·']);
+  });
+
+  it('shows a kit member’s note as each output’s drum map sends it, where the kit is routed', () => {
+    matrix(home());
+    expect([rowCells('&bd'), rowCells('&sd')]).toEqual([
+      ['60', '·', '·'],
+      ['38', '·', '·'],
+    ]);
+    expect(one('.note.mapped').textContent).toBe('60');
+  });
+
+  it('a channel picked changes the book, as the named setup’s custom variant', () => {
+    const { props } = matrix(home());
+    jack('&pad', 'Circuit Tracks').click();
+    flushSync();
+    expect(one('[role=dialog]').getAttribute('aria-label')).toBe('Channel of &pad → Circuit Tracks');
+    expect(all('[role=dialog] .busy').map((b) => b.textContent)).toEqual(['10']);
+    expect(all('[role=dialog] button').some((b) => b.textContent?.includes('As played'))).toBe(false);
+    click('7');
+    expect([crossingOf(props.book, 'piece:a', 'pad', 'o1'), activeSetup(props.book).name]).toEqual([7, 'Home - custom']);
+    expect(one('[role=dialog]')).toBeNull();
+    jack('&pad', 'Circuit Tracks').click();
+    flushSync();
+    click('Not sent');
+    expect(crossingOf(props.book, 'piece:a', 'pad', 'o1')).toBeUndefined();
+  });
+
+  it('an input’s row: As played, and its Heard switch', () => {
+    const { props } = matrix(home());
+    jack('KeyStep 37', 'Minilogue xd').click();
+    flushSync();
+    click('= As played');
+    expect(crossingOf(props.book, 'piece:a', inputRow(keystep), 'o2')).toBe(AS_PLAYED);
+    expect(rowCells('KeyStep 37')).toEqual(['·', '=', '·']);
+    click('Not heard');
+    expect(activeSetup(props.book).heard).toEqual([keystep]);
+    click('Heard');
+    expect(activeSetup(props.book).heard).toEqual([]);
+    props.book = withHeard(props.book, 'all');
+    flushSync();
+    click('Heard');
+    expect(activeSetup(props.book).heard).toEqual([]);
+  });
+
+  it('the clock row sends clock to an output, and stops', () => {
+    const { props } = matrix(home());
+    jack('Clock', 'Minilogue xd').click();
+    flushSync();
+    expect([activeSetup(props.book).clock, rowCells('Clock')]).toEqual([['o2'], ['·', 'CLK', '·']]);
+    jack('Clock', 'Minilogue xd').click();
+    flushSync();
+    expect(activeSetup(props.book).clock).toEqual([]);
+  });
+
+  it('empty rows wait behind a button', () => {
+    matrix(home());
+    expect(all('tbody th .label').some((l) => l.textContent === 'Seat 5')).toBe(false);
+    click('Show 1 empty row');
+    expect(all('tbody th .label').some((l) => l.textContent === 'Seat 5')).toBe(true);
+  });
+
+  it('adds an output plugged in that the setup lacks, selects it, and an output’s head selects it', () => {
+    const mf = { id: 'out-3', name: 'MicroFreak' };
+    const { props, calls } = matrix(home(), { outputs: [circuit, minilogue, mf] });
+    click('+ Output');
+    expect(activeSetup(props.book).outputs.map((o) => o.name)).toEqual(['Circuit Tracks', 'Minilogue xd', 'MicroFreak']);
+    expect(calls.select).toHaveBeenLastCalledWith('o3');
+    expect((all('button').find((b) => b.textContent === '+ Output') as HTMLButtonElement).disabled).toBe(true);
+    (one('thead .col') as HTMLButtonElement).click();
+    expect(calls.select).toHaveBeenLastCalledWith('o1');
+  });
+
+  it('locked (a piece routed by its cards): shown, no jack to press, no output to add', () => {
+    matrix(home(), { locked: true });
+    expect(rowCells('&lead')).toEqual(['·', '1']);
+    expect(all('button.jack').length).toBe(0);
+    expect(all('button').some((b) => b.textContent === '+ Output')).toBe(false);
+  });
+
+  it('marks an output not plugged in, and lists an input the routes send from that isn’t', () => {
+    const book = withCrossing(home(), 'piece:a', 'in:Launchkey', 'o1', 3);
+    matrix(book, { outputs: [circuit] });
+    expect(all('thead .col.absent .name').map((n) => n.textContent)).toEqual(['Minilogue xd']);
+    expect(inputRows([keystep], activeSetup(book).routes['piece:a']!).map((r) => [r.label, r.sub ?? ''])).toEqual([
+      ['KeyStep 37', ''],
+      ['Launchkey', 'not plugged in'],
+    ]);
+  });
+});
+
+describe('SetupPicker', () => {
+  function picker(book: SetupBook, plugged = [circuit, minilogue]) {
+    const exported = vi.fn();
+    const props = show(SetupPicker, { book, plugged, onchange: (next: SetupBook) => (props.book = next), onexport: exported });
+    return { props, exported };
+  }
+  const chips = () => all('.chip').map((c) => c.textContent!.replace(/\s+/g, ' ').trim());
+
+  it('a chip per setup with how many of its devices are plugged in; one pressed is put in use', () => {
+    const { props } = picker(saveAs(home(), 'Venue'), [circuit]);
+    expect(chips()).toEqual(['Home 1/2', 'Venue 1/2']);
+    (all('.chip')[0] as HTMLButtonElement).click();
+    flushSync();
+    expect(props.book.active).toBe('s1');
+  });
+
+  it('a change kept as the custom variant: Save… overwrites it, saves it as new, or discards it', () => {
+    const changed = withCrossing(home(), 'piece:a', 'pad', 'o1', 3);
+    const { props } = picker(changed);
+    expect(chips()).toEqual(['Home 2/2', 'Home - custom ● 2/2']);
+    expect((all('button').find((b) => b.textContent === 'Manage…') as HTMLButtonElement).disabled).toBe(true);
+    click('Save…');
+    click('Overwrite Home');
+    expect([chips(), crossingOf(props.book, 'piece:a', 'pad', 'o1')]).toEqual([['Home 2/2'], 3]);
+    props.book = changed;
+    flushSync();
+    click('Save…');
+    change(one('[aria-label="Name of the new setup"]') as HTMLInputElement, 'Studio');
+    one('[aria-label="Name of the new setup"]').dispatchEvent(new Event('input', { bubbles: true }));
+    click('Save as new');
+    expect(chips()).toEqual(['Home 2/2', 'Studio 2/2']);
+    props.book = changed;
+    flushSync();
+    click('Save…');
+    click('Discard changes');
+    expect(chips()).toEqual(['Home 2/2']);
+  });
+
+  it('suggests a setup whose devices are all plugged in, when the one in use misses one', () => {
+    let book = saveAs(home(), 'Venue');
+    book = overwrite(chooseDevice(book, 'o2', { id: 'out-7', name: 'TD-3' }));
+    const { props } = picker(book);
+    expect(one('p.line').textContent).toContain('Every device of Home is plugged in.');
+    click('Switch to it');
+    expect(props.book.active).toBe('s1');
+    expect(one('p.line')).toBeNull();
+  });
+
+  it('Manage… renames the setup in use, and removes it after asking; the last stays', () => {
+    const { props } = picker(saveAs(home(), 'Venue'));
+    click('Manage…');
+    const name = one('[aria-label="Name of Venue"]') as HTMLInputElement;
+    name.value = 'Stage';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    click('Rename');
+    expect(chips()).toEqual(['Home 2/2', 'Stage 2/2']);
+    click('Manage…');
+    click('Remove…');
+    click('Remove');
+    expect(chips()).toEqual(['Home 2/2']);
+    click('Manage…');
+    expect((all('button').find((b) => b.textContent === 'Remove…') as HTMLButtonElement).disabled).toBe(true);
+    void props;
+  });
+
+  it('exports the setup in use as a file, and says what is wrong with a file that isn’t one', async () => {
+    const { exported } = picker(home());
+    click('Export');
+    const [text, filename] = exported.mock.calls[0]!;
+    expect([JSON.parse(text).setup.name, filename]).toEqual(['Home', 'Home.midisetup.json']);
+    const input = one('input[type=file]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['not json'], 'x.json')], configurable: true });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(one('[role=alert]')?.textContent).toMatch(/isn’t JSON/));
   });
 });

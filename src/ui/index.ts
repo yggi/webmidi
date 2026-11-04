@@ -7,4 +7,8 @@
 export { default as MidiStatus } from './MidiStatus.svelte';
 export { default as DeviceInspector } from './DeviceInspector.svelte';
 export { default as ChannelMeter } from './ChannelMeter.svelte';
+export { default as PatchMatrix } from './PatchMatrix.svelte';
+export { default as ChannelPicker } from './ChannelPicker.svelte';
+export { default as SetupPicker } from './SetupPicker.svelte';
+export { inputRows, type MatrixRow } from './rows';
 export { CHANNELS, channelHue } from './channels';
