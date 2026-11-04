@@ -8,8 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
+Nothing has changed since `v0.1.2`.
+
+## v0.1.2 — 2026-11-04
+
+The patchbay's first three rungs (docs/proposals/patchbay.md): the setups model in `core` and the shared Svelte 5 components in `ui`, for Cell studio and Jambot to move onto. Nothing on the wire changes, and nothing breaks a frontend's code (new exports only, and an optional peer), so it is a patch.
+
 ### Added
-- **`@yggi/webmidi/ui`**, the patchbay's Svelte 5 components, shipped as source with Svelte as an optional peer: `MidiStatus` (the connection), `SetupPicker` (the setups, Save… with overwrite, save as new or discard), `PatchMatrix` (rows, inputs and the clock down, outputs across, with `ChannelPicker`), `DeviceInspector` (an output and its device's profile) and `ChannelMeter`. A frontend that doesn't import `ui` needs no Svelte. Nothing on the wire changes.
+- **`@yggi/webmidi/ui`**, the patchbay's Svelte 5 components, shipped as source with Svelte as an optional peer (`^5.57.2`, what Cell studio already has, so its pin moves without moving its Svelte; yggi/webmidi#13, yggi/webmidi#14): `MidiStatus` (the connection), `SetupPicker` (the setups, Save… with overwrite, save as new or discard), `PatchMatrix` (rows, inputs and the clock down, outputs across, with `ChannelPicker`), `DeviceInspector` (an output and its device's profile) and `ChannelMeter`. A frontend that doesn't import `ui` needs no Svelte. Nothing on the wire changes.
 - **Setups** (decision 002, yggi/webmidi#12): the model the patchbay's components will share, in `core` (`setups.ts`). It holds device profiles kept by port name (drum map, bend range, MPE, latency), named setups (outputs, the inputs heard, routes per context with the inputs as rows, the outputs sent clock), and the book that keeps them. A change to a named setup is kept as its custom variant ("Home - custom"), saved at once, until it overwrites the named setup (`overwrite`), is saved under a new name (`saveAs`) or is discarded (`discard`). It suggests a setup whose devices are all plugged in, and writes a setup as a file and reads it back. `fromCellStudio` and `fromJambot` migrate each frontend's store once; web's `localBookStore` keeps the book in `localStorage`. Nothing on the wire changes, and nothing changes for a frontend until it adopts the model.
 
 ## v0.1.1 — 2026-10-17
