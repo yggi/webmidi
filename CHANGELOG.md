@@ -10,6 +10,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ### Added
 - **`clockOffset` shows its estimate** (yggi/webmidi#9): it returns an `EstimatedClockOffset`, a `ClockOffset` with `estimate` (`PairEstimate`, now exported): the offset, the bound of the reading trusted and the jumps followed, for a timing panel or report. `ClockOffset` itself is as it was, so a frontend's own fake of one still types. Jambot can read its jumps here and drop its own count (`apps/web/src/audio/output-estimate.ts`). Nothing on the wire changes.
+- **`clockPair` is exported** (yggi/webmidi#10), with `PairConfig`, `PairSample` and `PairCarried`: the estimator `clockOffset` runs with `OUTPUT`, for a test or a frontend that runs it with another configuration. With `leap: Infinity` it is Jambot's estimator sample for sample (`src/core/clock-jambot.test.ts`). Nothing on the wire changes.
 
 ## v0.1.2 — 2026-11-04
 

@@ -22,7 +22,7 @@
  */
 
 /** How a pair of clocks is estimated. */
-interface PairConfig {
+export interface PairConfig {
   /** How many of the latest samples the estimate is taken from. */
   readonly window: number;
   /** How many samples it takes before the offset is trusted at all. */
@@ -38,18 +38,19 @@ interface PairConfig {
 }
 
 /** A sample of a pair's offset: it lies within `bound` of `offset`, both in seconds. */
-interface Sample {
+export interface PairSample {
   readonly offset: number;
   readonly bound: number;
 }
 
-interface PairCarried {
+/** What the estimator carries from one sample to the next. */
+export interface PairCarried {
   /** The latest samples, the oldest first. */
-  readonly samples: readonly Sample[];
+  readonly samples: readonly PairSample[];
   /** The offset played by, once it is trusted. */
   readonly offset: number | null;
   /** The samples in a row that disagreed with those before them, waiting for enough to say the clocks jumped. */
-  readonly doubts: readonly Sample[];
+  readonly doubts: readonly PairSample[];
   /** How many jumps the pair has followed. */
   readonly jumps: number;
 }
@@ -65,18 +66,22 @@ export interface PairEstimate {
 }
 
 /** Whether two samples could be of the same two clocks: their ranges meet, give or take `jumped`. */
-const agree = (a: Sample, b: Sample, jumped: number) => Math.abs(a.offset - b.offset) <= a.bound + b.bound + jumped;
+const agree = (a: PairSample, b: PairSample, jumped: number) => Math.abs(a.offset - b.offset) <= a.bound + b.bound + jumped;
 
 /** The sample trusted: the least bound, the latest of equals. */
-const trustedOf = (samples: readonly Sample[]) => (samples.length === 0 ? null : samples.reduce((a, b) => (b.bound <= a.bound ? b : a)));
+const trustedOf = (samples: readonly PairSample[]) => (samples.length === 0 ? null : samples.reduce((a, b) => (b.bound <= a.bound ? b : a)));
 
 const estimateOf = ({ samples, offset, jumps }: PairCarried): PairEstimate => ({ offset, bound: trustedOf(samples)?.bound ?? null, jumps });
 
-/** The estimator of a pair of clocks, from samples of their offset: a step from what it carried and one sample. */
-function clockPair(config: PairConfig) {
+/**
+ * The estimator of a pair of clocks, from samples of their offset: a step from what it carried and one sample.
+ * `clockOffset` runs it with `OUTPUT`; exported so a test (or a frontend) can run it with another configuration, as
+ * yggi/webmidi#10's check of `leap: Infinity` against Jambot's estimator does.
+ */
+export function clockPair(config: PairConfig) {
   const { window, ready, slew, jumped, confirm, leap } = config;
   const initial: PairCarried = { samples: [], offset: null, doubts: [], jumps: 0 };
-  const advance = (carried: PairCarried, sample: Sample): { carried: PairCarried; output: PairEstimate } => {
+  const advance = (carried: PairCarried, sample: PairSample): { carried: PairCarried; output: PairEstimate } => {
     if (!(sample.bound >= 0)) return { carried, output: estimateOf(carried) };
     const trusted = trustedOf(carried.samples);
     const withDoubts = carried.doubts.every((d) => agree(sample, d, jumped));
@@ -127,10 +132,10 @@ export const OUTPUT = {
 const outputPair = clockPair(OUTPUT);
 
 /** A reading of the platform's pairing, as a sample of the output's offset from the page's clock. */
-const pairingSample = (contextTime: number, performanceTime: number): Sample => ({ offset: contextTime - performanceTime / 1000, bound: OUTPUT.paired });
+const pairingSample = (contextTime: number, performanceTime: number): PairSample => ({ offset: contextTime - performanceTime / 1000, bound: OUTPUT.paired });
 
 /** The output's clock less its latency, against the page's clock in milliseconds, where the platform doesn't pair them. */
-const unpairedSample = (currentTime: number, latency: number, pageMs: number): Sample => ({ offset: currentTime - latency - pageMs / 1000, bound: OUTPUT.unpaired });
+const unpairedSample = (currentTime: number, latency: number, pageMs: number): PairSample => ({ offset: currentTime - latency - pageMs / 1000, bound: OUTPUT.unpaired });
 
 /** What the clock reads of an AudioContext (a fake in the tests). */
 export interface OutputClock {
