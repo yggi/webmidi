@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
+Nothing has changed since `v0.1.4`.
+
+## v0.1.4 — 2026-11-04
+
+What Cell studio's and Jambot's moves onto the patchbay (yggi/cell-studio#538, yggi/jambot#560) found. The machinery both frontends wrote for themselves is now in core: a setup's ports adopted without a custom variant (`portsOf`, `namePorts`) and what an input row's crossing forwards (`forwardsOf`, `forwardsOfInput`). In `PatchMatrix`: the clock is the first row, the matrix fits a narrow drawer, a kit member's drum note is edited in it, a locked matrix keeps the inputs and the clock editable, and the GM mark tells the truth. The connect button takes a name, and `listen` takes a setup's heard inputs. Nothing on the wire changes, and nothing breaks a frontend's code: `PortAccess.listen` widens to `Listened` (a string means what it did), and a frontend's own fake that declares `listen(id: string)` still types, so it is a patch. A frontend that keeps only part of a locked matrix's book (Cell studio keeps the Heard switches) takes the inputs' crossings, `clock` and `devices` from it too when it moves its pin.
+
 ### Added
 - **What an input row's crossing sends, in one place** (yggi/webmidi#32), `core/forward.ts`: `forwardsOf(book, context, row, data)` gives each output's bytes for a raw message, a channel voice message (0x80–0xEF) with its channel replaced, or kept for `AS_PLAYED`, and nothing for a system message (0xF0–0xFF) or a message with no status byte; `forwardsOfInput` adds every input's row (`ANY_INPUT`), the same bytes to one output once. The frontend sends the bytes with its own timestamp. Cell studio's and Jambot's own forwarding can go; what each passes on then agrees. Nothing a frontend sends changes until it adopts it.
 - **A setup's ports as plugged in now** (yggi/webmidi#28), `core/setup-ports.ts`: `portsOf(setup, access)` resolves each output to its live port, by id, else by name after a replug, and gives its heard inputs to listen to, changing nothing kept; `namePorts(book, plugged)` names the ports a store from before kept by id alone (Jambot's, through `fromJambot`), in every setup, their input rows too, and makes no custom variant. A frontend's own port adoption for a setup (Cell studio's) and its naming of ports (Jambot's `nameByPorts`) can go. `adoptPorts` stays for one port. Nothing on the wire changes.
