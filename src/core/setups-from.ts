@@ -4,7 +4,7 @@
 // Jambot's: yggi/jambot apps/web/src/midi/settings.svelte.ts @ 7113d55 (`StoredPrefs`, under `jambot-midi-v1`).
 
 import type { PortOption } from './port';
-import { DEFAULT_PROFILE, inputRow, ANY_INPUT, readProfile, type DeviceProfile, type Routes, type Setup, type SetupBook, type SetupOutput } from './setups';
+import { DEFAULT_PROFILE, inputRow, ANY_INPUT, readProfile, type DeviceProfile, type PlaysChoice, type Routes, type Setup, type SetupBook, type SetupOutput } from './setups';
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const isInt = (v: unknown, lo: number, hi: number): v is number => Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi;
@@ -12,7 +12,8 @@ const portOf = (v: unknown): PortOption | null => (isRecord(v) && typeof v.id ==
 const record = (v: unknown): Record<string, unknown> => (isRecord(v) ? v : {});
 
 /** What a frontend chose to hear: none, all, or one input. */
-const heardOf = (p: PortOption | null): readonly PortOption[] | 'all' => (!p || p.id === 'none' ? [] : p.id === 'all' ? 'all' : [p]);
+/** What a frontend chose to hear, as what each input plays (decision 003): none, every input, or one, each playing the default. */
+const playsOf = (p: PortOption | null): Record<string, PlaysChoice> => (!p || p.id === 'none' ? {} : p.id === 'all' ? { [ANY_INPUT]: 'default' } : { [inputRow(p)]: 'default' });
 
 const book = (setup: Setup, devices: Record<string, DeviceProfile>, defaults: DeviceProfile): SetupBook => ({
   version: 1,
@@ -60,7 +61,7 @@ export function fromCellStudio(stored: unknown): SetupBook {
   }
 
   const clocked = outputs.filter((o) => o.id !== 'none' && Object.hasOwn(clock, o.name) && clock[o.name] === true).map((o) => o.key);
-  return book({ id: 's1', name: 'Cell studio', outputs, heard: heardOf(portOf(s.in)), routes, clock: clocked }, Object.fromEntries(devices), defaults);
+  return book({ id: 's1', name: 'Cell studio', outputs, plays: playsOf(portOf(s.in)), routes, clock: clocked }, Object.fromEntries(devices), defaults);
 }
 
 /** The row of what is played on Jambot's own keys (on screen and the computer's), which its thru passed on too. */
@@ -82,21 +83,22 @@ export function fromJambot(stored: unknown, ports: { readonly inputs: readonly P
   const named = (list: readonly PortOption[], portId: string): PortOption => ({ id: portId, name: list.find((p) => p.id === portId)?.name ?? '' });
   const out = named(ports.outputs, id(s.outPortId));
   const inPort = id(s.inPortId);
-  const heard = heardOf(inPort === 'none' || inPort === 'all' ? { id: inPort, name: '' } : named(ports.inputs, inPort));
+  const heardPort = inPort === 'none' || inPort === 'all' ? { id: inPort, name: '' } : named(ports.inputs, inPort);
+  const plays = playsOf(heardPort);
 
   const band: Record<string, Record<string, number>> = {};
   const channels = record(s.channels);
   for (const part of PARTS) if (isInt(channels[part], 1, 16)) band[part] = { o1: channels[part] };
   if (s.thru === true && isInt(s.thruChannel, 1, 16)) {
     band[KEYS] = { o1: s.thruChannel };
-    if (heard === 'all') band[ANY_INPUT] = { o1: s.thruChannel };
-    else if (heard.length) band[inputRow(heard[0]!)] = { o1: s.thruChannel };
+    if (inPort === 'all') band[ANY_INPUT] = { o1: s.thruChannel };
+    else if (inPort !== 'none') band[inputRow(heardPort)] = { o1: s.thruChannel };
   }
 
   const profile = readProfile({ drums: s.drumMap }, DEFAULT_PROFILE);
   const known = out.id !== 'none' && !!out.name;
   return book(
-    { id: 's1', name: 'Jambot', outputs: [{ key: 'o1', ...out }], heard, routes: { band }, clock: s.clock === true ? ['o1'] : [] },
+    { id: 's1', name: 'Jambot', outputs: [{ key: 'o1', ...out }], plays, routes: { band }, clock: s.clock === true ? ['o1'] : [] },
     known ? { [out.name]: profile } : {},
     known ? DEFAULT_PROFILE : profile,
   );

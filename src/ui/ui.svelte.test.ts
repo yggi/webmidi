@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // The patchbay's components mounted in a DOM (jsdom): what each shows for the props it is given, and what it calls back.
 import { readFileSync } from 'node:fs';
+import { DEFAULT_PRESET } from '../core/input-kinds';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -17,7 +18,7 @@ import {
   renameSetup,
   saveAs,
   withCrossing,
-  withHeard,
+  withPlays,
   withProfile,
   type DeviceProfile,
   type SetupBook,
@@ -304,21 +305,39 @@ describe('PatchMatrix', () => {
     expect(crossingOf(props.book, 'piece:a', 'pad', 'o1')).toBeUndefined();
   });
 
-  it('an input’s row: As played, and its Heard switch', () => {
-    const { props } = matrix(home());
+  it('an input’s row: As played, and what it plays (decision 003)', () => {
+    const { props } = matrix(home(), { rows: ROWS.map((r) => (r.id === 'lead' ? { ...r, role: 'lead' } : r)) });
     jack('KeyStep 37', 'Minilogue xd').click();
     flushSync();
     click('= As played');
     expect(crossingOf(props.book, 'piece:a', inputRow(keystep), 'o2')).toBe(AS_PLAYED);
     expect(rowCells('KeyStep 37')).toEqual(['·', '=', '·']);
-    click('Not heard');
-    expect(activeSetup(props.book).heard).toEqual([keystep]);
-    click('Heard');
-    expect(activeSetup(props.book).heard).toEqual([]);
-    props.book = withHeard(props.book, 'all');
+    const plays = () => one('select.plays') as HTMLSelectElement;
+    expect([plays().value, [...plays().options].map((o) => o.textContent)]).toEqual(['none', ['Not heard', 'Plays the default', 'Plays &lead', 'Plays &pad', 'Plays Kit']]);
+    change(plays(), 'lead');
+    expect(activeSetup(props.book).plays).toEqual({ 'in:KeyStep 37': { row: 'lead', role: 'lead' } });
+    change(plays(), 'default');
+    expect(activeSetup(props.book).plays).toEqual({ 'in:KeyStep 37': 'default' });
+    // every input's choice: an input follows it until it has its own
+    props.book = withPlays(withPlays(props.book, 'in:*', 'default'), 'in:KeyStep 37', undefined);
     flushSync();
-    click('Heard');
-    expect(activeSetup(props.book).heard).toEqual([]);
+    expect(plays().value).toBe('');
+    expect(plays().options[0]!.textContent).toBe('As every input: default');
+    expect(rowCells('All inputs')).toEqual(['·', '·', '·']);
+    change(plays(), 'none');
+    expect(activeSetup(props.book).plays).toEqual({ 'in:*': 'default', 'in:KeyStep 37': 'none' });
+  });
+
+  it('assigns the inputs with no choice by a preset, from the rows’ roles; no button when there is none to fill', () => {
+    const pads = { id: 'in-2', name: 'MPD218' };
+    const roled: MatrixRow[] = ROWS.map((r) => (r.kind === 'kit' ? { ...r, role: 'drums' } : r));
+    const { props } = matrix(home(), { rows: roled, inputs: [keystep, pads], preset: DEFAULT_PRESET });
+    click('Assign inputs: Keyboard to lead, pads to drums');
+    expect(activeSetup(props.book).plays).toEqual({ 'in:MPD218': { row: '*', role: 'drums' } });
+    expect(all('button').some((b) => b.textContent?.startsWith('Assign inputs'))).toBe(true);
+    props.book = withPlays(props.book, 'in:KeyStep 37', 'none');
+    flushSync();
+    expect(all('button').some((b) => b.textContent?.startsWith('Assign inputs'))).toBe(false);
   });
 
   it('the clock row sends clock to an output, and stops', () => {

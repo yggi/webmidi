@@ -21,5 +21,7 @@ export * from './sysex';
 // Setups: device profiles, named setups and their routes, the book that keeps them, and the frontends' stores migrated.
 export * from './setups';
 export * from './forward';
+export * from './plays';
+export * from './input-kinds';
 export * from './setup-ports';
 export * from './setups-from';

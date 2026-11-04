@@ -23,7 +23,7 @@ describe('fromCellStudio', () => {
   const book = fromCellStudio(cellStudio);
 
   it('keeps the outputs and the input, as one setup', () => {
-    expect(activeSetup(book)).toMatchObject({ name: 'Cell studio', outputs: cellStudio.outputs, heard: [cellStudio.in] });
+    expect(activeSetup(book)).toMatchObject({ name: 'Cell studio', outputs: cellStudio.outputs, plays: { 'in:KeyStep 37': 'default' } });
   });
 
   it('turns each piece’s matrix into its context, row by output, with a channel 0 (not sent) dropped', () => {
@@ -40,8 +40,8 @@ describe('fromCellStudio', () => {
 
   it('reads back as itself, and makes a setup of a store with nothing in it', () => {
     expect(readBook(JSON.parse(JSON.stringify(book)))).toEqual(book);
-    expect(activeSetup(fromCellStudio(null))).toMatchObject({ outputs: [{ key: 'o1', id: 'none', name: '' }], heard: [], routes: {} });
-    expect(activeSetup(fromCellStudio({ in: { id: 'all', name: '' } })).heard).toBe('all');
+    expect(activeSetup(fromCellStudio(null))).toMatchObject({ outputs: [{ key: 'o1', id: 'none', name: '' }], plays: {}, routes: {} });
+    expect(activeSetup(fromCellStudio({ in: { id: 'all', name: '' } })).plays).toEqual({ 'in:*': 'default' });
   });
 });
 
@@ -62,7 +62,7 @@ describe('fromJambot', () => {
   it('turns the parts’ channels into the band’s rows on the one output, the ports named from the ports plugged in', () => {
     const book = fromJambot(jambot, ports);
     expect(activeSetup(book).outputs).toEqual([{ key: 'o1', id: 'out-1', name: 'Circuit Tracks' }]);
-    expect(activeSetup(book).heard).toEqual([{ id: 'in-1', name: 'KeyStep 37' }]);
+    expect(activeSetup(book).plays).toEqual({ 'in:KeyStep 37': 'default' });
     expect(activeSetup(book).routes.band).toMatchObject({ lead: { o1: 1 }, bass: { o1: 2 }, pad: { o1: 3 }, stab: { o1: 3 }, drums: { o1: 10 } });
   });
 
@@ -86,7 +86,7 @@ describe('fromJambot', () => {
   it('reads back as itself, and makes a setup of a store with nothing in it', () => {
     const book = fromJambot(jambot, ports);
     expect(readBook(JSON.parse(JSON.stringify(book)))).toEqual(book);
-    expect(activeSetup(fromJambot(undefined, ports))).toMatchObject({ outputs: [{ key: 'o1', id: 'none', name: '' }], heard: [], routes: { band: {} } });
+    expect(activeSetup(fromJambot(undefined, ports))).toMatchObject({ outputs: [{ key: 'o1', id: 'none', name: '' }], plays: {}, routes: { band: {} } });
   });
 });
 

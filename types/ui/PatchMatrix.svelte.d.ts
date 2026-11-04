@@ -1,4 +1,5 @@
 import type { PortOption } from '../core/port';
+import { type InputPreset } from '../core/input-kinds';
 import { type SetupBook } from '../core/setups';
 import { type MatrixRow } from './rows';
 interface Props {
@@ -11,8 +12,10 @@ interface Props {
     inputs?: readonly PortOption[];
     /** The outputs plugged in now. */
     outputs: readonly PortOption[];
-    /** Who hears an input ("the Muse"): each input's row gets its Heard switch; null for none (standalone). */
+    /** Who hears an input ("the Muse", "the keys"): each input's row gets its Plays choice; null for none (standalone). */
     heardBy?: string | null;
+    /** A preset to fill in what the inputs with no choice play (`DEFAULT_PRESET`), by the rows' roles; none: no button. */
+    preset?: InputPreset | null;
     /** The output selected, by key. */
     selected?: string;
     /** The crossings sounding now, as `row|output key`. */

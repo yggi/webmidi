@@ -47,7 +47,14 @@ export const AS_PLAYED = 0;
 export type Routes = Readonly<Record<string, Readonly<Record<string, Crossing>>>>;
 
 /**
- * A named setup: the outputs in order, the inputs the frontend hears, and the routes of each context it names. A change
+ * What an input plays (yggi/webmidi#43, decision 003): `'none'`, not heard at all; `'default'`, heard, playing what the
+ * frontend plays by default (the open sheet, the Muse's lead); or one of the frontend's rows, kept by its id and by its
+ * role (`'lead'`, `'drums'`), so a row a frontend doesn't have falls to its row of that role, else to the default.
+ */
+export type PlaysChoice = 'none' | 'default' | { readonly row: string; readonly role?: string };
+
+/**
+ * A named setup: the outputs in order, what each input plays, and the routes of each context it names. A change
  * to a named setup is kept as its custom variant (`base`), saved at once, until the person overwrites the named setup
  * with it, saves it under a new name, or discards it (decision 002).
  */
@@ -58,8 +65,12 @@ export interface Setup {
   readonly base?: string;
   /** At least one; an output with id `'none'` is a slot with no device. */
   readonly outputs: readonly SetupOutput[];
-  /** The inputs the frontend listens to (its keys, MIDI learn, the Muse), or `'all'`. Routing an input is its row's. */
-  readonly heard: readonly PortOption[] | 'all';
+  /**
+   * What each input plays, by its row (`in:<name>`): one mechanism for whether it is heard and what it drives, the same
+   * in every context, as the clock is. `ANY_INPUT`'s is every input's without one of its own; an input with neither is
+   * not heard. Where an input's messages are sent is its row's crossings, apart from this.
+   */
+  readonly plays: Readonly<Record<string, PlaysChoice>>;
   /**
    * By context, a name the frontend chooses (`piece:<title>` in Cell studio, `band` in Jambot, `bay` standalone): its
    * routes. Rows are the frontend's, and the inputs' (`inputRow`).
@@ -102,7 +113,7 @@ export function newBook(): SetupBook {
   return { version: 1, devices: {}, defaults: DEFAULT_PROFILE, setups: [blankSetup('s1', 'Setup 1')], active: 's1' };
 }
 
-const blankSetup = (id: string, name: string): Setup => ({ id, name, outputs: [{ key: 'o1', ...NO_DEVICE }], heard: [], routes: {}, clock: [] });
+const blankSetup = (id: string, name: string): Setup => ({ id, name, outputs: [{ key: 'o1', ...NO_DEVICE }], plays: {}, routes: {}, clock: [] });
 
 // ---- reading what was kept: anything, junk dropped field by field ----
 
@@ -154,17 +165,40 @@ function readSetup(v: unknown): Setup | null {
       const p = port(o);
       if (p && isRecord(o) && typeof o.key === 'string' && o.key && !outputs.some((c) => c.key === o.key)) outputs.push({ key: o.key, ...p });
     }
-  const heard = v.heard === 'all' ? 'all' : Array.isArray(v.heard) ? v.heard.map(port).filter((p): p is PortOption => !!p) : [];
+  const plays = isRecord(v.plays) ? playsRead(v.plays) : heardRead(v.heard);
   const contexts = isRecord(v.routes) ? Object.fromEntries(Object.entries(v.routes).map(([c, r]) => [c, routes(r)])) : {};
   return {
     id: v.id,
     name: typeof v.name === 'string' && v.name.trim() ? v.name : v.id,
     ...(typeof v.base === 'string' && v.base ? { base: v.base } : {}),
     outputs: outputs.length ? outputs : [{ key: 'o1', ...NO_DEVICE }],
-    heard,
+    plays,
     routes: contexts,
     clock: Array.isArray(v.clock) ? [...new Set(v.clock.filter((k): k is string => typeof k === 'string' && outputs.some((o) => o.key === k)))] : [],
   };
+}
+
+/** A choice of what an input plays, kept: one of the three forms, else nothing. */
+function playsChoice(v: unknown): PlaysChoice | null {
+  if (v === 'none' || v === 'default') return v;
+  if (!isRecord(v) || typeof v.row !== 'string' || !v.row) return null;
+  return typeof v.role === 'string' && v.role ? { row: v.row, role: v.role } : { row: v.row };
+}
+
+/** What each input plays, kept by input row (`in:…`), junk dropped; built by fromEntries, so `__proto__` is a key. */
+const playsRead = (v: Record<string, unknown>): Record<string, PlaysChoice> =>
+  Object.fromEntries(
+    Object.entries(v).flatMap(([row, c]) => {
+      const choice = row.startsWith('in:') ? playsChoice(c) : null;
+      return choice ? [[row, choice] as const] : [];
+    }),
+  );
+
+/** A setup kept before `plays` (webmidi 0.1): the inputs it heard, `'all'` or a list, each as playing the default. */
+function heardRead(v: unknown): Record<string, PlaysChoice> {
+  if (v === 'all') return { [ANY_INPUT]: 'default' };
+  if (!Array.isArray(v)) return {};
+  return Object.fromEntries(v.map(port).flatMap((p) => (p ? [[inputRow(p), 'default' as const]] : [])));
 }
 
 /** A book from what was kept: anything; junk is dropped field by field, and nothing usable is a new book. */
@@ -362,8 +396,18 @@ export function withClock(book: SetupBook, key: string, on: boolean): SetupBook 
 /** Whether an output of the setup in use is sent clock. */
 export const sendsClock = (book: SetupBook, key: string): boolean => activeSetup(book).clock.includes(key);
 
-/** The inputs the frontend hears, in the setup in use. */
-export const withHeard = (book: SetupBook, heard: readonly PortOption[] | 'all'): SetupBook => withActive(book, (s) => ({ ...s, heard: heard === 'all' ? 'all' : [...heard] }));
+/**
+ * What an input plays, by its row (`inputRow(port)`, or `ANY_INPUT` for every input's), in the setup in use: a choice,
+ * or undefined to drop its own and follow `ANY_INPUT`'s. A change to a named setup, as any.
+ */
+export function withPlays(book: SetupBook, input: string, choice: PlaysChoice | undefined): SetupBook {
+  return withActive(book, (s) => {
+    const now = own(s.plays, input);
+    if (choice === undefined ? now === undefined : JSON.stringify(now) === JSON.stringify(choice)) return s;
+    const { [input]: _old, ...rest } = s.plays;
+    return { ...s, plays: choice === undefined ? rest : { ...rest, [input]: choice } };
+  });
+}
 
 /** Another setup put in use (an id the book doesn't have: the book as it is). */
 export const useSetup = (book: SetupBook, id: string): SetupBook => (book.setups.some((s) => s.id === id) ? { ...book, active: id } : book);
@@ -416,11 +460,18 @@ export function removeSetup(book: SetupBook, id: string): SetupBook {
 /** What a setup's file says it is. */
 const FORMAT = 'webmidi-setup';
 
+/**
+ * The version a setup's file is written at: 2 since a setup keeps what each input plays (decision 003), where version 1
+ * kept the inputs heard. A reader before it refuses a version 2 file in words ("update the app") rather than read it as
+ * hearing nothing; this reader takes both, a version 1 file's inputs heard as playing the default.
+ */
+const FILE_VERSION = 2;
+
 /** A setup as a file's text (`.midisetup.json`): the setup, and the profiles of its devices that the book has. */
 export function exportSetup(book: SetupBook, id: string = book.active): string {
   const setup = book.setups.find((s) => s.id === id) ?? activeSetup(book);
   const devices = Object.fromEntries(setup.outputs.flatMap((o) => (own(book.devices, o.name) ? [[o.name, own(book.devices, o.name)!]] : [])));
-  return JSON.stringify({ format: FORMAT, version: 1, setup: unbased(setup), devices }, null, 2);
+  return JSON.stringify({ format: FORMAT, version: FILE_VERSION, setup: unbased(setup), devices }, null, 2);
 }
 
 /**
@@ -435,7 +486,7 @@ export function importSetup(book: SetupBook, text: string): SetupBook | string {
     return 'This file isn’t a MIDI setup: it isn’t JSON.';
   }
   if (!isRecord(kept) || kept.format !== FORMAT) return 'This file isn’t a MIDI setup.';
-  if (kept.version !== 1) return 'This MIDI setup was saved by a newer version: update the app to open it.';
+  if (kept.version !== 1 && kept.version !== FILE_VERSION) return 'This MIDI setup was saved by a newer version: update the app to open it.';
   const read = readSetup(kept.setup);
   if (!read) return 'This MIDI setup is damaged: it has no setup in it.';
   const id = freeId(book);

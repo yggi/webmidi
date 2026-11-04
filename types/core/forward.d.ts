@@ -1,4 +1,5 @@
 import type { PortOption } from './port';
+import { type PlayableRow } from './plays';
 import { type SetupBook } from './setups';
 /** A message to send to one output of the setup in use, by its key. */
 export interface Forward {
@@ -13,7 +14,14 @@ export interface Forward {
  */
 export declare function forwardsOf(book: SetupBook, context: string, row: string, data: ArrayLike<number>): Forward[];
 /**
- * The messages a raw message from an input sends: by its own row (`in:<name>`) and by every input's (`ANY_INPUT`), the
- * same bytes to one output sent once.
+ * The messages a raw message from an input sends: by its own row (`in:<name>`), and by every input's (`ANY_INPUT`) if
+ * the input is heard, as `ANY_INPUT` is every input heard (decision 003); the same bytes to one output sent once.
  */
 export declare function forwardsOfInput(book: SetupBook, context: string, input: PortOption, data: ArrayLike<number>): Forward[];
+/**
+ * The messages a raw message from an input sends where the row it plays is sent (yggi/webmidi#29, decision 003): Cell
+ * studio's keys thru, the keys heard on the voice they play. The row is what `playsOf` says among the frontend's `rows`;
+ * playing the default, it is `defaultRow`, the frontend's (the open sheet's voice), or nothing without one; not heard,
+ * nothing. Each message is re-channelled by that row's crossings, as `forwardsOf` does.
+ */
+export declare function forwardsAsPlayed(book: SetupBook, context: string, input: PortOption, rows: readonly PlayableRow[], data: ArrayLike<number>, defaultRow?: string): Forward[];
