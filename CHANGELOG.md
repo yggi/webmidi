@@ -8,8 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
+### Added
+- **What an input row's crossing sends, in one place** (yggi/webmidi#32), `core/forward.ts`: `forwardsOf(book, context, row, data)` gives each output's bytes for a raw message, a channel voice message (0x80–0xEF) with its channel replaced, or kept for `AS_PLAYED`, and nothing for a system message (0xF0–0xFF) or a message with no status byte; `forwardsOfInput` adds every input's row (`ANY_INPUT`), the same bytes to one output once. The frontend sends the bytes with its own timestamp. Cell studio's and Jambot's own forwarding can go; what each passes on then agrees. Nothing a frontend sends changes until it adopts it.
+- **A setup's ports as plugged in now** (yggi/webmidi#28), `core/setup-ports.ts`: `portsOf(setup, access)` resolves each output to its live port, by id, else by name after a replug, and gives its heard inputs to listen to, changing nothing kept; `namePorts(book, plugged)` names the ports a store from before kept by id alone (Jambot's, through `fromJambot`), in every setup, their input rows too, and makes no custom variant. A frontend's own port adoption for a setup (Cell studio's) and its naming of ports (Jambot's `nameByPorts`) can go. `adoptPorts` stays for one port. Nothing on the wire changes.
+- **`MidiAccess.listen` (and `PortAccess.listen`) takes several inputs** (yggi/webmidi#27): `Listened`, an id, `'all'`, `'none'`, or a list of ports (a setup's `heard`), each found by its id, else by its name, and listened to anew when the ports change; `isListened` says whether an input is among them. The string form works as before, and a frontend's own fake that listens by one id still types. A frontend that listened to all and filtered by name (Cell studio) can pass its heard inputs. Nothing on the wire changes.
+- **A kit member's drum note is editable in `PatchMatrix`** (yggi/webmidi#24): a number 0–127 per output where the kit is routed, written to that device's profile (`withProfile`, no custom variant); its own General MIDI note again drops the entry. Cell studio's and Jambot's own drum-note editors can go at their next pin. Nothing on the wire changes.
+- **`MidiStatus` takes its connect button's name** (yggi/webmidi#31): `connectLabel` (default "Connect") and `connectingLabel` (default "Connecting…"), so Jambot keeps "Connect MIDI". Additive; nothing on the wire changes.
+
 ### Changed
 - **The clock is the first row of `PatchMatrix`** (the owner, 2026-11-04), a rule under it, where it was the last. Nothing on the wire changes.
+- **`PatchMatrix` fits a narrow container** (yggi/webmidi#23): the matrix is a size container. A row's name wraps within at most 36 % of its width (96 px at least), with its tags (`IN`, Heard, a seat's part) on a line under it, and under 480 px the output heads are narrower. At 360 px with an input named 24 characters, two outputs show without scrolling, where none did. A frontend's own override for wrapping names (Cell studio's) can go. Nothing on the wire changes.
+- **A locked `PatchMatrix` locks only the frontend's rows** (yggi/webmidi#22): on a piece routed by its own MIDI cards, the input rows and the clock row stay editable and call back through `onchange`; "+ Output" stays hidden, since the outputs are the piece's. A frontend that kept only the Heard switches from a locked matrix's `onchange` (Cell studio, yggi/cell-studio#538) takes the input rows' crossings and the clock from it too. Nothing on the wire changes.
+
+### Fixed
+- **The kit's "GM" mark on channel 10 shows only on an output whose drum map is General MIDI** (yggi/webmidi#30), where it showed beside a Circuit's map too. Nothing on the wire changes.
 
 ## v0.1.3 — 2026-11-04
 

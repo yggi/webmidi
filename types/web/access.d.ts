@@ -1,4 +1,4 @@
-import type { MidiPort, PortAccess, PortOption } from '../core/port';
+import { type Listened, type MidiPort, type PortAccess, type PortOption } from '../core/port';
 import { type ParsedNote } from '../core/surfaces';
 /** What a connection tells: a note from a listened input, every message from one (for CCs), the ports changed. */
 export interface MidiHandlers {
@@ -50,6 +50,6 @@ export declare class MidiAccess implements PortAccess {
     refresh(): void;
     /** Let go: no input is listened to and the ports' changes are no longer heard. */
     close(): void;
-    /** Listen to one input by id, `'all'` of them, or `'none'`. */
-    listen(id: string): void;
+    /** Listen to one input by id, `'all'` of them, `'none'`, or several (a setup's `heard`), each by id, else by name. */
+    listen(inputs: Listened): void;
 }

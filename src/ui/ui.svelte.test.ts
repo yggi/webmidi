@@ -13,6 +13,7 @@ import {
   inputRow,
   newBook,
   overwrite,
+  profileOf,
   renameSetup,
   saveAs,
   withCrossing,
@@ -83,6 +84,23 @@ describe('MidiStatus', () => {
     flushSync();
     expect(one('.led').classList.contains('warn')).toBe(true);
     expect(one('[role=status]').textContent).toBe('MIDI connected: 1 input, 2 outputs. · 2 of this setup’s devices aren’t plugged in');
+  });
+});
+
+describe('MidiStatus’s connect button (yggi/webmidi#31)', () => {
+  it('takes the names it is given, before and while connecting', () => {
+    const props = show(MidiStatus, {
+      message: 'Not connected.',
+      connected: false,
+      onconnect: vi.fn(),
+      connecting: false,
+      connectLabel: 'Connect MIDI',
+      connectingLabel: 'Asking…',
+    });
+    expect(buttons()).toEqual(['Connect MIDI']);
+    props.connecting = true;
+    flushSync();
+    expect(buttons()).toEqual(['Asking…']);
   });
 });
 
@@ -231,7 +249,7 @@ function matrix(book: SetupBook, over: Record<string, unknown> = {}) {
 }
 const rowCells = (label: string) => {
   const row = all('tbody tr').find((r) => r.querySelector('th')?.textContent?.includes(label))!;
-  return [...row.querySelectorAll('td')].map((td) => td.textContent!.trim() || '·');
+  return [...row.querySelectorAll('td')].map((td) => td.querySelector('input')?.value ?? (td.textContent!.trim() || '·'));
 };
 const jack = (label: string, out: string) => all('.jack').find((j) => j.getAttribute('aria-label')?.startsWith(`${label} to ${out}`)) as HTMLButtonElement;
 
@@ -241,7 +259,13 @@ describe('PatchMatrix', () => {
     expect(all('thead .name').map((n) => n.textContent)).toEqual(['Circuit Tracks', 'Minilogue xd']);
     expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['Clock', '&lead', '&pad', 'Kit', '&bd', '&sd', 'KeyStep 37']);
     expect(rowCells('&lead')).toEqual(['·', '1', '·']);
-    expect(rowCells('Kit')).toEqual(['10GM', '·', '·']);
+    expect(rowCells('Kit')).toEqual(['10', '·', '·']);
+  });
+
+  it('marks a kit on channel 10 "GM" only where the output’s drum map is General MIDI (yggi/webmidi#30)', () => {
+    const book = withCrossing(home(), 'piece:a', '*', 'o2', 10);
+    matrix(book);
+    expect(rowCells('Kit')).toEqual(['10', '10GM', '·']);
   });
 
   it('shows a kit member’s note as each output’s drum map sends it, where the kit is routed', () => {
@@ -250,7 +274,18 @@ describe('PatchMatrix', () => {
       ['60', '·', '·'],
       ['38', '·', '·'],
     ]);
-    expect(one('.note.mapped').textContent).toBe('60');
+    expect((one('.note.mapped') as HTMLInputElement).value).toBe('60');
+  });
+
+  it('a member’s note typed changes the device’s drum map, clamped, and back to its own note drops the entry (yggi/webmidi#24)', () => {
+    const { props } = matrix(home());
+    change(all('input.note')[1] as HTMLInputElement, '62');
+    expect(profileOf(props.book, 'Circuit Tracks').drums).toEqual({ 36: 60, 38: 62 });
+    expect(activeSetup(props.book).name).toBe('Home');
+    change(all('input.note')[1] as HTMLInputElement, '300');
+    expect(profileOf(props.book, 'Circuit Tracks').drums[38]).toBe(127);
+    change(all('input.note')[0] as HTMLInputElement, '36');
+    expect(profileOf(props.book, 'Circuit Tracks').drums).toEqual({ 38: 127 });
   });
 
   it('a channel picked changes the book, as the named setup’s custom variant', () => {
@@ -314,11 +349,18 @@ describe('PatchMatrix', () => {
     expect(calls.select).toHaveBeenLastCalledWith('o1');
   });
 
-  it('locked (a piece routed by its cards): shown, no jack to press, no output to add', () => {
-    matrix(home(), { locked: true });
+  it('locked (a piece routed by its cards): its rows shown, not pressed, no output to add; the inputs and the clock still the setup’s (yggi/webmidi#22)', () => {
+    const { props } = matrix(home(), { locked: true });
     expect(rowCells('&lead')).toEqual(['·', '1']);
-    expect(all('button.jack').length).toBe(0);
+    expect([jack('&lead', 'Minilogue xd').tagName, jack('Kit', 'Circuit Tracks').tagName]).toEqual(['SPAN', 'SPAN']);
     expect(all('button').some((b) => b.textContent === '+ Output')).toBe(false);
+    jack('KeyStep 37', 'Minilogue xd').click();
+    flushSync();
+    click('= As played');
+    expect(crossingOf(props.book, 'piece:a', inputRow(keystep), 'o2')).toBe(AS_PLAYED);
+    jack('Clock', 'Minilogue xd').click();
+    flushSync();
+    expect(activeSetup(props.book).clock).toEqual(['o2']);
   });
 
   it('marks an output not plugged in, and lists an input the routes send from that isn’t', () => {

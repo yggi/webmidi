@@ -6,11 +6,11 @@
    * sits in) wait behind a button; the first row is the clock, the outputs the setup sends it to, the same in every context. An output's head selects it (for the `DeviceInspector`). It takes the book and calls
    * back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
    */
-  import { deviceNote } from '../core/drum-presets';
+  import { deviceNote, presetNameOf } from '../core/drum-presets';
   import type { PortOption } from '../core/port';
-  import { activeSetup, addOutput, AS_PLAYED, inputRow, profileOf, withClock, withCrossing, withHeard, type Crossing, type SetupBook } from '../core/setups';
+  import { activeSetup, addOutput, AS_PLAYED, inputRow, profileOf, withClock, withCrossing, withHeard, withProfile, type Crossing, type SetupBook } from '../core/setups';
   import ChannelPicker from './ChannelPicker.svelte';
-  import { channelHue } from './channels';
+  import { channelHue, clamp } from './channels';
   import { inputRows, type MatrixRow } from './rows';
 
   interface Props {
@@ -29,7 +29,10 @@
     selected?: string;
     /** The crossings sounding now, as `row|output key`. */
     lit?: ReadonlySet<string>;
-    /** Routed by the piece itself (its MIDI cards): shown, not changed. */
+    /**
+     * The frontend's rows routed by the piece itself (its MIDI cards): shown, not changed. The inputs and the clock stay
+     * the setup's, and editable; no output is added, since the outputs are the piece's (yggi/webmidi#22).
+     */
     locked?: boolean;
     /** Whether the clock row is shown: a frontend with no clock to send passes false. */
     clock?: boolean;
@@ -78,6 +81,19 @@
     onselect?.(key);
   }
 
+  /**
+   * A kit member's note on an output typed: its device's drum map sends the General MIDI note `gm` as it (0–127), the
+   * entry dropped when it is `gm` again. A device's profile, so no custom variant (decision 002; yggi/webmidi#24).
+   */
+  function setNote(e: Event & { currentTarget: HTMLInputElement }, name: string, gm: number) {
+    const drums: Record<number, number> = { ...profileOf(book, name).drums };
+    const n = clamp(e.currentTarget.valueAsNumber, 0, 127, drums[gm] ?? gm);
+    e.currentTarget.value = String(n);
+    if (n === gm) delete drums[gm];
+    else drums[gm] = n;
+    onchange(withProfile(book, name, { drums }));
+  }
+
   const outLabel = (o: { id: string; name: string }) => (o.id === 'none' ? 'No device' : o.name || o.id);
 </script>
 
@@ -124,19 +140,13 @@
       <tbody>
         {#if clock}
           <tr class="clock">
-            <th scope="row"><span class="label">Clock</span><span class="sub">24 ppq</span></th>
+            <th scope="row"><span class="rowname"><span class="label">Clock</span><span class="tags"><span class="sub">24 ppq</span></span></span></th>
             {#each setup.outputs as o (o.key)}
               {@const on = setup.clock.includes(o.key)}
               <td>
-                {#if locked}
-                  <span class="jack" aria-label="Clock to {outLabel(o)}: {on ? 'sent' : 'not sent'}"
-                    >{#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}</span
-                  >
-                {:else}
-                  <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
-                    {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
-                  </button>
-                {/if}
+                <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
+                  {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
+                </button>
               </td>
             {/each}
             {#if !locked}<td></td>{/if}
@@ -145,14 +155,20 @@
         {#each shown as row (row.id)}
           <tr class:member={row.kind === 'member'} class:empty={row.kind === 'empty'} class:group={row.group}>
             <th scope="row">
-              <span class="label">{row.label}</span>
-              {#if row.kind === 'input'}<span class="sub">IN</span>{/if}
-              {#if row.sub}<span class="sub">{row.sub}</span>{/if}
-              {#if row.kind === 'input' && heardBy}
-                <button type="button" class="ear" aria-pressed={heard(row)} title="{heard(row) ? 'Heard by' : 'Not heard by'} {heardBy}" onclick={() => toggleHeard(row)}
-                  >{heard(row) ? 'Heard' : 'Not heard'}</button
-                >
-              {/if}
+              <span class="rowname">
+                <span class="label">{row.label}</span>
+                {#if row.kind === 'input' || row.sub}
+                  <span class="tags">
+                    {#if row.kind === 'input'}<span class="sub">IN</span>{/if}
+                    {#if row.sub}<span class="sub">{row.sub}</span>{/if}
+                    {#if row.kind === 'input' && heardBy}
+                      <button type="button" class="ear" aria-pressed={heard(row)} title="{heard(row) ? 'Heard by' : 'Not heard by'} {heardBy}" onclick={() => toggleHeard(row)}
+                        >{heard(row) ? 'Heard' : 'Not heard'}</button
+                      >
+                    {/if}
+                  </span>
+                {/if}
+              </span>
             </th>
             {#each setup.outputs as o (o.key)}
               {@const value = crossing(row.id, o.key)}
@@ -160,11 +176,22 @@
                 {#if row.kind === 'member'}
                   {#if kitHere(o.key) && row.note !== undefined}
                     {@const n = deviceNote(profileOf(book, o.name).drums, row.note)}
-                    <span class="note" class:mapped={n !== row.note} title="General MIDI {row.note} goes out as {n}">{n}</span>
+                    {@const gm = row.note}
+                    <input
+                      type="number"
+                      class="note"
+                      class:mapped={n !== gm}
+                      min="0"
+                      max="127"
+                      value={n}
+                      aria-label="{row.label} on {outLabel(o)}: General MIDI {gm} goes out as"
+                      title="General MIDI {gm} goes out as {n}"
+                      onchange={(e) => setNote(e, o.name, gm)}
+                    />
                   {/if}
                 {:else}
                   {@const chip = value === undefined ? null : value === AS_PLAYED ? '=' : String(value)}
-                  {#if locked}
+                  {#if locked && row.kind !== 'input'}
                     <span class="jack" aria-label="{row.label} to {outLabel(o)}: {chip ?? 'not sent'}">
                       {#if chip}<span class="chip" class:keep={value === AS_PLAYED} style:--h={channelHue(value ?? 1)}>{chip}</span>{:else}<span class="hole"></span>{/if}
                     </span>
@@ -177,7 +204,7 @@
                     >
                       {#if chip}
                         <span class="chip" class:keep={value === AS_PLAYED} class:lit={lit?.has(`${row.id}|${o.key}`)} style:--h={channelHue(value ?? 1)}
-                          >{chip}{#if value === 10 && row.kind === 'kit'}<small>GM</small>{/if}</span
+                          >{chip}{#if value === 10 && row.kind === 'kit' && presetNameOf(profileOf(book, o.name).drums) === 'GM'}<small>GM</small>{/if}</span
                         >
                       {:else}<span class="hole"></span>{/if}
                     </button>
@@ -238,6 +265,8 @@
   }
   /* end palette */
   .wm-matrix {
+    /* a container, so the names and the heads fit what the frontend gives it, not the window (yggi/webmidi#23) */
+    container-type: inline-size;
     display: grid;
     gap: 6px;
     min-width: 0;
@@ -343,18 +372,47 @@
     position: sticky;
     left: 0;
     z-index: 1;
-    min-width: 128px;
+    min-width: 0;
     padding: 3px 10px 3px 8px;
     /* the names stay as the matrix scrolls sideways, over the ground the frontend draws it on */
     background: var(--wm-surface, var(--_panel));
     text-align: left;
-    white-space: nowrap;
+  }
+  /* a name wraps within at most 36 % of the matrix (96 px at least), its tags (IN, Heard, a seat's part) on a line under it */
+  .rowname {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: max-content;
+    max-width: max(96px, 36cqi);
+    overflow-wrap: anywhere;
+  }
+  .rowname > * {
+    max-width: 100%;
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+  }
+  @container (max-width: 480px) {
+    .col {
+      width: 96px;
+      min-width: 88px;
+    }
+    .add {
+      width: 72px;
+    }
+    .jack {
+      min-width: 56px;
+    }
   }
   .label {
     font: 600 15px var(--wm-font-num, ui-monospace, monospace);
   }
   .sub {
-    margin-left: 6px;
     font-size: 12px;
     color: var(--_muted);
   }
@@ -434,8 +492,11 @@
   }
   .note {
     display: inline-block;
-    min-width: 44px;
-    padding: 3px 8px;
+    width: 56px;
+    min-height: 28px;
+    padding: 2px 6px;
+    color: var(--_text);
+    text-align: center;
     border: 1px solid var(--_line);
     border-radius: 6px;
     background: var(--_panel-2);
@@ -445,8 +506,11 @@
     border-color: var(--_accent);
     color: var(--_accent);
   }
+  .note:focus-visible {
+    outline: 2px solid var(--_accent);
+    outline-offset: 2px;
+  }
   .ear {
-    margin-left: 6px;
     padding: 4px 7px;
     border: 1px solid var(--_line);
     border-radius: 999px;
