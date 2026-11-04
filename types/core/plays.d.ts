@@ -18,6 +18,8 @@ export declare function playsOf(book: SetupBook, input: PortOption | string, row
 export declare function heardOf(setup: Setup): 'all' | readonly PortOption[];
 /**
  * The inputs to listen to for a setup: those heard, and those whose row is routed in any context (forwarded, if not
- * heard); `'all'` when every input is heard or routed.
+ * heard); `'all'` when every input is heard or routed. Listened to is not heard: under `'all'` an input whose own choice
+ * is `'none'` is still listened to (a port can't be left out of `'all'`), so a frontend asks `isHeard` of each message's
+ * input before its instruments take it, and uses this only to open ports.
  */
 export declare function listenOf(setup: Setup): 'all' | readonly PortOption[];

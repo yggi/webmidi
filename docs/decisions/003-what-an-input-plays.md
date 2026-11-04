@@ -25,4 +25,5 @@ An input that plays a part must be heard, so a separate `heard` and a separate a
 
 - `Setup.heard` and `withHeard` go: a frontend reads `heardOf(setup)` or `isHeard`, and changes `withPlays`. That breaks a frontend's code at its next pin, so it is a minor version, the migration named in the changelog.
 - `PatchMatrix`'s Heard switch becomes a Plays choice on each input row, and a preset's button fills in the rest.
+- A setup's file is version 2 (the owner, 2026-11-04): a reader before this one would read a file without `heard` as hearing nothing, so it is told the file is newer instead; this reader takes version 1 too. The book a frontend keeps stays version 1: it is the frontend's own, and an older reader would drop it whole.
 - What a part *is* and playing it stay the frontends': Cell studio's keys, Jambot's instruments and Muse.

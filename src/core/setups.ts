@@ -460,11 +460,18 @@ export function removeSetup(book: SetupBook, id: string): SetupBook {
 /** What a setup's file says it is. */
 const FORMAT = 'webmidi-setup';
 
+/**
+ * The version a setup's file is written at: 2 since a setup keeps what each input plays (decision 003), where version 1
+ * kept the inputs heard. A reader before it refuses a version 2 file in words ("update the app") rather than read it as
+ * hearing nothing; this reader takes both, a version 1 file's inputs heard as playing the default.
+ */
+const FILE_VERSION = 2;
+
 /** A setup as a file's text (`.midisetup.json`): the setup, and the profiles of its devices that the book has. */
 export function exportSetup(book: SetupBook, id: string = book.active): string {
   const setup = book.setups.find((s) => s.id === id) ?? activeSetup(book);
   const devices = Object.fromEntries(setup.outputs.flatMap((o) => (own(book.devices, o.name) ? [[o.name, own(book.devices, o.name)!]] : [])));
-  return JSON.stringify({ format: FORMAT, version: 1, setup: unbased(setup), devices }, null, 2);
+  return JSON.stringify({ format: FORMAT, version: FILE_VERSION, setup: unbased(setup), devices }, null, 2);
 }
 
 /**
@@ -479,7 +486,7 @@ export function importSetup(book: SetupBook, text: string): SetupBook | string {
     return 'This file isn’t a MIDI setup: it isn’t JSON.';
   }
   if (!isRecord(kept) || kept.format !== FORMAT) return 'This file isn’t a MIDI setup.';
-  if (kept.version !== 1) return 'This MIDI setup was saved by a newer version: update the app to open it.';
+  if (kept.version !== 1 && kept.version !== FILE_VERSION) return 'This MIDI setup was saved by a newer version: update the app to open it.';
   const read = readSetup(kept.setup);
   if (!read) return 'This MIDI setup is damaged: it has no setup in it.';
   const id = freeId(book);

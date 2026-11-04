@@ -20,6 +20,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
   - `setup.heard` → `heardOf(setup)` (`'all'` or the ports), or `isHeard(setup, port)`;
   - `withHeard(book, ports)` → `withPlays(book, inputRow(port), 'default' | 'none')`, and `withHeard(book, 'all')` → `withPlays(book, ANY_INPUT, 'default')`;
   - `portsOf(...).listen` now gives the inputs heard and routed (`listenOf`).
+  - A setup's file (`exportSetup`, `.midisetup.json`) is now version 2. `importSetup` reads version 1 and 2 (a version 1 file's inputs heard as playing the default); a frontend still on webmidi 0.1 refuses a version 2 file with "saved by a newer version: update the app", rather than read it as hearing nothing.
 
   Nothing on the wire changes.
 

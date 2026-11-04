@@ -279,8 +279,17 @@ describe('a setup as a file', () => {
   it('says in words what is wrong with a file that isn’t one', () => {
     expect(importSetup(newBook(), 'not json')).toMatch(/isn’t JSON/);
     expect(importSetup(newBook(), '{"format":"other"}')).toMatch(/isn’t a MIDI setup/);
-    expect(importSetup(newBook(), '{"format":"webmidi-setup","version":2}')).toMatch(/newer version/);
+    expect(importSetup(newBook(), '{"format":"webmidi-setup","version":3}')).toMatch(/newer version/);
     expect(importSetup(newBook(), '{"format":"webmidi-setup","version":1}')).toMatch(/damaged/);
+    expect(importSetup(newBook(), '{"format":"webmidi-setup","version":2}')).toMatch(/damaged/);
+  });
+
+  it('is version 2 since what an input plays (decision 003), so a reader before it says to update, and reads a version 1 file by what it heard', () => {
+    expect(JSON.parse(exportSetup(home()))).toMatchObject({ format: 'webmidi-setup', version: 2 });
+    const old = JSON.stringify({ format: 'webmidi-setup', version: 1, setup: { id: 'x', name: 'Old', heard: [{ id: 'in-1', name: 'Keys' }] } });
+    const book = importSetup(newBook(), old);
+    if (typeof book === 'string') throw new Error(book);
+    expect(activeSetup(book).plays).toEqual({ 'in:Keys': 'default' });
   });
 });
 
