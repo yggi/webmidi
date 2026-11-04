@@ -69,8 +69,8 @@
   const kitHere = (key: string) => rows.some((r) => r.kind === 'kit' && crossing(r.id, key) !== undefined);
   const isPlugged = (o: PortOption) => o.id !== 'none' && outputs.some((p) => p.id === o.id || (!!o.name && p.name === o.name));
   const spare = $derived(outputs.filter((p) => !setup.outputs.some((o) => o.id === p.id || (!!o.name && o.name === p.name))));
-  /** The rows an input can play: the frontend's voices and kits. */
-  const playable = $derived(rows.filter((r) => r.kind === 'voice' || r.kind === 'kit'));
+  /** The rows an input can play: the frontend's voices and kits, but those it says can't be played (`playable: false`). */
+  const playable = $derived(rows.filter((r) => r.playable ?? (r.kind === 'voice' || r.kind === 'kit')));
   /** Inputs plugged in with no choice of their own, which a preset would fill in. */
   const unassigned = $derived(inputs.filter((p) => !Object.hasOwn(setup.plays, inputRow(p))));
   /** An input row's Plays value: its own choice (a row as the row it finds here), else '' (as every input's), else none. */
