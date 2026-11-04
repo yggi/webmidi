@@ -1,7 +1,7 @@
 // Lifted from yggi/cell-studio src/midi/fixtures.ts @ 3813fbb (lifted there from yggi/jambot apps/web/src/midi/access.test.ts
 // @ 8cdb6b8): Web MIDI without a device. Its `installMidi` and `uninstallMidi` (a fake `navigator.requestMIDIAccess`)
 // are `web`'s (web/fixtures.ts); `fakeConnection` is new, the adapter's part played over the same fake ports.
-import type { PortAccess } from './port';
+import { isListened, type Listened, type PortAccess } from './port';
 
 type Handler = ((event: { data: Uint8Array; timeStamp: number }) => void) | null;
 type FakeInput = { id: string; name: string; onmidimessage: Handler };
@@ -32,15 +32,15 @@ export function fakeAccess(inputs: FakeInput[] = [], outputs: FakeOutput[] = [])
 
 /**
  * A connection over a fake access, as the Web MIDI adapter makes one (Cell studio's `MidiAccess`): the ports in its maps,
- * in order, an output by id, the input listened to (an id, `'all'` or `'none'`: the others' handlers cleared), and the
+ * in order, an output by id, the inputs listened to (`Listened`: the others' handlers cleared), and the
  * access's `change()` heard as the ports changing: the input listened to anew (a port plugged in again is a fresh
  * object), then `onChange`.
  */
 export function fakeConnection(access: ReturnType<typeof fakeAccess>, on: { onChange?: () => void } = {}): PortAccess {
-  let listening = 'none';
-  const listen = (id: string) => {
-    listening = id;
-    for (const [portId, input] of access.inputs) input.onmidimessage = id === 'all' || id === portId ? () => {} : null;
+  let listening: Listened = 'none';
+  const listen = (inputs: Listened) => {
+    listening = inputs;
+    for (const [portId, input] of access.inputs) input.onmidimessage = isListened(inputs, portId, input.name) ? () => {} : null;
   };
   access.onstatechange = () => {
     listen(listening);
