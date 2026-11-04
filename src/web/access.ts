@@ -3,7 +3,7 @@
 // src/lib/transport/midi.ts @ 8b4b49e (requestAccess, readEnvironment): SysEx asked for, and what the page can tell
 // about where it runs. One place asks for Web MIDI, `requestAccess`; `MidiAccess.connect` is it in words.
 
-import type { MidiPort, PortAccess, PortOption } from '../core/port';
+import { isListened, type Listened, type MidiPort, type PortAccess, type PortOption } from '../core/port';
 import { type ParsedNote, parseMidiMessage } from '../core/surfaces';
 
 /** What a connection tells: a note from a listened input, every message from one (for CCs), the ports changed. */
@@ -68,7 +68,7 @@ export function readEnvironment(): MidiEnvironment {
 export class MidiAccess implements PortAccess {
   #access: MIDIAccess;
   #on: MidiHandlers;
-  #listening = 'none';
+  #listening: Listened = 'none';
 
   private constructor(access: MIDIAccess, on: MidiHandlers) {
     this.#access = access;
@@ -133,20 +133,19 @@ export class MidiAccess implements PortAccess {
     this.#access.onstatechange = null;
   }
 
-  /** Listen to one input by id, `'all'` of them, or `'none'`. */
-  listen(id: string): void {
-    this.#listening = id;
+  /** Listen to one input by id, `'all'` of them, `'none'`, or several (a setup's `heard`), each by id, else by name. */
+  listen(inputs: Listened): void {
+    this.#listening = inputs;
     for (const [portId, input] of this.#access.inputs)
-      input.onmidimessage =
-        id === 'all' || id === portId
-          ? (event) => {
-              const data = event.data;
-              if (!data) return;
-              const source = input.name ?? 'MIDI';
-              this.#on.onMessage?.(data, source, event.timeStamp);
-              const note = parseMidiMessage(data, event.timeStamp);
-              if (note) this.#on.onNote?.(note, source);
-            }
-          : null;
+      input.onmidimessage = isListened(inputs, portId, input.name)
+        ? (event) => {
+            const data = event.data;
+            if (!data) return;
+            const source = input.name ?? 'MIDI';
+            this.#on.onMessage?.(data, source, event.timeStamp);
+            const note = parseMidiMessage(data, event.timeStamp);
+            if (note) this.#on.onNote?.(note, source);
+          }
+        : null;
   }
 }

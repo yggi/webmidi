@@ -1,4 +1,4 @@
-import type { PortAccess } from './port';
+import { type PortAccess } from './port';
 type Handler = ((event: {
     data: Uint8Array;
     timeStamp: number;
@@ -32,7 +32,7 @@ export declare function fakeAccess(inputs?: FakeInput[], outputs?: FakeOutput[])
 };
 /**
  * A connection over a fake access, as the Web MIDI adapter makes one (Cell studio's `MidiAccess`): the ports in its maps,
- * in order, an output by id, the input listened to (an id, `'all'` or `'none'`: the others' handlers cleared), and the
+ * in order, an output by id, the inputs listened to (`Listened`: the others' handlers cleared), and the
  * access's `change()` heard as the ports changing: the input listened to anew (a port plugged in again is a fresh
  * object), then `onChange`.
  */
