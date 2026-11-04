@@ -288,12 +288,13 @@
 
   // ---- the rows each frontend hands the matrix; the inputs are rows in every mode (webmidi adds them) ----
   const inputRows = (group = true) => PLUGGED_IN.map((name, i) => ({ id: `in:${name}`, label: name, kind: 'input', group: group && i === 0 }));
-  const CLOCK_ROW = { id: 'clock', label: 'Clock', sub: '24 ppq', kind: 'clock', group: true };
+  const CLOCK_ROW = { id: 'clock', label: 'Clock', sub: '24 ppq', kind: 'clock' };
   const ROWS = {
     studio: {
       title: 'Patch · electroswing.cells',
       hint: 'The piece’s voices and the inputs down, the setup’s outputs across. Tap a jack for its channel.',
       rows: [
+        CLOCK_ROW,
         { id: 'lead', label: '&lead', kind: 'voice' },
         { id: 'bass', label: '&bass', kind: 'voice' },
         { id: 'pad', label: '&pad', kind: 'voice' },
@@ -304,24 +305,23 @@
         { id: 'hh', label: '&hh', kind: 'member', gm: 42 },
         { id: 'oh', label: '&oh', kind: 'member', gm: 46 },
         ...inputRows(),
-        CLOCK_ROW,
       ],
       heardBy: 'the keys and learn',
     },
     jambot: {
       title: 'Patch · the band’s seats',
       hint: 'Sixteen seats that stay put (jambot#108), and the inputs, down; the outputs across.',
-      rows: Array.from({ length: 16 }, (_, i) => {
+      rows: [CLOCK_ROW, ...Array.from({ length: 16 }, (_, i) => {
         const n = i + 1;
         const part = { 1: 'Lead', 2: 'Bass', 3: 'Pad', 4: 'Stab', 10: 'Drums' }[n];
         return { id: `s${n}`, label: `Seat ${n}`, sub: part ?? '', kind: part ? (n === 10 ? 'kit' : 'voice') : 'empty' };
-      }).concat(inputRows(), [CLOCK_ROW]),
+      }), ...inputRows()],
       heardBy: 'the Muse',
     },
     bay: {
       title: 'Patch · inputs to outputs',
       hint: 'Each input down, each output across. “=” passes the channel as played; a number moves it there.',
-      rows: [...inputRows(false), CLOCK_ROW],
+      rows: [CLOCK_ROW, ...inputRows()],
       heardBy: null,
     },
   };
@@ -462,8 +462,8 @@
     }
     const head = `<thead><tr><th scope="col"><span class="sr">Source</span></th>${s.outputs.map(colHead).join('')}
       <th scope="col"><button class="add-col" id="add-out">+ Output</button></th></tr></thead>`;
-    const body = rows.map((r) => {
-      const cls = [r.kind === 'member' ? 'member' : '', r.kind === 'empty' ? 'empty' : '', r.group ? 'group-start' : ''].join(' ');
+    const body = rows.map((r, i) => {
+      const cls = [r.kind === 'member' ? 'member' : '', r.kind === 'empty' ? 'empty' : '', r.group || (i === 1 && rows[0].kind === 'clock') ? 'group-start' : ''].join(' ');
       let sub = r.sub ? `<span class="sub">${esc(r.sub)}</span>` : '';
       if (r.kind === 'input') {
         const heard = spec.heardBy && s.heard.includes(r.label);

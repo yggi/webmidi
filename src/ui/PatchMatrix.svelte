@@ -3,7 +3,7 @@
    * The patch (docs/proposals/patchbay.md, `PatchMatrix`): the frontend's rows and the inputs down, the setup's outputs
    * across, each crossing a jack (empty, or a chip in its channel's hue). A jack opens the channel picker; a kit's members
    * show the note each output's drum map sends them as; an input's row has its Heard switch; empty rows (seats no part
-   * sits in) wait behind a button; the last row is the clock, the outputs the setup sends it to, the same in every context. An output's head selects it (for the `DeviceInspector`). It takes the book and calls
+   * sits in) wait behind a button; the first row is the clock, the outputs the setup sends it to, the same in every context. An output's head selects it (for the `DeviceInspector`). It takes the book and calls
    * back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
    */
   import { deviceNote, presetNameOf } from '../core/drum-presets';
@@ -138,6 +138,20 @@
         </tr>
       </thead>
       <tbody>
+        {#if clock}
+          <tr class="clock">
+            <th scope="row"><span class="rowname"><span class="label">Clock</span><span class="tags"><span class="sub">24 ppq</span></span></span></th>
+            {#each setup.outputs as o (o.key)}
+              {@const on = setup.clock.includes(o.key)}
+              <td>
+                <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
+                  {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
+                </button>
+              </td>
+            {/each}
+            {#if !locked}<td></td>{/if}
+          </tr>
+        {/if}
         {#each shown as row (row.id)}
           <tr class:member={row.kind === 'member'} class:empty={row.kind === 'empty'} class:group={row.group}>
             <th scope="row">
@@ -201,20 +215,6 @@
             {#if !locked}<td></td>{/if}
           </tr>
         {/each}
-        {#if clock}
-          <tr class="group">
-            <th scope="row"><span class="rowname"><span class="label">Clock</span><span class="tags"><span class="sub">24 ppq</span></span></span></th>
-            {#each setup.outputs as o (o.key)}
-              {@const on = setup.clock.includes(o.key)}
-              <td>
-                <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
-                  {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
-                </button>
-              </td>
-            {/each}
-            {#if !locked}<td></td>{/if}
-          </tr>
-        {/if}
       </tbody>
     </table>
   </div>
@@ -431,6 +431,10 @@
     border-top: 1px solid color-mix(in oklab, var(--_line) 55%, transparent);
   }
   tbody tr.group > * {
+    border-top: 1px solid var(--_line);
+  }
+  /* the clock, first: a rule under it, over the frontend's rows */
+  tbody tr.clock + tr > * {
     border-top: 1px solid var(--_line);
   }
   td {

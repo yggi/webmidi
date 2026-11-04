@@ -254,10 +254,10 @@ const rowCells = (label: string) => {
 const jack = (label: string, out: string) => all('.jack').find((j) => j.getAttribute('aria-label')?.startsWith(`${label} to ${out}`)) as HTMLButtonElement;
 
 describe('PatchMatrix', () => {
-  it('draws the rows, the inputs and the clock down, the outputs across, each crossing its channel', () => {
+  it('draws the clock first, then the rows and the inputs down, the outputs across, each crossing its channel', () => {
     matrix(home());
     expect(all('thead .name').map((n) => n.textContent)).toEqual(['Circuit Tracks', 'Minilogue xd']);
-    expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['&lead', '&pad', 'Kit', '&bd', '&sd', 'KeyStep 37', 'Clock']);
+    expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['Clock', '&lead', '&pad', 'Kit', '&bd', '&sd', 'KeyStep 37']);
     expect(rowCells('&lead')).toEqual(['·', '1', '·']);
     expect(rowCells('Kit')).toEqual(['10', '·', '·']);
   });
