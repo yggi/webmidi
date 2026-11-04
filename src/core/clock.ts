@@ -54,7 +54,8 @@ interface PairCarried {
   readonly jumps: number;
 }
 
-interface PairEstimate {
+/** What the estimator says after a sample: what `ClockOffset.estimate` shows a frontend's timing panel. */
+export interface PairEstimate {
   /** The offset to play by, in seconds. Null until enough samples. */
   readonly offset: number | null;
   /** The bound of the sample trusted, or null before the first. */
@@ -158,7 +159,17 @@ export interface ClockOffset {
   readonly paired: boolean;
 }
 
-export function clockOffset(clock: OutputClock, now: () => number = () => performance.now()): ClockOffset {
+/**
+ * The clock `clockOffset` makes: a `ClockOffset` that also shows its estimate in full, as of the last reading: the
+ * offset (`heardOffset`), the bound of the reading trusted (`OUTPUT.paired` or `OUTPUT.unpaired`), and how many jumps
+ * it has followed (a dropped buffer, a leap), for a timing panel or report (yggi/webmidi#9). Apart from `ClockOffset`,
+ * so a frontend's own fake of a `ClockOffset` needs no estimate.
+ */
+export interface EstimatedClockOffset extends ClockOffset {
+  readonly estimate: PairEstimate;
+}
+
+export function clockOffset(clock: OutputClock, now: () => number = () => performance.now()): EstimatedClockOffset {
   let carried = outputPair.initial;
   let estimate: PairEstimate = { offset: null, bound: null, jumps: 0 };
   // the audio time of the reading last taken, so one reading isn't taken twice
@@ -193,5 +204,8 @@ export function clockOffset(clock: OutputClock, now: () => number = () => perfor
     toDeviceMs: (seconds) => (seconds - offset()) * 1000,
     fromDeviceMs: (ms) => ms / 1000 + offset(),
     paired: !!clock.outputTimestamp,
+    get estimate() {
+      return estimate;
+    },
   };
 }

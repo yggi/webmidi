@@ -2,7 +2,7 @@
 // apps/web/src/audio/clock-offset.test.ts @ 8cdb6b8; the pair's own from packages/session/src/clock.test.ts there,
 // without its simulated device.
 import { describe, expect, it } from 'vitest';
-import { OUTPUT, PAIRED_AFTER, clockOffset } from './clock';
+import { OUTPUT, PAIRED_AFTER, clockOffset, type ClockOffset } from './clock';
 
 /** A clock whose output time the test moves, and its pairing, where it has one. */
 function clockAt(currentTime: number, pairing?: { contextTime: number; performanceTime: number }) {
@@ -114,5 +114,35 @@ describe('the output pair: one estimate of the clocks', () => {
     const out = run((t) => -12 + 1e-4 * t, 400);
     for (let i = 2; i < out.length; i++) expect(Math.abs(out[i]! - out[i - 1]!)).toBeLessThanOrEqual(OUTPUT.slew + 1e-12);
     expect(Math.abs(out.at(-1)! - (-12 + 1e-4 * (0.3 + 399 * 0.025)))).toBeLessThan(0.0005);
+  });
+});
+
+describe('ClockOffset.estimate (yggi/webmidi#9)', () => {
+  it('shows the bound of the reading trusted and every jump followed: a dropped buffer confirmed, then a leap', () => {
+    let t = 0.3;
+    let i = 0;
+    const offset = (n: number) => (n >= 150 ? -12 - 0.011 + 0.3 : n >= 50 ? -12 - 0.011 : -12);
+    const clock = { currentTime: t, outputTimestamp: () => ({ contextTime: t, performanceTime: (t - offset(i)) * 1000 }) };
+    const est = clockOffset(clock, () => 0);
+    expect(est.estimate).toEqual({ offset: null, bound: null, jumps: 0 });
+    const jumps: number[] = [];
+    for (; i < 200; i++, t += 0.025) {
+      est.update();
+      jumps.push(est.estimate.jumps);
+    }
+    expect([jumps[49], jumps[50 + OUTPUT.confirm - 1], jumps[149], jumps[150]]).toEqual([0, 1, 1, 2]);
+    expect(est.estimate.bound).toBe(OUTPUT.paired);
+    expect(est.estimate.offset).toBe(est.heardOffset());
+  });
+
+  it('on a clock the platform doesn’t pair: the bound of the clock less its latency', () => {
+    const est = clockOffset({ currentTime: 1, latency: 0.02 }, () => 0);
+    est.update();
+    expect(est.estimate.bound).toBe(OUTPUT.unpaired);
+  });
+
+  it('leaves ClockOffset as it was, so a frontend’s own fake of one still types', () => {
+    const fake: ClockOffset = { update: () => {}, heardOffset: () => 0, heard: () => 0, toDeviceMs: (s) => s * 1000, fromDeviceMs: (ms) => ms / 1000, paired: true };
+    expect('estimate' in fake).toBe(false);
   });
 });

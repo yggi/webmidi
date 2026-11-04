@@ -8,6 +8,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
+### Added
+- **`clockOffset` shows its estimate** (yggi/webmidi#9): it returns an `EstimatedClockOffset`, a `ClockOffset` with `estimate` (`PairEstimate`, now exported): the offset, the bound of the reading trusted and the jumps followed, for a timing panel or report. `ClockOffset` itself is as it was, so a frontend's own fake of one still types. Jambot can read its jumps here and drop its own count (`apps/web/src/audio/output-estimate.ts`). Nothing on the wire changes.
+
 ### Fixed
 - **Setups hardened** (yggi/webmidi#15). A stored row or device named `__proto__` is now kept as one, where `fromCellStudio` wrote it onto `Object.prototype`, and `importSetup` and `readBook` set the object's prototype. A custom variant takes an id no setup has, where it could repeat one `readBook` had kept as a named setup. An exported setup's download is no longer dropped by an older Safari. `localBookStore` says why text that isn't JSON reads as nothing kept. Nothing on the wire changes, and no signature does.
 
