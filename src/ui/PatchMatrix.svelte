@@ -141,14 +141,20 @@
         {#each shown as row (row.id)}
           <tr class:member={row.kind === 'member'} class:empty={row.kind === 'empty'} class:group={row.group}>
             <th scope="row">
-              <span class="label">{row.label}</span>
-              {#if row.kind === 'input'}<span class="sub">IN</span>{/if}
-              {#if row.sub}<span class="sub">{row.sub}</span>{/if}
-              {#if row.kind === 'input' && heardBy}
-                <button type="button" class="ear" aria-pressed={heard(row)} title="{heard(row) ? 'Heard by' : 'Not heard by'} {heardBy}" onclick={() => toggleHeard(row)}
-                  >{heard(row) ? 'Heard' : 'Not heard'}</button
-                >
-              {/if}
+              <span class="rowname">
+                <span class="label">{row.label}</span>
+                {#if row.kind === 'input' || row.sub}
+                  <span class="tags">
+                    {#if row.kind === 'input'}<span class="sub">IN</span>{/if}
+                    {#if row.sub}<span class="sub">{row.sub}</span>{/if}
+                    {#if row.kind === 'input' && heardBy}
+                      <button type="button" class="ear" aria-pressed={heard(row)} title="{heard(row) ? 'Heard by' : 'Not heard by'} {heardBy}" onclick={() => toggleHeard(row)}
+                        >{heard(row) ? 'Heard' : 'Not heard'}</button
+                      >
+                    {/if}
+                  </span>
+                {/if}
+              </span>
             </th>
             {#each setup.outputs as o (o.key)}
               {@const value = crossing(row.id, o.key)}
@@ -197,7 +203,7 @@
         {/each}
         {#if clock}
           <tr class="group">
-            <th scope="row"><span class="label">Clock</span><span class="sub">24 ppq</span></th>
+            <th scope="row"><span class="rowname"><span class="label">Clock</span><span class="tags"><span class="sub">24 ppq</span></span></span></th>
             {#each setup.outputs as o (o.key)}
               {@const on = setup.clock.includes(o.key)}
               <td>
@@ -259,6 +265,8 @@
   }
   /* end palette */
   .wm-matrix {
+    /* a container, so the names and the heads fit what the frontend gives it, not the window (yggi/webmidi#23) */
+    container-type: inline-size;
     display: grid;
     gap: 6px;
     min-width: 0;
@@ -364,18 +372,47 @@
     position: sticky;
     left: 0;
     z-index: 1;
-    min-width: 128px;
+    min-width: 0;
     padding: 3px 10px 3px 8px;
     /* the names stay as the matrix scrolls sideways, over the ground the frontend draws it on */
     background: var(--wm-surface, var(--_panel));
     text-align: left;
-    white-space: nowrap;
+  }
+  /* a name wraps within at most 36 % of the matrix (96 px at least), its tags (IN, Heard, a seat's part) on a line under it */
+  .rowname {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: max-content;
+    max-width: max(96px, 36cqi);
+    overflow-wrap: anywhere;
+  }
+  .rowname > * {
+    max-width: 100%;
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+  }
+  @container (max-width: 480px) {
+    .col {
+      width: 96px;
+      min-width: 88px;
+    }
+    .add {
+      width: 72px;
+    }
+    .jack {
+      min-width: 56px;
+    }
   }
   .label {
     font: 600 15px var(--wm-font-num, ui-monospace, monospace);
   }
   .sub {
-    margin-left: 6px;
     font-size: 12px;
     color: var(--_muted);
   }
@@ -470,7 +507,6 @@
     outline-offset: 2px;
   }
   .ear {
-    margin-left: 6px;
     padding: 4px 7px;
     border: 1px solid var(--_line);
     border-radius: 999px;

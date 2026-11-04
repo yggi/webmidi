@@ -13,6 +13,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 - **`MidiStatus` takes its connect button's name** (yggi/webmidi#31): `connectLabel` (default "Connect") and `connectingLabel` (default "Connecting…"), so Jambot keeps "Connect MIDI". Additive; nothing on the wire changes.
 
 ### Changed
+- **`PatchMatrix` fits a narrow container** (yggi/webmidi#23): the matrix is a size container. A row's name wraps within at most 36 % of its width (96 px at least), with its tags (`IN`, Heard, a seat's part) on a line under it, and under 480 px the output heads are narrower. At 360 px with an input named 24 characters, two outputs show without scrolling, where none did. A frontend's own override for wrapping names (Cell studio's) can go. Nothing on the wire changes.
 - **A locked `PatchMatrix` locks only the frontend's rows** (yggi/webmidi#22): on a piece routed by its own MIDI cards, the input rows and the clock row stay editable and call back through `onchange`; "+ Output" stays hidden, since the outputs are the piece's. A frontend that kept only the Heard switches from a locked matrix's `onchange` (Cell studio, yggi/cell-studio#538) takes the input rows' crossings and the clock from it too. Nothing on the wire changes.
 
 ### Fixed
