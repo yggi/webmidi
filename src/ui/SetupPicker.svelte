@@ -63,7 +63,8 @@
     const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
     const a = Object.assign(document.createElement('a'), { href: url, download: filename });
     a.click();
-    URL.revokeObjectURL(url);
+    // revoked a moment later: an older Safari drops a download whose URL is revoked in the tick that clicked it
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async function read(e: Event & { currentTarget: HTMLInputElement }) {

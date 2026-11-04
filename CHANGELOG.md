@@ -8,7 +8,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
-Nothing has changed since `v0.1.2`.
+### Fixed
+- **Setups hardened** (yggi/webmidi#15). A stored row or device named `__proto__` is now kept as one, where `fromCellStudio` wrote it onto `Object.prototype`, and `importSetup` and `readBook` set the object's prototype. A custom variant takes an id no setup has, where it could repeat one `readBook` had kept as a named setup. An exported setup's download is no longer dropped by an older Safari. `localBookStore` says why text that isn't JSON reads as nothing kept. Nothing on the wire changes, and no signature does.
 
 ## v0.1.2 — 2026-11-04
 

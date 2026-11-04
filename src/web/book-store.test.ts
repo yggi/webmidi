@@ -38,3 +38,18 @@ describe('localBookStore', () => {
     expect(loadBook(store)).toEqual(newBook());
   });
 });
+
+describe('text that isn’t JSON (yggi/webmidi#15)', () => {
+  it('reads as nothing kept, so loadBook migrates again and saves over it', () => {
+    const storage = fakeStorage();
+    storage.kept.set('k', '{not json');
+    const migrated = renameSetup(newBook(), 's1', 'From before');
+    expect(
+      loadBook(
+        localBookStore('k', () => storage),
+        () => migrated,
+      ),
+    ).toEqual(migrated);
+    expect(JSON.parse(storage.kept.get('k')!)).toEqual(migrated);
+  });
+});
