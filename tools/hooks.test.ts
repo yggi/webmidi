@@ -1,4 +1,4 @@
-// Lifted from yggi/cells tools/hooks.test.ts @ 41ef16b, adapted there from yggi/jambot tooling/hooks.test.ts @ 8871429: the pre-push gate (.githooks/pre-push), the stamp verify
+// Lifted from yggi/cells tools/hooks.test.ts @ e0a2274 (its names `webmidi-…`, its boot-set alarm left out), adapted there from yggi/jambot tooling/hooks.test.ts @ 8871429: the pre-push gate (.githooks/pre-push), the stamp verify
 // leaves for it (tools/verified.sh), the session's start (.claude/hooks/session-start.sh) and branch-status.sh, each
 // run in a throwaway repository.
 import { spawnSync } from 'node:child_process';
@@ -82,6 +82,9 @@ function verified(dir: string, step: 'begin' | 'end') {
   const run = spawnSync('sh', [`${root}/tools/verified.sh`, step], { cwd: dir, env, encoding: 'utf8' });
   expect(run.status, run.stderr).toBe(0);
 }
+
+/** The count of tests passed that verify's reporter (tools/test-count.ts) keeps in `dir`'s git directory. */
+const counted = (dir: string) => join(git(dir, 'rev-parse', '--absolute-git-dir'), 'webmidi-tests-passed');
 
 describe('pre-push', () => {
   it('blocks a push when verify fails, and says why', () => {
@@ -168,12 +171,21 @@ describe('pre-push', () => {
     expect(hook(dir, 'head', failing).status).toBe(1);
   });
 
-  it('does not verify a tree twice, so a retried push is free, and says so', () => {
+  it('does not verify a tree twice, so a retried push is free, and says so with the count of tests that passed', () => {
     const dir = repoWith(['a.ts']);
-    expect(hook(dir).status).toBe(0);
+    expect(hook(dir, 'head', `echo '      Tests  12 passed (12)'`).status).toBe(0);
     const again = hook(dir, 'head', failing);
     expect(again.status).toBe(0);
-    expect(again.stderr).toContain('passed verify already');
+    const commit = git(dir, 'rev-parse', '--short', 'HEAD');
+    expect(again.stderr.trim()).toBe(`pre-push: ${commit} passed npm run verify already (12 tests passed); not run again`);
+  });
+
+  it('reads a stamp of a tree alone, from before the count was kept, as a count unknown', () => {
+    const dir = repoWith(['a.ts']);
+    writeFileSync(join(git(dir, 'rev-parse', '--absolute-git-dir'), 'webmidi-verified'), `${git(dir, 'rev-parse', 'HEAD^{tree}')}\n`);
+    const { status, stderr } = hook(dir, 'head', failing);
+    expect(status).toBe(0);
+    expect(stderr).toContain('passed npm run verify already (? tests passed)');
   });
 
   it('verifies again once the tree changes', () => {
@@ -195,6 +207,23 @@ describe('pre-push', () => {
     const { status, stderr } = hook(dir, 'head', leaks, { GIT_DIR: join(dir, '.git') });
     expect(stderr).not.toContain('GIT_DIR leaked');
     expect(status).toBe(0);
+  });
+
+  it('lets a tree verified in one worktree through from another worktree of the same repository (#242)', () => {
+    const dir = repoWith(['a.ts']);
+    const other = `${dir}-other`;
+    repos.push(other);
+    git(dir, 'worktree', 'add', '-q', '--detach', other, 'HEAD');
+    verified(dir, 'begin');
+    verified(dir, 'end');
+    const { status, stderr } = hook(other, 'head', failing);
+    expect(stderr).toContain('passed npm run verify already');
+    expect(status).toBe(0);
+    // (and the other way: a tree the linked worktree verified, the main checkout pushes unverified)
+    commit(other, 'b.ts');
+    expect(hook(other, 'head', `echo '      Tests  3 passed (3)'`).status).toBe(0);
+    git(dir, 'checkout', '-q', '--detach', git(other, 'rev-parse', 'HEAD'));
+    expect(hook(dir, 'head', failing).stderr).toContain('(3 tests passed)');
   });
 
   it('is what a checkout runs: the session start points core.hooksPath at it', () => {
@@ -234,10 +263,28 @@ describe('installing webmidi from git', () => {
 });
 
 describe('the stamp verify leaves (tools/verified.sh)', () => {
-  it('is written by npm run verify: preverify begins it, postverify (only after a pass) ends it', () => {
+  it('is written by npm run verify: preverify begins it, postverify (only after a pass) ends it, its tests counted', () => {
     const scripts = JSON.parse(readFileSync(`${root}/package.json`, 'utf8')).scripts;
-    expect(scripts.preverify).toMatch(/ && sh tools\/verified\.sh begin$/);
+    expect(scripts.preverify).toBe('node tools/install-first.mjs && sh tools/verified.sh begin');
     expect(scripts.postverify).toBe('sh tools/verified.sh end');
+    expect(scripts.verify).toMatch(/npm test -- --reporter=default --reporter=\.\/tools\/test-count\.ts$/);
+  });
+
+  it("keeps the count verify's reporter left with the stamp, so the push of that tree says it", () => {
+    const dir = repoWith(['a.ts']);
+    verified(dir, 'begin');
+    writeFileSync(counted(dir), '1938\n');
+    verified(dir, 'end');
+    expect(existsSync(counted(dir))).toBe(false);
+    expect(hook(dir, 'head', failing).stderr).toContain('passed npm run verify already (1938 tests passed)');
+  });
+
+  it("does not take a count an earlier test run left for this run's", () => {
+    const dir = repoWith(['a.ts']);
+    writeFileSync(counted(dir), '5\n');
+    verified(dir, 'begin');
+    verified(dir, 'end');
+    expect(hook(dir, 'head', failing).stderr).toContain('passed npm run verify already (? tests passed)');
   });
 
   it('lets the push of the files it saw through without verifying again, even if they were committed after', () => {
@@ -250,7 +297,7 @@ describe('the stamp verify leaves (tools/verified.sh)', () => {
     git(dir, 'commit', '-qm', 'what verify saw');
     const { status, stderr } = hook(dir, 'head', failing);
     expect(status).toBe(0);
-    expect(stderr).toContain('passed verify already');
+    expect(stderr).toContain('passed npm run verify already');
   });
 
   it('stamps nothing when a file changed while verify ran, since verify may have read either version', () => {

@@ -1,3 +1,12 @@
+/** What the estimator says after a sample: what `ClockOffset.estimate` shows a frontend's timing panel. */
+export interface PairEstimate {
+    /** The offset to play by, in seconds. Null until enough samples. */
+    readonly offset: number | null;
+    /** The bound of the sample trusted, or null before the first. */
+    readonly bound: number | null;
+    /** How many jumps the pair has followed. */
+    readonly jumps: number;
+}
 /**
  * The audio clock against the page's: when what is scheduled on the AudioContext is *heard*, on `performance.now()`,
  * the clock MIDI timestamps are read against (Cell studio's decision 005: the heard moment). One estimator for it, which

@@ -316,3 +316,36 @@ describe('reading what was kept', () => {
     expect(loadBook(memoryStore())).toEqual(newBook());
   });
 });
+
+describe('hardening (yggi/webmidi#15)', () => {
+  it('a file’s device named __proto__ is a device, not the book’s prototype', () => {
+    const text = JSON.stringify({ format: 'webmidi-setup', version: 1, setup: { id: 'x', name: 'X' } }).replace('}}', '},"devices":{"__proto__":{"bend":12}}}');
+    const book = importSetup(newBook(), text);
+    if (typeof book === 'string') throw new Error(book);
+    expect([Object.hasOwn(book.devices, '__proto__'), Object.getPrototypeOf(book.devices), profileOf(book, '__proto__').bend]).toEqual([true, Object.prototype, 12]);
+    expect(({} as Record<string, unknown>).bend).toBeUndefined();
+  });
+
+  it('a row named __proto__ read back is a row, not the routes’ prototype', () => {
+    const kept = JSON.parse('{"version":1,"setups":[{"id":"a","name":"A","outputs":[{"key":"o1","id":"p","name":"X"}],"routes":{"band":{"__proto__":{"o1":3}}}}]}');
+    const routes = activeSetup(readBook(kept)).routes.band!;
+    expect([Object.hasOwn(routes, '__proto__'), Object.getPrototypeOf(routes)]).toEqual([true, Object.prototype]);
+  });
+
+  it('a variant takes an id no setup has, when one kept as named already has <id>~', () => {
+    const kept = {
+      version: 1,
+      setups: [
+        { id: 's1', name: 'Home' },
+        { id: 's1~', name: 'Home - custom', base: 'gone' },
+      ],
+    };
+    const book = withCrossing(readBook(kept), 'band', 'lead', 'o1', 1);
+    expect(book.setups.map((s) => [s.id, s.base])).toEqual([
+      ['s1', undefined],
+      ['s1~2', 's1'],
+      ['s1~', undefined],
+    ]);
+    expect(changedFrom(book)?.id).toBe('s1');
+  });
+});
