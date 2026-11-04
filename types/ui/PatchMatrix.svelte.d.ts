@@ -17,7 +17,10 @@ interface Props {
     selected?: string;
     /** The crossings sounding now, as `row|output key`. */
     lit?: ReadonlySet<string>;
-    /** Routed by the piece itself (its MIDI cards): shown, not changed. */
+    /**
+     * The frontend's rows routed by the piece itself (its MIDI cards): shown, not changed. The inputs and the clock stay
+     * the setup's, and editable; no output is added, since the outputs are the piece's (yggi/webmidi#22).
+     */
     locked?: boolean;
     /** Whether the clock row is shown: a frontend with no clock to send passes false. */
     clock?: boolean;
