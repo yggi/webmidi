@@ -8,6 +8,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
+### Added
+- **`MidiStatus` takes its connect button's name** (yggi/webmidi#31): `connectLabel` (default "Connect") and `connectingLabel` (default "Connecting…"), so Jambot keeps "Connect MIDI". Additive; nothing on the wire changes.
+
 ### Fixed
 - **The kit's "GM" mark on channel 10 shows only on an output whose drum map is General MIDI** (yggi/webmidi#30), where it showed beside a Circuit's map too. Nothing on the wire changes.
 

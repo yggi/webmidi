@@ -17,6 +17,9 @@ interface Props {
     onpanic?: () => void;
     /** Whether there is anything to silence. */
     canPanic?: boolean;
+    /** The connect button's name, before ("Connect MIDI", say) and while asking (yggi/webmidi#31). */
+    connectLabel?: string;
+    connectingLabel?: string;
 }
 declare const MidiStatus: import("svelte").Component<Props, {}, "">;
 type MidiStatus = ReturnType<typeof MidiStatus>;
