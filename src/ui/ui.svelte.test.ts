@@ -241,7 +241,13 @@ describe('PatchMatrix', () => {
     expect(all('thead .name').map((n) => n.textContent)).toEqual(['Circuit Tracks', 'Minilogue xd']);
     expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['&lead', '&pad', 'Kit', '&bd', '&sd', 'KeyStep 37', 'Clock']);
     expect(rowCells('&lead')).toEqual(['·', '1', '·']);
-    expect(rowCells('Kit')).toEqual(['10GM', '·', '·']);
+    expect(rowCells('Kit')).toEqual(['10', '·', '·']);
+  });
+
+  it('marks a kit on channel 10 "GM" only where the output’s drum map is General MIDI (yggi/webmidi#30)', () => {
+    const book = withCrossing(home(), 'piece:a', '*', 'o2', 10);
+    matrix(book);
+    expect(rowCells('Kit')).toEqual(['10', '10GM', '·']);
   });
 
   it('shows a kit member’s note as each output’s drum map sends it, where the kit is routed', () => {
