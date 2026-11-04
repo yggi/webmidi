@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
+Nothing has changed since `v0.1.3`.
+
+## v0.1.3 — 2026-11-04
+
+The clock's estimate shown and its estimator exported, for Jambot's timing panel and its check against Jambot's own; the setups hardened. Nothing on the wire changes, and nothing breaks a frontend's code (new exports, a return type that widens), so it is a patch.
+
 ### Added
 - **`clockOffset` shows its estimate** (yggi/webmidi#9): it returns an `EstimatedClockOffset`, a `ClockOffset` with `estimate` (`PairEstimate`, now exported): the offset, the bound of the reading trusted and the jumps followed, for a timing panel or report. `ClockOffset` itself is as it was, so a frontend's own fake of one still types. Jambot can read its jumps here and drop its own count (`apps/web/src/audio/output-estimate.ts`). Nothing on the wire changes.
 - **`clockPair` is exported** (yggi/webmidi#10), with `PairConfig`, `PairSample` and `PairCarried`: the estimator `clockOffset` runs with `OUTPUT`, for a test or a frontend that runs it with another configuration. With `leap: Infinity` it is Jambot's estimator sample for sample (`src/core/clock-jambot.test.ts`). Nothing on the wire changes.
