@@ -10,6 +10,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ### Added
 - **A kit member's drum note is editable in `PatchMatrix`** (yggi/webmidi#24): a number 0–127 per output where the kit is routed, written to that device's profile (`withProfile`, no custom variant); its own General MIDI note again drops the entry. Cell studio's and Jambot's own drum-note editors can go at their next pin. Nothing on the wire changes.
+- **`MidiStatus` takes its connect button's name** (yggi/webmidi#31): `connectLabel` (default "Connect") and `connectingLabel` (default "Connecting…"), so Jambot keeps "Connect MIDI". Additive; nothing on the wire changes.
+
+### Changed
+- **A locked `PatchMatrix` locks only the frontend's rows** (yggi/webmidi#22): on a piece routed by its own MIDI cards, the input rows and the clock row stay editable and call back through `onchange`; "+ Output" stays hidden, since the outputs are the piece's. A frontend that kept only the Heard switches from a locked matrix's `onchange` (Cell studio, yggi/cell-studio#538) takes the input rows' crossings and the clock from it too. Nothing on the wire changes.
+
+### Fixed
+- **The kit's "GM" mark on channel 10 shows only on an output whose drum map is General MIDI** (yggi/webmidi#30), where it showed beside a Circuit's map too. Nothing on the wire changes.
 
 ## v0.1.3 — 2026-11-04
 

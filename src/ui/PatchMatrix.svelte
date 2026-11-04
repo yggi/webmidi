@@ -6,7 +6,7 @@
    * sits in) wait behind a button; the last row is the clock, the outputs the setup sends it to, the same in every context. An output's head selects it (for the `DeviceInspector`). It takes the book and calls
    * back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
    */
-  import { deviceNote } from '../core/drum-presets';
+  import { deviceNote, presetNameOf } from '../core/drum-presets';
   import type { PortOption } from '../core/port';
   import { activeSetup, addOutput, AS_PLAYED, inputRow, profileOf, withClock, withCrossing, withHeard, withProfile, type Crossing, type SetupBook } from '../core/setups';
   import ChannelPicker from './ChannelPicker.svelte';
@@ -29,7 +29,10 @@
     selected?: string;
     /** The crossings sounding now, as `row|output key`. */
     lit?: ReadonlySet<string>;
-    /** Routed by the piece itself (its MIDI cards): shown, not changed. */
+    /**
+     * The frontend's rows routed by the piece itself (its MIDI cards): shown, not changed. The inputs and the clock stay
+     * the setup's, and editable; no output is added, since the outputs are the piece's (yggi/webmidi#22).
+     */
     locked?: boolean;
     /** Whether the clock row is shown: a frontend with no clock to send passes false. */
     clock?: boolean;
@@ -168,7 +171,7 @@
                   {/if}
                 {:else}
                   {@const chip = value === undefined ? null : value === AS_PLAYED ? '=' : String(value)}
-                  {#if locked}
+                  {#if locked && row.kind !== 'input'}
                     <span class="jack" aria-label="{row.label} to {outLabel(o)}: {chip ?? 'not sent'}">
                       {#if chip}<span class="chip" class:keep={value === AS_PLAYED} style:--h={channelHue(value ?? 1)}>{chip}</span>{:else}<span class="hole"></span>{/if}
                     </span>
@@ -181,7 +184,7 @@
                     >
                       {#if chip}
                         <span class="chip" class:keep={value === AS_PLAYED} class:lit={lit?.has(`${row.id}|${o.key}`)} style:--h={channelHue(value ?? 1)}
-                          >{chip}{#if value === 10 && row.kind === 'kit'}<small>GM</small>{/if}</span
+                          >{chip}{#if value === 10 && row.kind === 'kit' && presetNameOf(profileOf(book, o.name).drums) === 'GM'}<small>GM</small>{/if}</span
                         >
                       {:else}<span class="hole"></span>{/if}
                     </button>
@@ -198,15 +201,9 @@
             {#each setup.outputs as o (o.key)}
               {@const on = setup.clock.includes(o.key)}
               <td>
-                {#if locked}
-                  <span class="jack" aria-label="Clock to {outLabel(o)}: {on ? 'sent' : 'not sent'}"
-                    >{#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}</span
-                  >
-                {:else}
-                  <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
-                    {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
-                  </button>
-                {/if}
+                <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
+                  {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
+                </button>
               </td>
             {/each}
             {#if !locked}<td></td>{/if}
