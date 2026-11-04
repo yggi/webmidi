@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 ## Unreleased
 
+Nothing has changed since `v0.2.0`.
+
+## v0.2.0 — 2026-11-04
+
+What an input plays (decision 003, yggi/webmidi#43): one mechanism for whether an input is heard and which of the frontend's parts it plays, kept in the setup by row and role, filled in by preset (keyboard → lead, pads → drums), and sent as played (#29). It breaks a frontend's code, `Setup.heard` and `withHeard` gone, so it is a minor version: the migration is under *Changed*. A setup's file is now version 2, which a frontend still on 0.1 refuses in words. Nothing on the wire changes.
+
 ### Changed
 - **What an input plays replaces what it heard: one mechanism** (yggi/webmidi#43, decision 003). This breaks a frontend's code, so the next release is a minor version.
   - `Setup.plays`, by input row: `'none'` (not heard), `'default'`, or one of the frontend's rows kept with its role.
