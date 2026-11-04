@@ -48,10 +48,16 @@ export const AS_PLAYED = 0;
 /** A context's routes: a row's id to its crossings, by output key. */
 export type Routes = Readonly<Record<string, Readonly<Record<string, Crossing>>>>;
 
-/** A named setup: the outputs in order, the inputs the frontend hears, and the routes of each context it names. */
+/**
+ * A named setup: the outputs in order, the inputs the frontend hears, and the routes of each context it names. A change
+ * to a named setup is kept as its custom variant (`base`), saved at once, until the person overwrites the named setup
+ * with it, saves it under a new name, or discards it (decision 002).
+ */
 export interface Setup {
   readonly id: string;
   readonly name: string;
+  /** A custom variant's: the id of the named setup it was changed from. A named setup has none. */
+  readonly base?: string;
   /** At least one; an output with id `'none'` is a slot with no device. */
   readonly outputs: readonly SetupOutput[];
   /** The inputs the frontend listens to (its keys, MIDI learn, the Muse), or `'all'`. Routing an input is its row's. */
@@ -87,6 +93,9 @@ export const ANY_INPUT = 'in:*';
 export const DEFAULT_PROFILE: DeviceProfile = { clock: false, drums: {}, bend: 2, mpe: null, latency: 0 };
 
 const NO_DEVICE: PortOption = { id: 'none', name: '' };
+
+/** What a custom variant is called after its named setup: "Home - custom". */
+export const CUSTOM = ' - custom';
 
 /** A book with one setup, one output and no device: a first visit. */
 export function newBook(): SetupBook {
@@ -150,6 +159,7 @@ function readSetup(v: unknown): Setup | null {
   return {
     id: v.id,
     name: typeof v.name === 'string' && v.name.trim() ? v.name : v.id,
+    ...(typeof v.base === 'string' && v.base ? { base: v.base } : {}),
     outputs: outputs.length ? outputs : [{ key: 'o1', ...NO_DEVICE }],
     heard,
     routes: contexts,
@@ -165,7 +175,14 @@ export function readBook(v: unknown): SetupBook {
       const setup = readSetup(s);
       if (setup && !setups.some((x) => x.id === setup.id)) setups.push(setup);
     }
-  if (!setups.length) return newBook();
+  // a variant needs its named setup, and a named setup has one variant at most: else it is kept as a named setup
+  const kept: Setup[] = [];
+  for (const x of setups) {
+    const named = setups.some((n) => n.id === x.base && n.base === undefined) && !kept.some((k) => k.base === x.base);
+    kept.push(x.base === undefined || named ? x : unbased(x));
+  }
+  setups.splice(0, setups.length, ...kept);
+  if (!setups.some((x) => x.base === undefined)) return newBook();
   const defaults = readProfile(v.defaults);
   const devices = isRecord(v.devices) ? Object.fromEntries(Object.entries(v.devices).map(([name, p]) => [name, readProfile(p, defaults)])) : {};
   const active = typeof v.active === 'string' && setups.some((s) => s.id === v.active) ? v.active : setups[0]!.id;
@@ -233,10 +250,44 @@ export function suggestSetup(book: SetupBook, plugged: readonly PortOption[]): S
 
 // ---- changing the book: each a new book ----
 
-const withActive = (book: SetupBook, change: (s: Setup) => Setup): SetupBook => ({
-  ...book,
-  setups: book.setups.map((s) => (s.id === book.active ? change(s) : s)),
-});
+/** A setup without its base: named. */
+const unbased = ({ base: _base, ...setup }: Setup): Setup => setup;
+
+/**
+ * A change to the setup in use. A custom variant is changed in place; a named setup stays as it is, and the change is
+ * kept as its custom variant, put in use (one it already had is replaced: a change starts from what was saved).
+ */
+function withActive(book: SetupBook, change: (s: Setup) => Setup): SetupBook {
+  const active = activeSetup(book);
+  const changed = change(active);
+  if (changed === active) return book;
+  if (active.base !== undefined) return { ...book, setups: book.setups.map((s) => (s.id === active.id ? changed : s)) };
+  const old = book.setups.find((s) => s.base === active.id);
+  const variant: Setup = { ...changed, id: old?.id ?? `${active.id}~`, name: active.name + CUSTOM, base: active.id };
+  const setups = old ? book.setups.map((s) => (s === old ? variant : s)) : book.setups.flatMap((s) => (s === active ? [s, variant] : [s]));
+  return { ...book, setups, active: variant.id };
+}
+
+/** The named setup the one in use is a custom variant of, or null: the one in use is as saved. */
+export function changedFrom(book: SetupBook): Setup | null {
+  const base = activeSetup(book).base;
+  return base === undefined ? null : (book.setups.find((s) => s.id === base) ?? null);
+}
+
+/** The named setup overwritten with its custom variant in use, which goes; the book as it is when none is. */
+export function overwrite(book: SetupBook): SetupBook {
+  const variant = activeSetup(book);
+  const base = changedFrom(book);
+  if (!base) return book;
+  const saved: Setup = { ...unbased(variant), id: base.id, name: base.name };
+  return { ...book, setups: book.setups.filter((s) => s !== variant).map((s) => (s === base ? saved : s)), active: base.id };
+}
+
+/** The custom variant in use discarded, and its named setup put back in use. */
+export function discard(book: SetupBook): SetupBook {
+  const base = changedFrom(book);
+  return base ? { ...book, setups: book.setups.filter((s) => s.id !== book.active), active: base.id } : book;
+}
 
 /** A device's profile changed (by its port's name), each value clamped to what it may be. */
 export function withProfile(book: SetupBook, name: string, change: Partial<DeviceProfile>): SetupBook {
@@ -307,22 +358,32 @@ const freeName = (book: SetupBook, name: string) => {
   return `${name} ${i}`;
 };
 
-/** The setup in use copied under a new name (made free), and put in use. */
+/** The setup in use saved as a named setup under a new name (made free), and put in use; a custom variant saved so goes. */
 export function saveAs(book: SetupBook, name: string): SetupBook {
-  const id = freeId(book);
-  const copy: Setup = { ...activeSetup(book), id, name: freeName(book, name.trim() || 'Setup') };
-  return { ...book, setups: [...book.setups, copy], active: id };
+  const active = activeSetup(book);
+  const setups = active.base === undefined ? book.setups : book.setups.filter((s) => s !== active);
+  const left = { ...book, setups };
+  const id = freeId(left);
+  const copy: Setup = { ...unbased(active), id, name: freeName(left, name.trim() || 'Setup') };
+  return { ...book, setups: [...setups, copy], active: id };
 }
 
-/** A setup renamed (blank: as it was). */
-export const renameSetup = (book: SetupBook, id: string, name: string): SetupBook =>
-  name.trim() ? { ...book, setups: book.setups.map((s) => (s.id === id ? { ...s, name: name.trim() } : s)) } : book;
+/** A named setup renamed, and its custom variant with it (blank, or a variant: as it was). */
+export function renameSetup(book: SetupBook, id: string, name: string): SetupBook {
+  const to = name.trim();
+  if (!to || !book.setups.some((s) => s.id === id && s.base === undefined)) return book;
+  return { ...book, setups: book.setups.map((s) => (s.id === id ? { ...s, name: to } : s.base === id ? { ...s, name: to + CUSTOM } : s)) };
+}
 
-/** A setup removed; the last one stays, and removing the one in use puts the first left in use. */
+/**
+ * A setup removed, a named one with its custom variant; the last named setup stays. Removing the one in use puts the
+ * first named setup left in use.
+ */
 export function removeSetup(book: SetupBook, id: string): SetupBook {
-  if (book.setups.length < 2) return book;
-  const setups = book.setups.filter((s) => s.id !== id);
-  return { ...book, setups, active: setups.some((s) => s.id === book.active) ? book.active : setups[0]!.id };
+  const gone = book.setups.find((s) => s.id === id);
+  if (!gone || (gone.base === undefined && book.setups.filter((s) => s.base === undefined).length < 2)) return book;
+  const setups = book.setups.filter((s) => s.id !== id && s.base !== id);
+  return { ...book, setups, active: setups.some((s) => s.id === book.active) ? book.active : setups.find((s) => s.base === undefined)!.id };
 }
 
 // ---- a setup as a file ----
@@ -334,7 +395,7 @@ const FORMAT = 'webmidi-setup';
 export function exportSetup(book: SetupBook, id: string = book.active): string {
   const setup = book.setups.find((s) => s.id === id) ?? activeSetup(book);
   const devices = Object.fromEntries(setup.outputs.flatMap((o) => (own(book.devices, o.name) ? [[o.name, own(book.devices, o.name)!]] : [])));
-  return JSON.stringify({ format: FORMAT, version: 1, setup, devices }, null, 2);
+  return JSON.stringify({ format: FORMAT, version: 1, setup: unbased(setup), devices }, null, 2);
 }
 
 /**
@@ -355,6 +416,6 @@ export function importSetup(book: SetupBook, text: string): SetupBook | string {
   const id = freeId(book);
   const devices = { ...book.devices };
   if (isRecord(kept.devices)) for (const [name, p] of Object.entries(kept.devices)) if (!own(devices, name)) devices[name] = readProfile(p, book.defaults);
-  const setup: Setup = { ...read, id, name: freeName(book, read.name) };
+  const setup: Setup = { ...unbased(read), id, name: freeName(book, read.name) };
   return { ...book, devices, setups: [...book.setups, setup], active: id };
 }

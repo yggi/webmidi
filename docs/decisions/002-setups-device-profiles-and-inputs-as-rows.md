@@ -17,6 +17,10 @@ The patchbay proposal ([proposals/patchbay.md](../proposals/patchbay.md), with i
 - **The inputs are rows of the matrix, in every mode** (`in:<port name>`): routed like any row, to any outputs, on a channel 1–16 or as played (`AS_PLAYED`, 0).
   Thru is one crossing of the matrix, not an option of its own.
   Which inputs the frontend listens to (its keys, MIDI learn, the Muse) is the setup's `heard`, apart from where they are sent.
+- **A change to a named setup makes its custom variant**, "Home - custom", saved at once and put in use; the named setup stays as it was saved (the owner, 2026-11-04).
+  Save then offers to overwrite the named setup with it, or to save it under a new name; or it is discarded.
+  A named setup has one variant at most: a change made again from the named setup starts from what was saved, and replaces it.
+  A device's profile is not part of a setup, so a change to one makes no variant.
 - **The book** holds the profiles, the setups (at least one) and the one in use.
   It is pure (`core`, `setups.ts`), each change a new book.
   It is kept through a `BookStore`: web's `localBookStore`, or a frontend's own.

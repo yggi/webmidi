@@ -99,6 +99,10 @@
   .cfg-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .suggest { flex-basis: 100%; font-size: 14px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .suggest[hidden] { display: none; }
+  .cfg.custom { border-style: dashed; }
+  .savemenu { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px; border-radius: 8px; background: var(--panel-2); font-size: 14px; }
+  .savemenu input { min-height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); min-width: 0; flex: 1 1 160px; }
+  .savemenu .sep { color: var(--faint); }
 
   /* the rack: matrix and inspector */
   .rack { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
@@ -235,12 +239,12 @@
     <span class="label">Setup</span>
     <div class="configs" id="configs" role="group" aria-label="Saved setups"></div>
     <div class="cfg-actions">
-      <button class="btn" id="save" disabled>Save</button>
-      <button class="btn" id="saveas">Save as new</button>
+      <button class="btn" id="save" disabled aria-expanded="false" aria-controls="savemenu">Save…</button>
       <button class="btn ghost" id="export">Export</button>
       <button class="btn ghost" id="import">Import</button>
     </div>
     <p class="suggest" id="suggest" hidden></p>
+    <div class="savemenu" id="savemenu" hidden></div>
   </div>
 
   <div class="rack">
@@ -344,7 +348,7 @@
     },
   ];
 
-  const state = { mode: 'studio', active: 'home', selected: 'Circuit Tracks', dirty: false, showEmpty: false, demo: null, lit: new Set(), litCh: new Map() };
+  const state = { mode: 'studio', active: 'home', selected: 'Circuit Tracks', showEmpty: false, demo: null, lit: new Set(), litCh: new Map() };
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   const hue = (ch) => ((ch - 1) * 22.5 + 12) % 360;
@@ -366,8 +370,16 @@
     toast.timer = setTimeout(() => (t.hidden = true), 2200);
   }
 
+  /** Before a change to a setup: a named one stays as saved, and the change goes to its custom variant, put in use. */
+  function edit() {
+    const s = setup();
+    if (s.base) return;
+    const old = setups.findIndex((x) => x.base === s.id);
+    const variant = { ...structuredClone(s), id: s.id + '~', name: s.name + ' - custom', base: s.id };
+    if (old >= 0) setups[old] = variant; else setups.splice(setups.indexOf(s) + 1, 0, variant);
+    state.active = variant.id;
+  }
   function markDirty() {
-    state.dirty = true;
     renderSetups();
   }
 
@@ -385,14 +397,15 @@
     $('configs').innerHTML = setups.map((s) => {
       const fit = fitOf(s);
       const full = fit === s.outputs.length;
-      return `<button class="cfg" id="cfg-${s.id}" data-id="${s.id}" aria-pressed="${s.id === state.active}">
+      return `<button class="cfg ${s.base ? 'custom' : ''}" id="cfg-${CSS.escape(s.id)}" data-id="${esc(s.id)}" aria-pressed="${s.id === state.active}">
         <span class="led ${full ? 'on' : fit ? 'warn' : ''}" aria-hidden="true"></span>${esc(s.name)}
-        ${s.id === state.active && state.dirty ? '<span class="dirty" title="Changed since saved">●</span>' : ''}
+        ${s.base ? '<span class="dirty" title="Changed, saved as a custom variant">●</span>' : ''}
         <span class="fit ${full ? 'full' : ''}" title="Devices plugged in">${fit}/${s.outputs.length}</span></button>`;
     }).join('');
-    $('save').disabled = !state.dirty;
+    $('save').disabled = !setup().base;
+    if (!setup().base) closeSave();
     const s = setup();
-    const best = [...setups].sort((a, b) => fitOf(b) / b.outputs.length - fitOf(a) / a.outputs.length)[0];
+    const best = setups.filter((x) => !x.base).sort((a, b) => fitOf(b) / b.outputs.length - fitOf(a) / a.outputs.length)[0];
     const sug = $('suggest');
     if (best.id !== s.id && fitOf(s) < s.outputs.length) {
       sug.hidden = false;
@@ -472,6 +485,7 @@
     const row = btn.dataset.row, out = btn.dataset.out;
     const spec = ROWS[state.mode].rows.find((r) => r.id === row);
     if (row === 'clock') {
+      edit();
       const r = (routesHere().clock ??= {});
       if (out in r) delete r[out]; else r[out] = 0;
       markDirty(); renderGrid(); return;
@@ -499,6 +513,7 @@
     const b = e.target.closest('[data-ch]');
     if (!b || !picking) return;
     const ch = Number(b.dataset.ch);
+    edit();
     const r = (routesHere()[picking.row] ??= {});
     if (ch < 0) delete r[picking.out]; else r[picking.out] = ch;
     const sel = `[data-row="${CSS.escape(picking.row)}"][data-out="${CSS.escape(picking.out)}"]`;
@@ -566,9 +581,10 @@
     if (t.id === 'f-to') d.mpe.to = num(1, 16, t.value);
     if (t.id === 'f-lat') d.latency = num(0, 200, t.value);
     if (t.id === 'port-pick') {
-      const s = setup();
       const name = t.value.replace(/ \(not plugged in\)$/, '');
-      if (name !== state.selected && !s.outputs.includes(name)) {
+      if (name !== state.selected && !setup().outputs.includes(name)) {
+        edit();
+        const s = setup();
         const old = state.selected;
         s.outputs[s.outputs.indexOf(old)] = name;
         for (const r of Object.values(s.routes)) for (const v of Object.values(r)) if (old in v) { v[name] = v[old]; delete v[old]; }
@@ -584,6 +600,7 @@
     if (id === 'test-note') { flashOut(state.selected, 1); toast(`Middle C sent to ${state.selected}`); }
     if (id === 'dev-panic') toast(`All notes off on ${state.selected}, 16 channels`);
     if (id === 'remove-out') {
+      edit();
       const s = setup();
       s.outputs = s.outputs.filter((o) => o !== state.selected);
       state.selected = s.outputs[0];
@@ -636,22 +653,49 @@
   $('configs').addEventListener('click', (e) => {
     const b = e.target.closest('[data-id]');
     if (!b) return;
-    state.active = b.dataset.id; state.dirty = false;
+    state.active = b.dataset.id;
     toast(`${setup().name}: ${fitOf(setup())} of ${setup().outputs.length} devices plugged in`);
     renderAll();
   });
   $('suggest').addEventListener('click', (e) => {
     const b = e.target.closest('#use-best');
     if (!b) return;
-    state.active = b.dataset.id; state.dirty = false; renderAll();
+    state.active = b.dataset.id; renderAll();
   });
-  $('save').addEventListener('click', () => { state.dirty = false; renderSetups(); toast(`Saved ${setup().name}`); });
-  $('saveas').addEventListener('click', () => {
-    const s = setup();
-    const copy = structuredClone(s);
-    copy.id = 'c' + Date.now(); copy.name = `${s.name} (copy)`;
-    setups.push(copy); state.active = copy.id; state.dirty = false; renderAll();
-    toast(`Saved as ${copy.name}: rename it from its menu`);
+  // ---- Save: overwrite the named setup with its custom variant, save it under a new name, or discard it ----
+  function closeSave() { const m = $('savemenu'); if (m) m.hidden = true; $('save').setAttribute('aria-expanded', 'false'); }
+  $('save').addEventListener('click', () => {
+    const v = setup();
+    const base = setups.find((x) => x.id === v.base);
+    if (!base) return;
+    const m = $('savemenu');
+    if (!m.hidden) { closeSave(); return; }
+    m.innerHTML = `<button class="btn primary" id="sv-over">Overwrite ${esc(base.name)}</button><span class="sep">or</span>
+      <input id="sv-name" aria-label="Name of the new setup" value="${esc(base.name)} 2"><button class="btn" id="sv-new">Save as new</button>
+      <span class="grow"></span><button class="btn ghost" id="sv-discard">Discard changes</button>`;
+    m.hidden = false;
+    $('save').setAttribute('aria-expanded', 'true');
+    $('sv-over').focus();
+  });
+  $('savemenu').addEventListener('click', (e) => {
+    const v = setup();
+    const base = setups.find((x) => x.id === v.base);
+    if (!base) return;
+    const drop = () => setups.splice(setups.indexOf(v), 1);
+    if (e.target.id === 'sv-over') {
+      Object.assign(base, { outputs: v.outputs, heard: v.heard, routes: v.routes });
+      drop(); state.active = base.id; toast(`Saved ${base.name}`);
+    } else if (e.target.id === 'sv-new') {
+      const want = $('sv-name').value.trim() || 'Setup';
+      let name = want, n = 2;
+      while (setups.some((x) => x.name === name)) name = `${want} ${n++}`;
+      const copy = { ...v, id: 'c' + setups.length + '-' + n, name };
+      delete copy.base;
+      drop(); setups.push(copy); state.active = copy.id; toast(`Saved as ${name}; ${base.name} is as it was`);
+    } else if (e.target.id === 'sv-discard') {
+      drop(); state.active = base.id; toast(`Back to ${base.name} as saved`);
+    } else return;
+    closeSave(); renderAll();
   });
   $('export').addEventListener('click', () => toast(`${setup().name} exported as a .midisetup.json file`));
   $('import').addEventListener('click', () => toast('Choose a .midisetup.json file to add'));
@@ -662,6 +706,7 @@
   document.addEventListener('click', (e) => {
     const ear = e.target.closest('[data-ear]');
     if (ear) {
+      edit();
       const s = setup();
       const name = ear.dataset.ear;
       s.heard = s.heard.includes(name) ? s.heard.filter((n) => n !== name) : [...s.heard, name];
@@ -676,7 +721,8 @@
       const s = setup();
       const free = PLUGGED_OUT.find((p) => !s.outputs.includes(p));
       if (!free) { toast('Every plugged-in output is already in this setup'); return; }
-      s.outputs.push(free); state.selected = free; markDirty(); renderAll();
+      edit();
+      setup().outputs.push(free); state.selected = free; markDirty(); renderAll();
     }
   });
 

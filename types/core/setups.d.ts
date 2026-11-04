@@ -36,10 +36,16 @@ export type Crossing = number;
 export declare const AS_PLAYED = 0;
 /** A context's routes: a row's id to its crossings, by output key. */
 export type Routes = Readonly<Record<string, Readonly<Record<string, Crossing>>>>;
-/** A named setup: the outputs in order, the inputs the frontend hears, and the routes of each context it names. */
+/**
+ * A named setup: the outputs in order, the inputs the frontend hears, and the routes of each context it names. A change
+ * to a named setup is kept as its custom variant (`base`), saved at once, until the person overwrites the named setup
+ * with it, saves it under a new name, or discards it (decision 002).
+ */
 export interface Setup {
     readonly id: string;
     readonly name: string;
+    /** A custom variant's: the id of the named setup it was changed from. A named setup has none. */
+    readonly base?: string;
     /** At least one; an output with id `'none'` is a slot with no device. */
     readonly outputs: readonly SetupOutput[];
     /** The inputs the frontend listens to (its keys, MIDI learn, the Muse), or `'all'`. Routing an input is its row's. */
@@ -69,6 +75,8 @@ export interface BookStore {
 export declare const inputRow: (port: PortOption) => string;
 export declare const ANY_INPUT = "in:*";
 export declare const DEFAULT_PROFILE: DeviceProfile;
+/** What a custom variant is called after its named setup: "Home - custom". */
+export declare const CUSTOM = " - custom";
 /** A book with one setup, one output and no device: a first visit. */
 export declare function newBook(): SetupBook;
 /** A profile kept, each field checked on its own, the rest from `base`. */
@@ -97,6 +105,12 @@ export declare function fit(setup: Setup, plugged: readonly PortOption[]): {
  * most devices first), or null: the one in use has all its own, or no other does.
  */
 export declare function suggestSetup(book: SetupBook, plugged: readonly PortOption[]): Setup | null;
+/** The named setup the one in use is a custom variant of, or null: the one in use is as saved. */
+export declare function changedFrom(book: SetupBook): Setup | null;
+/** The named setup overwritten with its custom variant in use, which goes; the book as it is when none is. */
+export declare function overwrite(book: SetupBook): SetupBook;
+/** The custom variant in use discarded, and its named setup put back in use. */
+export declare function discard(book: SetupBook): SetupBook;
 /** A device's profile changed (by its port's name), each value clamped to what it may be. */
 export declare function withProfile(book: SetupBook, name: string, change: Partial<DeviceProfile>): SetupBook;
 /** A crossing of the setup in use set (a channel 1–16, or `AS_PLAYED`), or cleared (undefined, or out of range). */
@@ -114,11 +128,14 @@ export declare function removeOutput(book: SetupBook, key: string): SetupBook;
 export declare const withHeard: (book: SetupBook, heard: readonly PortOption[] | "all") => SetupBook;
 /** Another setup put in use (an id the book doesn't have: the book as it is). */
 export declare const useSetup: (book: SetupBook, id: string) => SetupBook;
-/** The setup in use copied under a new name (made free), and put in use. */
+/** The setup in use saved as a named setup under a new name (made free), and put in use; a custom variant saved so goes. */
 export declare function saveAs(book: SetupBook, name: string): SetupBook;
-/** A setup renamed (blank: as it was). */
-export declare const renameSetup: (book: SetupBook, id: string, name: string) => SetupBook;
-/** A setup removed; the last one stays, and removing the one in use puts the first left in use. */
+/** A named setup renamed, and its custom variant with it (blank, or a variant: as it was). */
+export declare function renameSetup(book: SetupBook, id: string, name: string): SetupBook;
+/**
+ * A setup removed, a named one with its custom variant; the last named setup stays. Removing the one in use puts the
+ * first named setup left in use.
+ */
 export declare function removeSetup(book: SetupBook, id: string): SetupBook;
 /** A setup as a file's text (`.midisetup.json`): the setup, and the profiles of its devices that the book has. */
 export declare function exportSetup(book: SetupBook, id?: string): string;

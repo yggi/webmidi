@@ -3,9 +3,11 @@ import {
   activeSetup,
   addOutput,
   AS_PLAYED,
+  changedFrom,
   chooseDevice,
   crossingOf,
   DEFAULT_PROFILE,
+  discard,
   exportSetup,
   fit,
   importSetup,
@@ -13,6 +15,7 @@ import {
   loadBook,
   memoryStore,
   newBook,
+  overwrite,
   profileOf,
   readBook,
   removeOutput,
@@ -31,13 +34,88 @@ const circuit = { id: 'out-1', name: 'Circuit Tracks' };
 const minilogue = { id: 'out-2', name: 'Minilogue xd' };
 const keystep = { id: 'in-1', name: 'KeyStep 37' };
 
-/** A book with one setup, "Home", sending to the Circuit (o1) and the Minilogue (o2). */
+/** A book with one named setup, "Home", sending to the Circuit (o1) and the Minilogue (o2), as saved. */
 function home(): SetupBook {
   let book = renameSetup(newBook(), 's1', 'Home');
   book = chooseDevice(book, 'o1', circuit);
   book = addOutput(book, minilogue).book;
-  return book;
+  return overwrite(book);
 }
+
+describe('a change to a named setup', () => {
+  it('is kept as its custom variant, put in use, and the named setup stays as saved', () => {
+    const book = withCrossing(home(), 'band', 'lead', 'o2', 1);
+    expect(book.setups.map((s) => [s.id, s.name, s.base])).toEqual([
+      ['s1', 'Home', undefined],
+      ['s1~', 'Home - custom', 's1'],
+    ]);
+    expect([book.active, changedFrom(book)?.name]).toEqual(['s1~', 'Home']);
+    expect(crossingOf(useSetup(book, 's1'), 'band', 'lead', 'o2')).toBeUndefined();
+    expect(changedFrom(home())).toBeNull();
+  });
+
+  it('a further change goes to the variant in use; one to the named setup again starts from what was saved', () => {
+    let book = withCrossing(home(), 'band', 'lead', 'o2', 1);
+    book = withCrossing(book, 'band', 'bass', 'o1', 2);
+    expect(activeSetup(book).routes.band).toEqual({ lead: { o2: 1 }, bass: { o1: 2 } });
+    book = withCrossing(useSetup(book, 's1'), 'band', 'pad', 'o1', 3);
+    expect(book.setups.length).toBe(2);
+    expect(activeSetup(book).routes.band).toEqual({ pad: { o1: 3 } });
+  });
+
+  it('overwrites the named setup, or is saved under a new name, or discarded: each leaves no variant', () => {
+    const changed = withCrossing(home(), 'band', 'lead', 'o2', 1);
+    const over = overwrite(changed);
+    expect([over.setups.map((s) => s.name), over.active, crossingOf(over, 'band', 'lead', 'o2')]).toEqual([['Home'], 's1', 1]);
+    const saved = saveAs(changed, 'Venue');
+    expect([saved.setups.map((s) => [s.id, s.name]), crossingOf(saved, 'band', 'lead', 'o2')]).toEqual([
+      [
+        ['s1', 'Home'],
+        ['s2', 'Venue'],
+      ],
+      1,
+    ]);
+    expect(crossingOf(useSetup(saved, 's1'), 'band', 'lead', 'o2')).toBeUndefined();
+    expect(discard(changed)).toEqual(home());
+    expect([overwrite(home()), discard(home())]).toEqual([home(), home()]);
+  });
+
+  it('changes nothing when the change changes nothing, nor for a device’s profile, shared by every setup', () => {
+    const book = home();
+    expect(removeOutput(book, 'o9')).toBe(book);
+    expect(withProfile(book, circuit.name, { clock: true }).setups).toBe(book.setups);
+  });
+
+  it('is renamed with its named setup, and removed with it; it can’t be renamed itself', () => {
+    let book = saveAs(home(), 'Venue');
+    book = withCrossing(useSetup(book, 's1'), 'band', 'lead', 'o2', 1);
+    book = renameSetup(book, 's1', 'Studio');
+    expect(book.setups.map((s) => s.name)).toEqual(['Studio', 'Studio - custom', 'Venue']);
+    expect(renameSetup(book, 's1~', 'Mine')).toBe(book);
+    book = removeSetup(book, 's1');
+    expect([book.setups.map((s) => s.id), book.active]).toEqual([['s2'], 's2']);
+  });
+
+  it('is read back as a variant only with its named setup there, one to a named setup', () => {
+    const kept = {
+      version: 1,
+      active: 'x',
+      setups: [
+        { id: 'a', name: 'A' },
+        { id: 'b', name: 'B', base: 'a' },
+        { id: 'c', name: 'C', base: 'a' },
+        { id: 'd', name: 'D', base: 'gone' },
+      ],
+    };
+    expect(readBook(kept).setups.map((s) => [s.id, s.base])).toEqual([
+      ['a', undefined],
+      ['b', 'a'],
+      ['c', undefined],
+      ['d', undefined],
+    ]);
+    expect(readBook({ version: 1, setups: [{ id: 'b', base: 'b' }] }).setups.map((s) => s.base)).toEqual([undefined]);
+  });
+});
 
 describe('crossings', () => {
   it('are set, read and cleared by context, row and output', () => {
@@ -103,7 +181,7 @@ describe('device profiles', () => {
 });
 
 describe('setups', () => {
-  it('save as copies the one in use, under a free name, and puts it in use', () => {
+  it('save as copies the one in use, under a free name, and puts it in use; a variant saved so leaves its named setup as it was', () => {
     let book = withCrossing(home(), 'band', 'lead', 'o2', 1);
     book = saveAs(book, 'Home');
     expect(book.setups.map((s) => [s.id, s.name])).toEqual([
@@ -112,7 +190,7 @@ describe('setups', () => {
     ]);
     expect(book.active).toBe('s2');
     book = withCrossing(book, 'band', 'lead', 'o2', 5);
-    expect([crossingOf(useSetup(book, 's1'), 'band', 'lead', 'o2'), crossingOf(book, 'band', 'lead', 'o2')]).toEqual([1, 5]);
+    expect([crossingOf(useSetup(book, 's1'), 'band', 'lead', 'o2'), crossingOf(book, 'band', 'lead', 'o2')]).toEqual([undefined, 5]);
   });
 
   it('removing the one in use puts the first left in use; the last stays', () => {
@@ -132,7 +210,7 @@ describe('fit and the setup suggested', () => {
   const venue = () => {
     let book = saveAs(home(), 'Venue');
     book = chooseDevice(book, 'o2', { id: 'out-7', name: 'TD-3' });
-    return book; // in use: Venue (Circuit, TD-3)
+    return overwrite(book); // in use: Venue (Circuit, TD-3)
   };
 
   it('counts a setup’s devices plugged in, by id or by name, slots with no device left out', () => {
@@ -151,7 +229,7 @@ describe('fit and the setup suggested', () => {
 describe('a setup as a file', () => {
   it('goes out and comes back in, with its devices’ profiles, under a free name', () => {
     let book = withProfile(home(), circuit.name, { drums: { 36: 60 } });
-    book = withCrossing(book, 'band', 'drums', 'o1', 10);
+    book = overwrite(withCrossing(book, 'band', 'drums', 'o1', 10));
     const text = exportSetup(book);
     const other = importSetup(newBook(), text);
     if (typeof other === 'string') throw new Error(other);

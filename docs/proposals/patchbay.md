@@ -110,7 +110,8 @@ It would be the first thing webmidi deploys.
 1. **Device facts are kept by port name and shared by every setup.** A Circuit's drum map is set once.
 2. **The routes are saved in the setup**, per context. A venue setup carries the band's patch with it.
 3. **The standalone page lives in this repository, in `site/`.** It is webmidi's first deploy.
-4. **Setups are shared between devices as a file** to export and import now. Later, users may share setups with each other, for example through Jambot's lobby (an issue when it starts).
-5. **The inputs are rows of the matrix in every mode**, as in the standalone page: thru becomes a crossing (section 1, Rows).
+4. **A change to a named setup is kept as "NAME - custom"**, saved at once; Save marks it and offers to overwrite NAME or to save it under a new name (or discard it).
+5. **Setups are shared between devices as a file** to export and import now. Later, users may share setups with each other, for example through Jambot's lobby (an issue when it starts).
+6. **The inputs are rows of the matrix in every mode**, as in the standalone page: thru becomes a crossing (section 1, Rows).
 
 The decision record is [002](../decisions/002-setups-device-profiles-and-inputs-as-rows.md), written with rung 1.
