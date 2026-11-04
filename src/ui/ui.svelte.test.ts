@@ -86,6 +86,23 @@ describe('MidiStatus', () => {
   });
 });
 
+describe('MidiStatus’s connect button (yggi/webmidi#31)', () => {
+  it('takes the names it is given, before and while connecting', () => {
+    const props = show(MidiStatus, {
+      message: 'Not connected.',
+      connected: false,
+      onconnect: vi.fn(),
+      connecting: false,
+      connectLabel: 'Connect MIDI',
+      connectingLabel: 'Asking…',
+    });
+    expect(buttons()).toEqual(['Connect MIDI']);
+    props.connecting = true;
+    flushSync();
+    expect(buttons()).toEqual(['Asking…']);
+  });
+});
+
 describe('ChannelMeter', () => {
   it('marks the channels used and lit, each in its own hue', () => {
     show(ChannelMeter, { used: [10, 1], lit: new Set([10]) });
