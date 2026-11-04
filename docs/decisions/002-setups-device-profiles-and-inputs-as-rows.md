@@ -10,17 +10,19 @@ The patchbay proposal ([proposals/patchbay.md](../proposals/patchbay.md), with i
 
 ## Decision
 
-- **A device's profile is kept by its port's name, and shared by every setup:** its drum map, clock, bend range, MPE rotation and latency.
+- **A device's profile is kept by its port's name, and shared by every setup:** its drum map, bend range, MPE rotation and latency.
   A Circuit's drum map is set once. A device with no profile takes the book's defaults.
 - **A setup** is named and holds the outputs in order (each under a key its routes are kept by), the inputs the frontend hears, and **the routes**, by a context the frontend names (`piece:<title>`, `band`, `bay`).
   A venue's setup carries the band's patch with it.
+- **Clock is a row of the matrix, in every mode** (the owner, 2026-11-04): the setup's `clock`, the outputs sent clock by key, the same in every context.
+  It is the setup's and not the device's, so a venue's setup can clock the drum machine that the home setup doesn't. It isn't per context, so a piece doesn't need it set again.
 - **The inputs are rows of the matrix, in every mode** (`in:<port name>`): routed like any row, to any outputs, on a channel 1–16 or as played (`AS_PLAYED`, 0).
   Thru is one crossing of the matrix, not an option of its own.
   Which inputs the frontend listens to (its keys, MIDI learn, the Muse) is the setup's `heard`, apart from where they are sent.
 - **A change to a named setup makes its custom variant**, "Home - custom", saved at once and put in use; the named setup stays as it was saved (the owner, 2026-11-04).
   Save then offers to overwrite the named setup with it, or to save it under a new name; or it is discarded.
   A named setup has one variant at most: a change made again from the named setup starts from what was saved, and replaces it.
-  A device's profile is not part of a setup, so a change to one makes no variant.
+  A device's profile is not part of a setup, so a change to one makes no variant; the clock row is, so a change to it does.
 - **The book** holds the profiles, the setups (at least one) and the one in use.
   It is pure (`core`, `setups.ts`), each change a new book.
   It is kept through a `BookStore`: web's `localBookStore`, or a frontend's own.

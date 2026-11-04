@@ -85,7 +85,7 @@ describe('DeviceInspector', () => {
       output: { key: 'o1', ...circuit },
       slot: 1,
       ports,
-      profile: { ...DEFAULT_PROFILE, clock: true } as DeviceProfile,
+      profile: { ...DEFAULT_PROFILE, latency: 6 } as DeviceProfile,
       used: [2, 10],
       canRemove: true,
       onport: calls.port,
@@ -106,7 +106,8 @@ describe('DeviceInspector', () => {
     inspect();
     expect(one('h3').textContent).toBe('Circuit Tracks');
     expect((one('select') as HTMLSelectElement).value).toBe('out-1');
-    expect(field('Send clock').checked).toBe(true);
+    expect(field('Latency').value).toBe('6');
+    expect(all('label').some((l) => l.textContent?.includes('clock'))).toBe(false);
     expect(field('Bend range').value).toBe('2');
     expect(all('.cell.on').length).toBe(2);
     expect(buttons()).toEqual(['Test note', 'Notes off here', 'Remove output']);
@@ -116,10 +117,9 @@ describe('DeviceInspector', () => {
     const { calls } = inspect();
     change(one('select') as HTMLSelectElement, 'out-2');
     expect(calls.port).toHaveBeenCalledWith({ id: 'out-2', name: 'Minilogue xd' });
-    change(field('Send clock'), false);
     change(field('Drum map'), 'Novation Circuit');
     change(field('A channel per note'), true);
-    expect(calls.profile.mock.calls.map((c) => c[0])).toEqual([{ clock: false }, { drums: expect.objectContaining({ 36: 60 }) }, { mpe: { from: 2, to: 16 } }]);
+    expect(calls.profile.mock.calls.map((c) => c[0])).toEqual([{ drums: expect.objectContaining({ 36: 60 }) }, { mpe: { from: 2, to: 16 } }]);
   });
 
   it('clamps a number typed, as core keeps it, and shows what was kept', () => {
@@ -145,7 +145,7 @@ describe('DeviceInspector', () => {
   it('a slot with no device: no profile; its MPE channels when on; the last output not removable', () => {
     const { props } = inspect({ output: { key: 'o1', id: 'none', name: '' }, canRemove: false });
     expect(one('h3').textContent).toBe('No device');
-    expect(all('label').some((l) => l.textContent?.includes('Send clock'))).toBe(false);
+    expect(all('label').some((l) => l.textContent?.includes('Bend range'))).toBe(false);
     expect((all('button').at(-1) as HTMLButtonElement).disabled).toBe(true);
     props.output = { key: 'o1', ...circuit };
     props.profile = { ...DEFAULT_PROFILE, mpe: { from: 2, to: 5 } };

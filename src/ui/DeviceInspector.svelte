@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
    * One output of the setup in use, in full (docs/proposals/patchbay.md, `DeviceInspector`): the port it sends to (one
-   * not plugged in kept and said so), then its device's profile, kept with the device in every setup (decision 002): clock,
-   * drum map, bend range, a channel per note (MPE), latency. Under them the channels routed here, a test note, notes off
+   * not plugged in kept and said so), then its device's profile, kept with the device in every setup (decision 002): drum
+   * map, bend range, a channel per note (MPE), latency. Under them the channels routed here, a test note, notes off
    * here, and removing the output. Presentational: a change is a call back (`onport`, `onprofile`), which the frontend
    * makes with core's `chooseDevice` and `withProfile`.
    */
@@ -72,10 +72,6 @@
   {#if !none}
     <div class="block">
       <p class="scope"><span class="tag">Device</span> Kept with {title}, in every setup</p>
-      <label class="field">
-        <span>Send clock<small>24 ticks a beat, Start, Stop, Continue</small></span>
-        <input type="checkbox" role="switch" class="switch" checked={profile.clock} onchange={(e) => onprofile({ clock: e.currentTarget.checked })} />
-      </label>
       {#if drums}
         <label class="field">
           <span>Drum map<small>General MIDI note to the device’s</small></span>

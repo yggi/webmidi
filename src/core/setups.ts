@@ -14,11 +14,9 @@ export interface MpeRange {
 
 /**
  * What is true of a device, kept by its port's name and shared by every setup (decision 002): a Circuit's drum map is
- * set once, wherever it is plugged in.
+ * set once, wherever it is plugged in. Whether it is sent clock is the setup's (`Setup.clock`), a row of the matrix.
  */
 export interface DeviceProfile {
-  /** Whether it is sent MIDI clock (24 ticks a beat, Start, Stop, Continue). */
-  readonly clock: boolean;
   /** General MIDI drum note to the note it sends (`drum-presets.ts`). */
   readonly drums: DrumMap;
   /** Its pitch-bend range, in semitones each way, 1–96. */
@@ -67,6 +65,8 @@ export interface Setup {
    * routes. Rows are the frontend's, and the inputs' (`inputRow`).
    */
   readonly routes: Readonly<Record<string, Routes>>;
+  /** The outputs sent MIDI clock (24 ticks a beat, Start, Stop, Continue), by key: the matrix's clock row, in every context. */
+  readonly clock: readonly string[];
 }
 
 /** Everything kept: the device profiles, the setups (at least one) and which is in use. */
@@ -90,7 +90,7 @@ export interface BookStore {
 export const inputRow = (port: PortOption): string => `in:${port.name || port.id}`;
 export const ANY_INPUT = 'in:*';
 
-export const DEFAULT_PROFILE: DeviceProfile = { clock: false, drums: {}, bend: 2, mpe: null, latency: 0 };
+export const DEFAULT_PROFILE: DeviceProfile = { drums: {}, bend: 2, mpe: null, latency: 0 };
 
 const NO_DEVICE: PortOption = { id: 'none', name: '' };
 
@@ -102,7 +102,7 @@ export function newBook(): SetupBook {
   return { version: 1, devices: {}, defaults: DEFAULT_PROFILE, setups: [blankSetup('s1', 'Setup 1')], active: 's1' };
 }
 
-const blankSetup = (id: string, name: string): Setup => ({ id, name, outputs: [{ key: 'o1', ...NO_DEVICE }], heard: [], routes: {} });
+const blankSetup = (id: string, name: string): Setup => ({ id, name, outputs: [{ key: 'o1', ...NO_DEVICE }], heard: [], routes: {}, clock: [] });
 
 // ---- reading what was kept: anything, junk dropped field by field ----
 
@@ -127,7 +127,6 @@ const mpe = (v: unknown): MpeRange | null => (isRecord(v) && isInt(v.from, 1, 16
 export function readProfile(v: unknown, base: DeviceProfile = DEFAULT_PROFILE): DeviceProfile {
   if (!isRecord(v)) return base;
   return {
-    clock: typeof v.clock === 'boolean' ? v.clock : base.clock,
     drums: isRecord(v.drums) ? drumMap(v.drums) : base.drums,
     bend: isInt(v.bend, 1, 96) ? v.bend : base.bend,
     mpe: v.mpe === null ? null : (mpe(v.mpe) ?? base.mpe),
@@ -163,6 +162,7 @@ function readSetup(v: unknown): Setup | null {
     outputs: outputs.length ? outputs : [{ key: 'o1', ...NO_DEVICE }],
     heard,
     routes: contexts,
+    clock: Array.isArray(v.clock) ? [...new Set(v.clock.filter((k): k is string => typeof k === 'string' && outputs.some((o) => o.key === k)))] : [],
   };
 }
 
@@ -293,7 +293,7 @@ export function discard(book: SetupBook): SetupBook {
 export function withProfile(book: SetupBook, name: string, change: Partial<DeviceProfile>): SetupBook {
   const p = { ...profileOf(book, name), ...change };
   const range = p.mpe && { from: clamped(p.mpe.from, 1, 16, 2), to: clamped(p.mpe.to, 1, 16, 16) };
-  const kept: DeviceProfile = { clock: p.clock, drums: drumMap(p.drums), bend: clamped(p.bend, 1, 96, 2), mpe: range, latency: clamped(p.latency, 0, 1000, 0) };
+  const kept: DeviceProfile = { drums: drumMap(p.drums), bend: clamped(p.bend, 1, 96, 2), mpe: range, latency: clamped(p.latency, 0, 1000, 0) };
   return { ...book, devices: { ...book.devices, [name]: kept } };
 }
 
@@ -333,9 +333,24 @@ export function removeOutput(book: SetupBook, key: string): SetupBook {
           .map(([row, c]) => [row, Object.fromEntries(Object.entries(c).filter(([k]) => k !== key))] as const)
           .filter(([, c]) => Object.keys(c).length),
       );
-    return { ...s, outputs: s.outputs.filter((o) => o.key !== key), routes: Object.fromEntries(Object.entries(s.routes).map(([c, r]) => [c, strip(r)])) };
+    return {
+      ...s,
+      outputs: s.outputs.filter((o) => o.key !== key),
+      clock: s.clock.filter((k) => k !== key),
+      routes: Object.fromEntries(Object.entries(s.routes).map(([c, r]) => [c, strip(r)])),
+    };
   });
 }
+
+/** An output of the setup in use sent clock, or not (an output it doesn't have: the book as it is). */
+export function withClock(book: SetupBook, key: string, on: boolean): SetupBook {
+  return withActive(book, (s) =>
+    !s.outputs.some((o) => o.key === key) || s.clock.includes(key) === on ? s : { ...s, clock: on ? [...s.clock, key] : s.clock.filter((k) => k !== key) },
+  );
+}
+
+/** Whether an output of the setup in use is sent clock. */
+export const sendsClock = (book: SetupBook, key: string): boolean => activeSetup(book).clock.includes(key);
 
 /** The inputs the frontend hears, in the setup in use. */
 export const withHeard = (book: SetupBook, heard: readonly PortOption[] | 'all'): SetupBook => withActive(book, (s) => ({ ...s, heard: heard === 'all' ? 'all' : [...heard] }));

@@ -7,11 +7,9 @@ export interface MpeRange {
 }
 /**
  * What is true of a device, kept by its port's name and shared by every setup (decision 002): a Circuit's drum map is
- * set once, wherever it is plugged in.
+ * set once, wherever it is plugged in. Whether it is sent clock is the setup's (`Setup.clock`), a row of the matrix.
  */
 export interface DeviceProfile {
-    /** Whether it is sent MIDI clock (24 ticks a beat, Start, Stop, Continue). */
-    readonly clock: boolean;
     /** General MIDI drum note to the note it sends (`drum-presets.ts`). */
     readonly drums: DrumMap;
     /** Its pitch-bend range, in semitones each way, 1–96. */
@@ -55,6 +53,8 @@ export interface Setup {
      * routes. Rows are the frontend's, and the inputs' (`inputRow`).
      */
     readonly routes: Readonly<Record<string, Routes>>;
+    /** The outputs sent MIDI clock (24 ticks a beat, Start, Stop, Continue), by key: the matrix's clock row, in every context. */
+    readonly clock: readonly string[];
 }
 /** Everything kept: the device profiles, the setups (at least one) and which is in use. */
 export interface SetupBook {
@@ -124,6 +124,10 @@ export declare function addOutput(book: SetupBook, device?: PortOption): {
 export declare function chooseDevice(book: SetupBook, key: string, device: PortOption): SetupBook;
 /** An output removed, with its crossings in every context; the last one stays. */
 export declare function removeOutput(book: SetupBook, key: string): SetupBook;
+/** An output of the setup in use sent clock, or not (an output it doesn't have: the book as it is). */
+export declare function withClock(book: SetupBook, key: string, on: boolean): SetupBook;
+/** Whether an output of the setup in use is sent clock. */
+export declare const sendsClock: (book: SetupBook, key: string) => boolean;
 /** The inputs the frontend hears, in the setup in use. */
 export declare const withHeard: (book: SetupBook, heard: readonly PortOption[] | "all") => SetupBook;
 /** Another setup put in use (an id the book doesn't have: the book as it is). */

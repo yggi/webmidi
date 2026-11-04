@@ -276,18 +276,19 @@
 
   // ---- device facts: kept by port name, in every setup (core: DeviceProfile) ----
   const devices = {
-    'Circuit Tracks': { clock: true, drums: 'Circuit', bend: 2, mpe: null, latency: 6 },
-    'Minilogue xd': { clock: false, drums: 'GM', bend: 12, mpe: null, latency: 4 },
-    'MicroFreak': { clock: false, drums: 'GM', bend: 2, mpe: { from: 2, to: 5 }, latency: 3 },
-    'IAC Bus 1': { clock: true, drums: 'GM', bend: 48, mpe: null, latency: 0 },
-    'TD-3': { clock: true, drums: 'GM', bend: 2, mpe: null, latency: 5 },
-    'Fireface UFX': { clock: false, drums: 'GM', bend: 2, mpe: null, latency: 2 },
+    'Circuit Tracks': { drums: 'Circuit', bend: 2, mpe: null, latency: 6 },
+    'Minilogue xd': { drums: 'GM', bend: 12, mpe: null, latency: 4 },
+    'MicroFreak': { drums: 'GM', bend: 2, mpe: { from: 2, to: 5 }, latency: 3 },
+    'IAC Bus 1': { drums: 'GM', bend: 48, mpe: null, latency: 0 },
+    'TD-3': { drums: 'GM', bend: 2, mpe: null, latency: 5 },
+    'Fireface UFX': { drums: 'GM', bend: 2, mpe: null, latency: 2 },
   };
   const DRUM_MAPS = { GM: { 36: 36, 38: 38, 42: 42, 46: 46, 39: 39 }, Circuit: { 36: 60, 38: 62, 42: 64, 46: 65, 39: 62 } };
-  const deviceOf = (name) => (devices[name] ??= { clock: false, drums: 'GM', bend: 2, mpe: null, latency: 0 });
+  const deviceOf = (name) => (devices[name] ??= { drums: 'GM', bend: 2, mpe: null, latency: 0 });
 
   // ---- the rows each frontend hands the matrix; the inputs are rows in every mode (webmidi adds them) ----
   const inputRows = (group = true) => PLUGGED_IN.map((name, i) => ({ id: `in:${name}`, label: name, kind: 'input', group: group && i === 0 }));
+  const CLOCK_ROW = { id: 'clock', label: 'Clock', sub: '24 ppq', kind: 'clock', group: true };
   const ROWS = {
     studio: {
       title: 'Patch · electroswing.cells',
@@ -303,6 +304,7 @@
         { id: 'hh', label: '&hh', kind: 'member', gm: 42 },
         { id: 'oh', label: '&oh', kind: 'member', gm: 46 },
         ...inputRows(),
+        CLOCK_ROW,
       ],
       heardBy: 'the keys and learn',
     },
@@ -313,13 +315,13 @@
         const n = i + 1;
         const part = { 1: 'Lead', 2: 'Bass', 3: 'Pad', 4: 'Stab', 10: 'Drums' }[n];
         return { id: `s${n}`, label: `Seat ${n}`, sub: part ?? '', kind: part ? (n === 10 ? 'kit' : 'voice') : 'empty' };
-      }).concat(inputRows()),
+      }).concat(inputRows(), [CLOCK_ROW]),
       heardBy: 'the Muse',
     },
     bay: {
       title: 'Patch · inputs to outputs',
       hint: 'Each input down, each output across. “=” passes the channel as played; a number moves it there.',
-      rows: [...inputRows(false), { id: 'clock', label: 'Clock', sub: '120 bpm', kind: 'clock', group: true }],
+      rows: [...inputRows(false), CLOCK_ROW],
       heardBy: null,
     },
   };
@@ -327,23 +329,23 @@
   // ---- setups: outputs in order, the input, and routes per context (core: Setup) ----
   const setups = [
     {
-      id: 'home', name: 'Home studio', outputs: ['Circuit Tracks', 'Minilogue xd', 'IAC Bus 1'], heard: ['KeyStep 37'],
+      id: 'home', name: 'Home studio', outputs: ['Circuit Tracks', 'Minilogue xd', 'IAC Bus 1'], heard: ['KeyStep 37'], clock: ['Circuit Tracks', 'IAC Bus 1'],
       routes: {
         studio: { lead: { 'Minilogue xd': 1 }, bass: { 'Circuit Tracks': 2 }, pad: { 'Circuit Tracks': 1, 'IAC Bus 1': 3 }, stab: { 'IAC Bus 1': 4 }, '*': { 'Circuit Tracks': 10 }, 'in:KeyStep 37': { 'Minilogue xd': 1 } },
         jambot: { s1: { 'Minilogue xd': 1 }, s2: { 'Circuit Tracks': 2 }, s3: { 'Circuit Tracks': 1 }, s4: { 'IAC Bus 1': 4 }, s10: { 'Circuit Tracks': 10 }, 'in:KeyStep 37': { 'Minilogue xd': 5 }, 'in:Circuit Tracks': { 'IAC Bus 1': 0 } },
-        bay: { 'in:KeyStep 37': { 'Minilogue xd': 0, 'IAC Bus 1': 0 }, 'in:Circuit Tracks': { 'IAC Bus 1': 0 }, clock: { 'Circuit Tracks': 0 } },
+        bay: { 'in:KeyStep 37': { 'Minilogue xd': 0, 'IAC Bus 1': 0 }, 'in:Circuit Tracks': { 'IAC Bus 1': 0 } },
       },
     },
     {
-      id: 'summit', name: 'Summit · venue', outputs: ['Circuit Tracks', 'MicroFreak', 'TD-3', 'Fireface UFX'], heard: ['KeyStep 37', 'Circuit Tracks'],
+      id: 'summit', name: 'Summit · venue', outputs: ['Circuit Tracks', 'MicroFreak', 'TD-3', 'Fireface UFX'], heard: ['KeyStep 37', 'Circuit Tracks'], clock: ['Circuit Tracks', 'TD-3'],
       routes: {
         studio: { lead: { MicroFreak: 1 }, bass: { 'TD-3': 1 }, pad: { 'Fireface UFX': 3 }, '*': { 'Circuit Tracks': 10 } },
         jambot: { s1: { MicroFreak: 1 }, s2: { 'TD-3': 1 }, s3: { 'Fireface UFX': 3 }, s4: { 'Fireface UFX': 4 }, s10: { 'Circuit Tracks': 10 } },
-        bay: { clock: { 'TD-3': 0, 'Circuit Tracks': 0 } },
+        bay: {},
       },
     },
     {
-      id: 'laptop', name: 'Laptop only', outputs: ['IAC Bus 1'], heard: ['IAC Bus 1'],
+      id: 'laptop', name: 'Laptop only', outputs: ['IAC Bus 1'], heard: ['IAC Bus 1'], clock: ['IAC Bus 1'],
       routes: { studio: { lead: { 'IAC Bus 1': 1 }, bass: { 'IAC Bus 1': 2 }, pad: { 'IAC Bus 1': 3 }, stab: { 'IAC Bus 1': 4 }, '*': { 'IAC Bus 1': 10 } }, jambot: {}, bay: {} },
     },
   ];
@@ -418,7 +420,7 @@
     const d = deviceOf(name);
     const here = plugged(name);
     const facts = [];
-    if (d.clock) facts.push('<span class="tag">Clock</span>');
+    if (setup().clock.includes(name)) facts.push('<span class="tag">Clock</span>');
     if (d.mpe) facts.push('<span class="tag">MPE</span>');
     if (d.drums !== 'GM' && kitOuts().includes(name)) facts.push(`<span class="tag">${esc(d.drums)}</span>`);
     if (!here) facts.unshift('<span class="tag gone">Not plugged in</span>');
@@ -437,7 +439,7 @@
       return `<td><span class="note ${n !== row.gm ? 'mapped' : ''}" title="General MIDI ${row.gm} goes out as ${n} (${esc(deviceOf(out).drums)} map)">${n}</span></td>`;
     }
     if (row.kind === 'clock') {
-      const on = ch !== undefined;
+      const on = setup().clock.includes(out);
       return `<td><button class="jack ${on ? 'set' : ''}" data-row="${row.id}" data-out="${esc(out)}" aria-label="Clock to ${esc(out)}: ${on ? 'sent' : 'not sent'}">${on ? '<span class="chip keep">CLK</span>' : '<span class="hole"></span>'}</button></td>`;
     }
     const id = `${row.id}|${out}`;
@@ -475,6 +477,7 @@
       ? `<button class="btn ghost collapse" id="toggle-empty">${state.showEmpty ? 'Hide empty seats' : `Show ${hidden} empty seats`}</button>` : '';
     $('legend').innerHTML = `<span><span class="hole"></span> not sent</span><span><span class="chip" style="--h:${hue(1)}">1</span> channel</span>` +
       '<span><span class="chip keep">=</span> an input’s channel as played</span>' +
+      '<span><span class="chip keep">CLK</span> sent clock</span>' +
       (spec.heardBy ? `<span><span class="ear" aria-pressed="true" style="pointer-events:none">Heard</span> the input reaches ${spec.heardBy}</span>` : '') +
       (state.mode === 'studio' ? '<span><span class="note mapped" style="padding:1px 6px">60</span> drum note moved by the device’s map</span>' : '');
   }
@@ -486,8 +489,8 @@
     const spec = ROWS[state.mode].rows.find((r) => r.id === row);
     if (row === 'clock') {
       edit();
-      const r = (routesHere().clock ??= {});
-      if (out in r) delete r[out]; else r[out] = 0;
+      const c = setup().clock;
+      setup().clock = c.includes(out) ? c.filter((x) => x !== out) : [...c, out];
       markDirty(); renderGrid(); return;
     }
     picking = { row, out, btn };
@@ -545,7 +548,6 @@
       </section>
       <section>
         <p class="scope"><span class="tag">Device</span> Kept with ${esc(n)}, in every setup</p>
-        <label class="field"><span>Send clock<small>24 ticks a beat, Start, Stop, Continue</small></span><input type="checkbox" class="switch" id="f-clock" ${d.clock ? 'checked' : ''}></label>
         <label class="field"><span>Drum map<small>General MIDI note to the device’s</small></span>
           <select id="f-drums">${Object.keys(DRUM_MAPS).map((k) => `<option ${k === d.drums ? 'selected' : ''}>${k}</option>`).join('')}<option disabled>Custom…</option></select></label>
         <label class="field"><span>Bend range<small>Semitones each way</small></span><input type="number" id="f-bend" min="1" max="96" value="${d.bend}"></label>
@@ -573,7 +575,6 @@
     const d = deviceOf(state.selected);
     const t = e.target;
     const num = (lo, hi, v) => Math.max(lo, Math.min(hi, Math.round(Number(v) || lo)));
-    if (t.id === 'f-clock') d.clock = t.checked;
     if (t.id === 'f-drums') d.drums = t.value;
     if (t.id === 'f-bend') d.bend = t.value = num(1, 96, t.value);
     if (t.id === 'f-mpe') d.mpe = t.checked ? { from: 2, to: 16 } : null;
@@ -588,6 +589,7 @@
         const old = state.selected;
         s.outputs[s.outputs.indexOf(old)] = name;
         for (const r of Object.values(s.routes)) for (const v of Object.values(r)) if (old in v) { v[name] = v[old]; delete v[old]; }
+        s.clock = s.clock.map((x) => (x === old ? name : x));
         state.selected = name;
         markDirty();
       }
@@ -603,6 +605,7 @@
       edit();
       const s = setup();
       s.outputs = s.outputs.filter((o) => o !== state.selected);
+      s.clock = s.clock.filter((o) => o !== state.selected);
       state.selected = s.outputs[0];
       markDirty(); renderAll();
     }
@@ -683,7 +686,7 @@
     if (!base) return;
     const drop = () => setups.splice(setups.indexOf(v), 1);
     if (e.target.id === 'sv-over') {
-      Object.assign(base, { outputs: v.outputs, heard: v.heard, routes: v.routes });
+      Object.assign(base, { outputs: v.outputs, heard: v.heard, routes: v.routes, clock: v.clock });
       drop(); state.active = base.id; toast(`Saved ${base.name}`);
     } else if (e.target.id === 'sv-new') {
       const want = $('sv-name').value.trim() || 'Setup';
