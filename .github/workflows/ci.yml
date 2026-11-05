@@ -18,10 +18,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # (the whole history, for the merge base tools/docs-only.sh reads: a pull request that changes markdown alone runs
+      # the docs check, `npm run verify:docs`, as the pre-push hook does)
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: echo "scope=$([ '${{ github.event_name }}' = pull_request ] && sh tools/docs-only.sh 'origin/${{ github.base_ref }}' || echo code)" >>"$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - run: npm run verify # the project's one gate
+      - run: npm run ${{ steps.scope.outputs.scope == 'docs' && 'verify:docs' || 'verify' }} # the project's one gate, or its docs check
