@@ -94,6 +94,8 @@ if [ "$(sh "$(dirname "$stamp_tool")/docs-only.sh")" = docs ]; then
   esc=$(printf '\033')
   count=$(sed "s/$esc\[[0-9;]*m//g" "$log" | sed -n 's/^ *Tests  *\([0-9][0-9]*\) passed.*/\1/p' | tail -1)
   rm -f "$log"
+  # The boot set near its ceiling, which a passing check's hidden output would keep from the pusher (tools/reading-list.ts).
+  node --experimental-strip-types --no-warnings tools/reading-list.ts 2>/dev/null | sed 's/^/pre-push: /' >&2
   echo "pre-push: the docs check passed (the branch changes prose alone), ${count:-an unknown number of} tests; not stamped" >&2
   exit 0
 fi
@@ -113,6 +115,8 @@ fi
 esc=$(printf '\033')
 count=$(sed "s/$esc\[[0-9;]*m//g" "$log" | sed -n 's/^ *Tests  *\([0-9][0-9]*\) passed.*/\1/p' | tail -1)
 rm -f "$log"
+# The boot set near its ceiling, which a passing check's hidden output would keep from the pusher (tools/reading-list.ts).
+node --experimental-strip-types --no-warnings tools/reading-list.ts 2>/dev/null | sed 's/^/pre-push: /' >&2
 # `postverify` has stamped the tree already when the check was `npm run verify`, with the count its reporter kept, and
 # this `end` then finds nothing begun. Neither stamps a tree a file changed in while the check ran.
 sh "$stamp_tool" end "$count"
