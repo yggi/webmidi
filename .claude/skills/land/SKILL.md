@@ -17,7 +17,7 @@ Every comment posted from a session ends with a blank line, `---` and `_Generate
 1. **The pull request is ready.**
    It is out of draft, and its *Verified* names its current head as the commit that passed the pre-push hook (`npm run verify`, and the count of tests the hook printed).
    It has no conflicts with `main` (`gh api repos/yggi/webmidi/pulls/<n> --jq .mergeable_state` is not `dirty`; otherwise `git merge origin/main` into it once, verified again), and CI on the head is green or blocked, never red.
-   A change to what goes on the wire says so, with its line in `CHANGELOG.md`.
+   A change to what goes on the wire says so, with its entry in `changes/`.
 2. **The owner has approved.**
    In the prompt ("merge if you find nothing", and nothing was found), or as a yes to the review's summary.
    Otherwise stop and ask.
@@ -35,7 +35,7 @@ Every comment posted from a session ends with a blank line, `---` and `_Generate
       The issue states its bounds as numbers (the `task` template).
    4. **References right:** an issue or pull request in another repository that the merged pull request mentions by a bare number is written `yggi/<repo>#n`, in its body and its comments; a bare `#n` here always means webmidi's own.
 6. **No deploy.**
-   A change a frontend would notice waits under *Unreleased* in `CHANGELOG.md` until the owner tags a release.
+   A change a frontend would notice waits in `changes/` until a release gathers it into `CHANGELOG.md` (`npm run changelog -- gather vX.Y.Z`) and the owner tags it.
 7. **Say so** in a comment on the pull request: the merge commit, the issues closed, the epic line ticked, and the follow-ups filed, each by its number.
 
 If a step after the merge fails, the merge stands: fix forward on a new branch, and say on the pull request what is left.

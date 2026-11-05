@@ -41,7 +41,8 @@
     "preverify": "node tools/install-first.mjs && sh tools/verified.sh begin",
     "verify": "npm run check && npm run lint && npm run format:check && npm run knip && npm test -- --reporter=default --reporter=./tools/test-count.ts",
     "postverify": "sh tools/verified.sh end",
-    "verify:docs": "npm run format:check && vitest run src/docs.test.ts tools/reading-list.test.ts tools/docs-only.test.ts tools/conflict-markers.test.ts",
+    "verify:docs": "npm run format:check && vitest run src/docs.test.ts tools/reading-list.test.ts tools/docs-only.test.ts tools/conflict-markers.test.ts tools/changelog.test.ts",
+    "changelog": "node tools/changelog.mjs",
     "types": "tsc -p tsconfig.types.json && node tools/ui-types.mjs"
   },
   "devDependencies": {
