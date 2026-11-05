@@ -19,9 +19,9 @@ export function markers(text: string): number[] {
       const above = lines[i - 1];
       if (above !== undefined && above.trim() !== '' && !MARKER.test(above)) {
         // an underline, unless a `<<<<<<<` opened a conflict above it with no `>>>>>>>` since
-        const opened = lines.slice(0, i).findLastIndex((l) => /^<{7}( |$)/.test(l));
-        const closed = lines.slice(0, i).findLastIndex((l) => /^>{7}( |$)/.test(l));
-        if (opened === -1 || closed > opened) return [];
+        const last = (open: RegExp) => lines.slice(0, i).reduce((at, l, j) => (open.test(l) ? j : at), -1);
+        const opened = last(/^<{7}( |$)/);
+        if (opened === -1 || last(/^>{7}( |$)/) > opened) return [];
       }
     }
     return [i + 1];
