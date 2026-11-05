@@ -1,14 +1,14 @@
 # Changelog
 
 What changed in webmidi, newest first: what a frontend (Cell studio, Jambot, KO-Multitool) reads before it moves its pin, `github:yggi/webmidi#vX.Y.Z`.
-A release is a tag, and it gathers the entries under *Unreleased* beneath its own heading.
+A release is a tag, and it gathers the entries under *Unreleased* and those in [`changes/`](changes/), where what isn't released yet is, beneath its own heading.
 An entry says whether what goes on the wire changes; one that breaks a frontend's code names its migration, and before 1.0 it makes the next release a minor version.
 
-Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from yggi/cells CHANGELOG.md @ 41ef16b, its form). Add a line to *Unreleased* in the pull request that makes the change.
+Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from yggi/cells CHANGELOG.md @ 41ef16b, its form). Add a file to [`changes/`](changes/) in the pull request that makes the change ([`changes/README.md`](changes/README.md)).
 
 ## Unreleased
 
-Nothing has changed since `v0.2.1`.
+Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
 ## v0.2.1 — 2026-11-04
 

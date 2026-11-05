@@ -8,7 +8,11 @@
  * Condensing the boot set is its own deliberate change, made when the ceiling
  * is reached, not a trim tucked into a feature's pull request.
  */
-export const BOOT_SET = ['AGENTS.md', 'docs/MEMORY.md'];
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+// (`CLAUDE.md` too: a session loads it whole, whatever it holds besides its `@AGENTS.md`)
+export const BOOT_SET = ['CLAUDE.md', 'AGENTS.md', 'docs/MEMORY.md'];
 
 /** In bytes: about 4k tokens, two thirds of the family's 24 KB, since this package is small; a ceiling far above the size could never fire. */
 export const CEILING = 16 * 1024;
@@ -16,4 +20,23 @@ export const CEILING = 16 * 1024;
 /** The boot set's size in bytes, given a reader of a path's text. */
 export function bootBytes(read: (path: string) => string): number {
   return BOOT_SET.reduce((sum, path) => sum + Buffer.byteLength(read(path)), 0);
+}
+
+/** The share of the ceiling from which the boot set warns, so the condensing comes before a pull request is stopped by it. Lifted from yggi/cells tools/reading-list.ts. */
+export const ALARM = 0.9;
+
+/** What to say of a boot set of `bytes`: a warning from the alarm on, nothing below it. */
+export function alarm(bytes: number, ceiling = CEILING): string | undefined {
+  if (bytes < ALARM * ceiling) return undefined;
+  return `the boot set is ${bytes} B, ${Math.round((100 * bytes) / ceiling)} % of its ceiling: condense it, as a change of its own`;
+}
+
+/** This repository's boot set, read from disk. */
+export const ownBootBytes = (): number => bootBytes((path) => readFileSync(join(fileURLToPath(new URL('..', import.meta.url)), path), 'utf8'));
+
+// Run as a script, by the pre-push hook after its check passed (verify's own output is hidden from the pusher when it
+// passes): prints the alarm, if any.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const said = alarm(ownBootBytes());
+  if (said) console.log(said);
 }

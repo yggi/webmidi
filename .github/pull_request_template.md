@@ -3,7 +3,7 @@ Closes #
 <!-- Or `Part of #n` for one rung of an epic; another repository's issue as `yggi/<repo>#n`. -->
 
 ## What and why
-<!-- What changes, and the reason, in the present tense. A change a reader of the CHANGELOG would notice adds its line under *Unreleased*. A change to what goes on the wire says so here, and was asked about first (AGENTS.md). -->
+<!-- What changes, and the reason, in the present tense. A change a reader of the CHANGELOG would notice adds its file to `changes/` (`changes/README.md`). A change to what goes on the wire says so here, and was asked about first (AGENTS.md). -->
 
 **What could this dissolve?** <!-- A rule, a special case or a source of truth this change makes unnecessary, or "nothing seen". -->
 
