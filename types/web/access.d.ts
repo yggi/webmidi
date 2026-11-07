@@ -50,6 +50,9 @@ export declare class MidiAccess implements PortAccess {
     refresh(): void;
     /** Let go: no input is listened to and the ports' changes are no longer heard. */
     close(): void;
-    /** Listen to one input by id, `'all'` of them, `'none'`, or several (a setup's `heard`), each by id, else by name. */
+    /**
+     * Listen to one input by id, `'all'` of them, `'none'`, or several (a setup's `heard`), each by id, else by name. An
+     * input that refuses (a port gone mid-look) is skipped, and the others are listened to all the same.
+     */
     listen(inputs: Listened): void;
 }

@@ -31,9 +31,18 @@ export interface MatrixRow {
  * The inputs' rows, after the frontend's: each input plugged in, then each one the routes still send from, or that has
  * a choice of what it plays, that isn't (said so), then every input (`ANY_INPUT`) when the routes send from it or it
  * has a choice.
+ *
+ * Inputs plugged in under one name are one row, said so ("2 ports"): the book keeps an input by its name, so they are
+ * routed and heard alike, and Android names a device's every port after the device. Two rows with one id would also
+ * break a keyed list, and with it the page.
  */
 export function inputRows(plugged: readonly PortOption[], routes: Routes, plays: Readonly<Record<string, PlaysChoice>> = {}): MatrixRow[] {
-  const rows: MatrixRow[] = plugged.map((p) => ({ id: inputRow(p), label: p.name || p.id, kind: 'input' }));
+  const rows: MatrixRow[] = [];
+  for (const p of plugged) {
+    const id = inputRow(p);
+    const shared = plugged.filter((q) => inputRow(q) === id).length;
+    if (!rows.some((r) => r.id === id)) rows.push({ id, label: p.name || p.id, kind: 'input', ...(shared > 1 ? { sub: `${shared} ports` } : {}) });
+  }
   const kept = [...Object.entries(routes).flatMap(([id, crossings]) => (Object.keys(crossings).length ? [id] : [])), ...Object.keys(plays)];
   for (const id of kept) {
     if (!id.startsWith('in:') || id === ANY_INPUT || rows.some((r) => r.id === id)) continue;

@@ -2,7 +2,8 @@
   /**
    * The setups (docs/proposals/patchbay.md, `SetupPicker`): each a chip with its light and how many of its devices are
    * plugged in; a custom variant beside its named setup, marked (decision 002). Save… offers to overwrite the named setup
-   * with it, to save it under a new name, or to discard it; Manage… renames or removes the named setup in use. A setup
+   * with it, to save it under a new name, or to discard it; Manage… renames or removes the named setup in use (a custom variant's named setup, with the variant); the last
+   * removed leaves a blank one. A setup
    * whose every device is plugged in is suggested when the one in use misses one. Export writes the setup in use as a
    * file, Import reads one. It takes the book and calls back a new one (`onchange`).
    */
@@ -38,6 +39,8 @@
   const base = $derived(changedFrom(book));
   const suggested = $derived(suggestSetup(book, plugged));
   const named = $derived(book.setups.filter((s) => s.base === undefined).length);
+  /** The named setup Manage… acts on: the one in use, or its custom variant's. */
+  const managed = $derived(base ?? active);
   let panel: 'save' | 'manage' | null = $state(null);
   let name = $state('');
   let confirming = $state(false);
@@ -49,7 +52,7 @@
   function open(which: 'save' | 'manage') {
     panel = panel === which ? null : which;
     confirming = false;
-    name = which === 'save' ? `${base?.name ?? active.name} 2` : active.name;
+    name = which === 'save' ? `${base?.name ?? active.name} 2` : managed.name;
   }
 
   /** A change made, and the panel closed. */
@@ -71,7 +74,14 @@
     const chosen = e.currentTarget.files?.[0];
     e.currentTarget.value = '';
     if (!chosen) return;
-    const next = importSetup(book, await chosen.text());
+    let text: string;
+    try {
+      text = await chosen.text();
+    } catch (err) {
+      problem = `${chosen.name} couldn’t be read (${err instanceof Error ? err.name : 'error'}).`;
+      return;
+    }
+    const next = importSetup(book, text);
     if (typeof next === 'string') problem = next;
     else done(next);
   }
@@ -95,7 +105,7 @@
   </div>
   <div class="actions">
     <button type="button" onclick={() => open('save')} disabled={!base} aria-expanded={panel === 'save'}>Save…</button>
-    <button type="button" class="ghost" onclick={() => open('manage')} disabled={!!base} aria-expanded={panel === 'manage'}>Manage…</button>
+    <button type="button" class="ghost" onclick={() => open('manage')} aria-expanded={panel === 'manage'}>Manage…</button>
     <button type="button" class="ghost" onclick={() => onexport(exportSetup(book), filename(active.name))}>Export</button>
     <button type="button" class="ghost" onclick={() => file?.click()}>Import</button>
     <input type="file" accept=".json,application/json" hidden bind:this={file} onchange={read} aria-label="A setup’s file" />
@@ -119,16 +129,16 @@
       <button type="button" class="ghost" onclick={() => done(discard(book))}>Discard changes</button>
     </form>
   {:else if panel === 'manage'}
-    <form class="panel" onsubmit={(e) => (e.preventDefault(), done(renameSetup(book, active.id, name)))}>
-      <input aria-label="Name of {active.name}" bind:value={name} />
+    <form class="panel" onsubmit={(e) => (e.preventDefault(), done(renameSetup(book, managed.id, name)))}>
+      <input aria-label="Name of {managed.name}" bind:value={name} />
       <button type="submit">Rename</button>
       <span class="grow"></span>
       {#if confirming}
-        <span>Remove {active.name}?</span>
-        <button type="button" class="danger" onclick={() => done(removeSetup(book, active.id))}>Remove</button>
+        <span>Remove {managed.name}{base ? ' and its changes' : ''}?{named < 2 ? ' A blank setup takes its place.' : ''}</span>
+        <button type="button" class="danger" onclick={() => done(removeSetup(book, managed.id))}>Remove</button>
         <button type="button" class="ghost" onclick={() => (confirming = false)}>Keep it</button>
       {:else}
-        <button type="button" class="ghost" disabled={named < 2} title={named < 2 ? 'The last setup stays' : undefined} onclick={() => (confirming = true)}>Remove…</button>
+        <button type="button" class="ghost" onclick={() => (confirming = true)}>Remove…</button>
       {/if}
     </form>
   {/if}

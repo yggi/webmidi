@@ -193,6 +193,29 @@ describe('DeviceInspector', () => {
   });
 });
 
+describe('DeviceInspector, more', () => {
+  it('tells apart ports plugged in under one name by their place, and forgets a device’s settings when asked', () => {
+    const onforget = vi.fn();
+    const twins = [
+      { id: 'a', name: 'USB MIDI' },
+      { id: 'b', name: 'USB MIDI' },
+      { id: 'c', name: 'TD-3' },
+    ];
+    show(DeviceInspector, {
+      output: { key: 'o1', ...twins[1]! },
+      slot: 1,
+      ports: twins,
+      profile: DEFAULT_PROFILE,
+      onport: () => {},
+      onprofile: () => {},
+      onforget,
+    });
+    expect([...one<HTMLSelectElement>('select').options].map((o) => o.textContent)).toEqual(['No device', 'USB MIDI (1)', 'USB MIDI (2)', 'TD-3']);
+    click('Forget USB MIDI’s settings');
+    expect(onforget).toHaveBeenCalledOnce();
+  });
+});
+
 describe('the palette', () => {
   const sources = ['MidiStatus', 'DeviceInspector', 'ChannelMeter', 'ChannelPicker', 'PatchMatrix', 'SetupPicker'].map((name) => readFileSync(`src/ui/${name}.svelte`, 'utf8'));
   /** A component's palette, its root's selector left out. */
@@ -263,6 +286,15 @@ describe('PatchMatrix', () => {
     expect(rowCells('Kit')).toEqual(['10', '·', '·']);
   });
 
+  it('draws two inputs plugged in under one name (Android names a device’s every port so) as one row, since the book keeps an input by its name', () => {
+    const twin = { id: 'in-2', name: keystep.name };
+    matrix(home(), { inputs: [keystep, twin] });
+    expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['Clock', '&lead', '&pad', 'Kit', '&bd', '&sd', 'KeyStep 37']);
+    expect(rowCells('KeyStep 37')).toEqual(['·', '·', '·']);
+    expect(one('tbody tr:last-child .sub').textContent).toBe('IN');
+    expect(all('tbody tr:last-child .sub').map((s) => s.textContent)).toEqual(['IN', '2 ports']);
+  });
+
   it('marks a kit on channel 10 "GM" only where the output’s drum map is General MIDI (yggi/webmidi#30)', () => {
     const book = withCrossing(home(), 'piece:a', '*', 'o2', 10);
     matrix(book);
@@ -303,6 +335,49 @@ describe('PatchMatrix', () => {
     flushSync();
     click('Not sent');
     expect(crossingOf(props.book, 'piece:a', 'pad', 'o1')).toBeUndefined();
+  });
+
+  it('the channel picker closes even when the frontend’s change throws', () => {
+    matrix(home(), {
+      onchange: () => {
+        throw new Error('the frontend broke');
+      },
+    });
+    const thrown: unknown[] = [];
+    const caught = (e: ErrorEvent) => (thrown.push(e.error), e.preventDefault());
+    window.addEventListener('error', caught);
+    jack('&pad', 'Circuit Tracks').click();
+    flushSync();
+    click('7');
+    window.removeEventListener('error', caught);
+    expect(thrown).toEqual([new Error('the frontend broke')]);
+    expect(one('[role=dialog]')).toBeNull();
+  });
+
+  it('removes an output from its head after asking; the last is left with no device, and then offers no ×', () => {
+    const { props } = matrix(withCrossing(home(), 'piece:a', 'lead', 'o1', 2));
+    const x = (n: number) => one<HTMLButtonElement>(`[aria-label^="Remove OUT ${n},"]`);
+    x(2).click();
+    flushSync();
+    expect(one('[role=group]').getAttribute('aria-label')).toBe('Remove OUT 2?');
+    click('Keep');
+    expect(activeSetup(props.book).outputs.length).toBe(2);
+    x(2).click();
+    flushSync();
+    click('Remove');
+    expect(all('thead .name').map((n) => n.textContent)).toEqual(['Circuit Tracks']);
+    expect(activeSetup(props.book).name).toBe('Home - custom');
+    x(1).click();
+    flushSync();
+    click('Remove');
+    expect(all('thead .name').map((n) => n.textContent)).toEqual(['No device']);
+    expect(crossingOf(props.book, 'piece:a', 'lead', 'o1')).toBe(2);
+    expect(one('[aria-label^="Remove OUT"]')).toBeNull();
+  });
+
+  it('offers no × on a piece’s own outputs', () => {
+    matrix(home(), { locked: true });
+    expect(one('[aria-label^="Remove OUT"]')).toBeNull();
   });
 
   it('an input’s row: As played, and what it plays (decision 003)', () => {
@@ -424,7 +499,6 @@ describe('SetupPicker', () => {
     const changed = withCrossing(home(), 'piece:a', 'pad', 'o1', 3);
     const { props } = picker(changed);
     expect(chips()).toEqual(['Home 2/2', 'Home - custom ● 2/2']);
-    expect((all('button').find((b) => b.textContent === 'Manage…') as HTMLButtonElement).disabled).toBe(true);
     click('Save…');
     click('Overwrite Home');
     expect([chips(), crossingOf(props.book, 'piece:a', 'pad', 'o1')]).toEqual([['Home 2/2'], 3]);
@@ -452,7 +526,18 @@ describe('SetupPicker', () => {
     expect(one('p.line')).toBeNull();
   });
 
-  it('Manage… renames the setup in use, and removes it after asking; the last stays', () => {
+  it('Manage… on a custom variant acts on its named setup: removed, the variant goes with it', () => {
+    const { props } = picker(withCrossing(saveAs(home(), 'Venue'), 'piece:a', 'pad', 'o1', 3));
+    expect(chips()).toEqual(['Home 2/2', 'Venue 2/2', 'Venue - custom ● 2/2']);
+    click('Manage…');
+    expect(one('[aria-label="Name of Venue"]')).not.toBeNull();
+    click('Remove…');
+    expect(one('.panel span:not(.grow)').textContent).toBe('Remove Venue and its changes?');
+    click('Remove');
+    expect([chips(), props.book.active]).toEqual([['Home 2/2'], 's1']);
+  });
+
+  it('Manage… renames the setup in use, and removes it after asking; the last leaves a blank one', () => {
     const { props } = picker(saveAs(home(), 'Venue'));
     click('Manage…');
     const name = one('[aria-label="Name of Venue"]') as HTMLInputElement;
@@ -465,8 +550,11 @@ describe('SetupPicker', () => {
     click('Remove');
     expect(chips()).toEqual(['Home 2/2']);
     click('Manage…');
-    expect((all('button').find((b) => b.textContent === 'Remove…') as HTMLButtonElement).disabled).toBe(true);
-    void props;
+    click('Remove…');
+    expect(one('.panel span:not(.grow)').textContent).toBe('Remove Home? A blank setup takes its place.');
+    click('Remove');
+    expect(chips()).toEqual(['Setup 1 0/0']);
+    expect(props.book.devices).toHaveProperty(['Circuit Tracks']);
   });
 
   it('exports the setup in use as a file, and says what is wrong with a file that isn’t one', async () => {

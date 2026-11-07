@@ -4,8 +4,9 @@
    * across, each crossing a jack (empty, or a chip in its channel's hue). A jack opens the channel picker; a kit's members
    * show the note each output's drum map sends them as; an input's row has its Plays choice (decision 003: not heard,
    * the default, or one of the frontend's rows), and a preset fills in the inputs with no choice; empty rows (seats no part
-   * sits in) wait behind a button; the first row is the clock, the outputs the setup sends it to, the same in every context. An output's head selects it (for the `DeviceInspector`). It takes the book and calls
-   * back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
+   * sits in) wait behind a button; the first row is the clock, the outputs the setup sends it to, the same in every context. An output's head selects it (for the `DeviceInspector`),
+   * and its × removes it after asking (the last output is left with no device: core's `removeOutput`). It takes the book
+   * and calls back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
    */
   import { deviceNote, presetNameOf } from '../core/drum-presets';
   import type { PortOption } from '../core/port';
@@ -15,6 +16,7 @@
     activeSetup,
     addOutput,
     ANY_INPUT,
+    removeOutput,
     AS_PLAYED,
     inputRow,
     profileOf,
@@ -64,7 +66,10 @@
   const routes = $derived(Object.hasOwn(setup.routes, context) ? setup.routes[context]! : {});
   let showEmpty = $state(false);
   const empties = $derived(rows.filter((r) => r.kind === 'empty').length);
-  const shown = $derived([...rows.filter((r) => showEmpty || r.kind !== 'empty'), ...inputRows(inputs, routes, setup.plays)]);
+  /** The rows drawn, each id once: a keyed list with an id twice throws, and stops the page redrawing. */
+  const shown = $derived(
+    [...rows.filter((r) => showEmpty || r.kind !== 'empty'), ...inputRows(inputs, routes, setup.plays)].filter((r, i, all) => all.findIndex((x) => x.id === r.id) === i),
+  );
   const crossing = (row: string, key: string): Crossing | undefined => (Object.hasOwn(routes, row) && Object.hasOwn(routes[row]!, key) ? routes[row]![key] : undefined);
   const kitHere = (key: string) => rows.some((r) => r.kind === 'kit' && crossing(r.id, key) !== undefined);
   const isPlugged = (o: PortOption) => o.id !== 'none' && outputs.some((p) => p.id === o.id || (!!o.name && p.name === o.name));
@@ -87,10 +92,21 @@
 
   let picking: { row: MatrixRow; key: string; name: string; anchor: DOMRect } | null = $state(null);
 
+  /** A channel picked: the picker closes first, whatever the frontend then does with the change. */
   function pick(value: Crossing | undefined) {
     if (!picking) return;
-    onchange(withCrossing(book, context, picking.row.id, picking.key, value));
+    const { row, key } = picking;
     picking = null;
+    onchange(withCrossing(book, context, row.id, key, value));
+  }
+
+  /** The output whose removal is being asked about, by key. */
+  let removing: string | null = $state(null);
+  /** Whether an output's × is offered: not on a piece's outputs, nor on a lone output with no device, which is all a removal would leave. */
+  const removable = $derived(!locked && (setup.outputs.length > 1 || setup.outputs[0]?.id !== 'none'));
+  function remove(key: string) {
+    removing = null;
+    onchange(removeOutput(book, key));
   }
 
   /** The channels other rows send on to an output. */
@@ -139,22 +155,36 @@
           {#each setup.outputs as o, i (o.key)}
             {@const profile = profileOf(book, o.name)}
             {@const here = isPlugged(o)}
-            <th scope="col">
-              <button
-                type="button"
-                class="col"
-                class:absent={o.id !== 'none' && !here}
-                aria-pressed={selected === o.key}
-                onclick={() => onselect?.(o.key)}
-                title="{outLabel(o)}: its settings"
-              >
-                <span class="top"><span class="led" class:on={here} aria-hidden="true"></span><span class="slot">OUT {i + 1}</span></span>
-                <span class="name">{outLabel(o)}</span>
-                <span class="facts">
-                  {#if o.id !== 'none' && !here}<span class="tag gone">Not plugged in</span>{/if}
-                  {#if o.id !== 'none' && profile.mpe}<span class="tag">MPE</span>{/if}
-                </span>
-              </button>
+            <th scope="col" class="head">
+              {#if removing === o.key}
+                <div class="col asking" role="group" aria-label="Remove OUT {i + 1}?">
+                  <span class="slot">OUT {i + 1}</span>
+                  <span class="name">Remove {outLabel(o)}?</span>
+                  <span class="ask">
+                    <button type="button" class="danger" onclick={() => remove(o.key)}>Remove</button>
+                    <button type="button" onclick={() => (removing = null)}>Keep</button>
+                  </span>
+                </div>
+              {:else}
+                <button
+                  type="button"
+                  class="col"
+                  class:absent={o.id !== 'none' && !here}
+                  aria-pressed={selected === o.key}
+                  onclick={() => onselect?.(o.key)}
+                  title="{outLabel(o)}: its settings"
+                >
+                  <span class="top"><span class="led" class:on={here} aria-hidden="true"></span><span class="slot">OUT {i + 1}</span></span>
+                  <span class="name">{outLabel(o)}</span>
+                  <span class="facts">
+                    {#if o.id !== 'none' && !here}<span class="tag gone">Not plugged in</span>{/if}
+                    {#if o.id !== 'none' && profile.mpe}<span class="tag">MPE</span>{/if}
+                  </span>
+                </button>
+                {#if removable}
+                  <button type="button" class="x" aria-label="Remove OUT {i + 1}, {outLabel(o)}" title="Remove this output" onclick={() => (removing = o.key)}>×</button>
+                {/if}
+              {/if}
             </th>
           {/each}
           {#if !locked}
@@ -356,6 +386,56 @@
     color: inherit;
     text-align: left;
     cursor: pointer;
+  }
+  .head {
+    position: relative;
+  }
+  /* the head's ×: in its top right corner, over the head's own button */
+  .x {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--_muted);
+    font: 600 18px/1 var(--wm-font, system-ui, sans-serif);
+    cursor: pointer;
+  }
+  .x:hover {
+    background: var(--_panel);
+    color: var(--_text);
+  }
+  .asking {
+    cursor: default;
+    border-color: var(--_warn);
+  }
+  .asking .name {
+    white-space: normal;
+  }
+  .ask {
+    display: flex;
+    gap: 4px;
+  }
+  .ask button {
+    flex: 1;
+    min-height: 32px;
+    padding: 0 4px;
+    border: 1px solid var(--_line);
+    border-radius: 6px;
+    background: var(--_panel);
+    color: var(--_text);
+    font: 600 13px var(--wm-font, system-ui, sans-serif);
+    cursor: pointer;
+  }
+  .ask .danger {
+    border-color: var(--_warn);
+    color: var(--_warn);
   }
   .col[aria-pressed='true'] {
     border-color: var(--_accent);

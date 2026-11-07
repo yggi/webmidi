@@ -74,6 +74,22 @@ describe('MidiAccess', () => {
     expect(pads.onmidimessage).toBeNull();
   });
 
+  it('listens to the others when one input refuses a listener (a port gone mid-look)', async () => {
+    const gone = fakeInput('in-1', 'Gone');
+    Object.defineProperty(gone, 'onmidimessage', {
+      set() {
+        throw new DOMException('gone', 'InvalidStateError');
+      },
+    });
+    const pads = fakeInput('in-2', 'Pads');
+    installMidi(fakeAccess([gone, pads]));
+    const notes: string[] = [];
+    const midi = await connected({ onNote: (_, source) => notes.push(source) });
+    expect(() => midi.listen('all')).not.toThrow();
+    pads.play([0x90, 36, 100]);
+    expect(notes).toEqual(['Pads']);
+  });
+
   it('listens to several inputs, a setup’s heard, each by id or else by name (yggi/webmidi#27)', async () => {
     const keys = fakeInput('in-1', 'Keys');
     const pads = fakeInput('in-2', 'Pads');

@@ -27,5 +27,9 @@ export interface MatrixRow {
  * The inputs' rows, after the frontend's: each input plugged in, then each one the routes still send from, or that has
  * a choice of what it plays, that isn't (said so), then every input (`ANY_INPUT`) when the routes send from it or it
  * has a choice.
+ *
+ * Inputs plugged in under one name are one row, said so ("2 ports"): the book keeps an input by its name, so they are
+ * routed and heard alike, and Android names a device's every port after the device. Two rows with one id would also
+ * break a keyed list, and with it the page.
  */
 export declare function inputRows(plugged: readonly PortOption[], routes: Routes, plays?: Readonly<Record<string, PlaysChoice>>): MatrixRow[];

@@ -2,8 +2,8 @@
   /**
    * One output of the setup in use, in full (docs/proposals/patchbay.md, `DeviceInspector`): the port it sends to (one
    * not plugged in kept and said so), then its device's profile, kept with the device in every setup (decision 002): drum
-   * map, bend range, a channel per note (MPE), latency. Under them the channels routed here, a test note, notes off
-   * here, and removing the output. Presentational: a change is a call back (`onport`, `onprofile`), which the frontend
+   * map, bend range, a channel per note (MPE), latency, and forgetting them. Under them the channels routed here, a test
+   * note, notes off here, and removing the output. Ports plugged in under one name are told apart by their place. Presentational: a change is a call back (`onport`, `onprofile`), which the frontend
    * makes with core's `chooseDevice` and `withProfile`.
    */
   import { DRUM_PRESETS, presetNameOf } from '../core/drum-presets';
@@ -31,15 +31,23 @@
     ontest?: () => void;
     onpanic?: () => void;
     onremove?: () => void;
+    /** Forget the device's profile, back to the defaults: offered when the frontend passes it (the book keeps one). */
+    onforget?: () => void;
   }
 
-  let { output, slot, ports, profile, used = [], lit, drums = true, canRemove = false, onport, onprofile, ontest, onpanic, onremove }: Props = $props();
+  let { output, slot, ports, profile, used = [], lit, drums = true, canRemove = false, onport, onprofile, ontest, onpanic, onremove, onforget }: Props = $props();
 
   const none = $derived(output.id === 'none');
   const plugged = $derived(!none && ports.some((p) => p.id === output.id || (!!output.name && p.name === output.name)));
   const title = $derived(none ? 'No device' : output.name || output.id);
   const preset = $derived(presetNameOf(profile.drums));
   const uid = $props.id();
+  /** A port's name in the list, its place after it when another port has the same ("Circuit (2)"). */
+  const portLabel = (p: PortOption, i: number) => {
+    const name = p.name || p.id;
+    const same = ports.filter((q) => (q.name || q.id) === name);
+    return same.length > 1 ? `${name} (${same.indexOf(ports[i]!) + 1})` : name;
+  };
 
   /** A number field set: clamped as core keeps it, shown so at once (a value clamped to the one there changes no prop, so nothing would redraw it). */
   function typed(e: Event & { currentTarget: HTMLInputElement }, lo: number, hi: number, fallback: number, set: (n: number) => void) {
@@ -62,7 +70,7 @@
       <span>Port</span>
       <select value={output.id} onchange={(e) => choosePort(e.currentTarget.value)}>
         <option value="none">No device</option>
-        {#each ports as p (p.id)}<option value={p.id}>{p.name || p.id}</option>{/each}
+        {#each ports as p, i (p.id)}<option value={p.id}>{portLabel(p, i)}</option>{/each}
         {#if !none && !plugged}<option value={output.id}>{output.name || output.id} (not plugged in)</option>{/if}
       </select>
     </label>
@@ -130,6 +138,9 @@
         <span>Latency<small>Sent this much earlier, in ms</small></span>
         <input type="number" min="0" max="1000" value={profile.latency} onchange={(e) => typed(e, 0, 1000, profile.latency, (latency) => onprofile({ latency }))} />
       </label>
+      {#if onforget}
+        <div class="actions"><button type="button" class="ghost" onclick={onforget}>Forget {title}’s settings</button></div>
+      {/if}
     </div>
   {/if}
 
