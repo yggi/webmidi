@@ -367,10 +367,14 @@ export function chooseDevice(book: SetupBook, key: string, device: PortOption): 
   return withActive(book, (s) => ({ ...s, outputs: s.outputs.map((o) => (o.key === key ? { key, id: device.id, name: device.name } : o)) }));
 }
 
-/** An output removed, with its crossings in every context; the last one stays. */
+/**
+ * An output removed, with its crossings in every context. A setup keeps one output, so the last is left with no device
+ * instead, its routes kept for the next device chosen.
+ */
 export function removeOutput(book: SetupBook, key: string): SetupBook {
   return withActive(book, (s) => {
-    if (s.outputs.length < 2 || !s.outputs.some((o) => o.key === key)) return s;
+    if (!s.outputs.some((o) => o.key === key)) return s;
+    if (s.outputs.length < 2) return s.outputs[0]!.id === 'none' ? s : { ...s, outputs: [{ key, ...NO_DEVICE }] };
     const strip = (r: Routes): Routes =>
       Object.fromEntries(
         Object.entries(r)
@@ -445,14 +449,25 @@ export function renameSetup(book: SetupBook, id: string, name: string): SetupBoo
 }
 
 /**
- * A setup removed, a named one with its custom variant; the last named setup stays. Removing the one in use puts the
- * first named setup left in use.
+ * A setup removed, a named one with its custom variant. Removing the one in use puts the first named setup left in use;
+ * removing the last named setup leaves a blank one in its place, since a book keeps one. The devices' profiles stay.
  */
 export function removeSetup(book: SetupBook, id: string): SetupBook {
-  const gone = book.setups.find((s) => s.id === id);
-  if (!gone || (gone.base === undefined && book.setups.filter((s) => s.base === undefined).length < 2)) return book;
+  if (!book.setups.some((s) => s.id === id)) return book;
   const setups = book.setups.filter((s) => s.id !== id && s.base !== id);
-  return { ...book, setups, active: setups.some((s) => s.id === book.active) ? book.active : setups.find((s) => s.base === undefined)!.id };
+  const named = setups.find((s) => s.base === undefined);
+  if (!named) {
+    const blank = blankSetup(freeId({ ...book, setups }), 'Setup 1');
+    return { ...book, setups: [...setups, blank], active: blank.id };
+  }
+  return { ...book, setups, active: setups.some((s) => s.id === book.active) ? book.active : named.id };
+}
+
+/** A device's profile forgotten: it follows the book's defaults again, in every setup. */
+export function forgetDevice(book: SetupBook, name: string): SetupBook {
+  if (!Object.hasOwn(book.devices, name)) return book;
+  const { [name]: _gone, ...devices } = book.devices;
+  return { ...book, devices };
 }
 
 // ---- a setup as a file ----

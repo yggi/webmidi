@@ -133,19 +133,27 @@ export class MidiAccess implements PortAccess {
     this.#access.onstatechange = null;
   }
 
-  /** Listen to one input by id, `'all'` of them, `'none'`, or several (a setup's `heard`), each by id, else by name. */
+  /**
+   * Listen to one input by id, `'all'` of them, `'none'`, or several (a setup's `heard`), each by id, else by name. An
+   * input that refuses (a port gone mid-look) is skipped, and the others are listened to all the same.
+   */
   listen(inputs: Listened): void {
     this.#listening = inputs;
-    for (const [portId, input] of this.#access.inputs)
-      input.onmidimessage = isListened(inputs, portId, input.name)
-        ? (event) => {
-            const data = event.data;
-            if (!data) return;
-            const source = input.name ?? 'MIDI';
-            this.#on.onMessage?.(data, source, event.timeStamp);
-            const note = parseMidiMessage(data, event.timeStamp);
-            if (note) this.#on.onNote?.(note, source);
-          }
-        : null;
+    for (const [portId, input] of this.#access.inputs) {
+      try {
+        input.onmidimessage = isListened(inputs, portId, input.name)
+          ? (event) => {
+              const data = event.data;
+              if (!data) return;
+              const source = input.name ?? 'MIDI';
+              this.#on.onMessage?.(data, source, event.timeStamp);
+              const note = parseMidiMessage(data, event.timeStamp);
+              if (note) this.#on.onNote?.(note, source);
+            }
+          : null;
+      } catch {
+        // the port went while it was looked at: the next look (`onstatechange`) finds the ports as they are
+      }
+    }
   }
 }

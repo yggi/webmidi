@@ -135,7 +135,10 @@ export declare function addOutput(book: SetupBook, device?: PortOption): {
 };
 /** An output given another device: its routes stay, under its key. */
 export declare function chooseDevice(book: SetupBook, key: string, device: PortOption): SetupBook;
-/** An output removed, with its crossings in every context; the last one stays. */
+/**
+ * An output removed, with its crossings in every context. A setup keeps one output, so the last is left with no device
+ * instead, its routes kept for the next device chosen.
+ */
 export declare function removeOutput(book: SetupBook, key: string): SetupBook;
 /** An output of the setup in use sent clock, or not (an output it doesn't have: the book as it is). */
 export declare function withClock(book: SetupBook, key: string, on: boolean): SetupBook;
@@ -153,10 +156,12 @@ export declare function saveAs(book: SetupBook, name: string): SetupBook;
 /** A named setup renamed, and its custom variant with it (blank, or a variant: as it was). */
 export declare function renameSetup(book: SetupBook, id: string, name: string): SetupBook;
 /**
- * A setup removed, a named one with its custom variant; the last named setup stays. Removing the one in use puts the
- * first named setup left in use.
+ * A setup removed, a named one with its custom variant. Removing the one in use puts the first named setup left in use;
+ * removing the last named setup leaves a blank one in its place, since a book keeps one. The devices' profiles stay.
  */
 export declare function removeSetup(book: SetupBook, id: string): SetupBook;
+/** A device's profile forgotten: it follows the book's defaults again, in every setup. */
+export declare function forgetDevice(book: SetupBook, name: string): SetupBook;
 /** A setup as a file's text (`.midisetup.json`): the setup, and the profiles of its devices that the book has. */
 export declare function exportSetup(book: SetupBook, id?: string): string;
 /**

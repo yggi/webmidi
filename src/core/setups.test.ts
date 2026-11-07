@@ -22,6 +22,7 @@ import {
   removeOutput,
   sendsClock,
   removeSetup,
+  forgetDevice,
   renameSetup,
   saveAs,
   suggestSetup,
@@ -163,9 +164,13 @@ describe('outputs', () => {
     expect(activeSetup(book).routes).toEqual({ band: {}, 'piece:a': { bass: { o1: 3 } } });
   });
 
-  it('the last stays', () => {
+  it('the last is left with no device, its routes kept for the next device chosen; with none already, as it was', () => {
     const book = newBook();
     expect(removeOutput(book, 'o1')).toEqual(book);
+    let one = withCrossing(chooseDevice(newBook(), 'o1', { id: 'out-9', name: 'MicroFreak' }), 'band', 'lead', 'o1', 1);
+    one = removeOutput(one, 'o1');
+    expect(activeSetup(one).outputs).toEqual([{ key: 'o1', id: 'none', name: '' }]);
+    expect(crossingOf(one, 'band', 'lead', 'o1')).toBe(1);
   });
 });
 
@@ -219,11 +224,23 @@ describe('setups', () => {
     expect([crossingOf(useSetup(book, 's1'), 'band', 'lead', 'o2'), crossingOf(book, 'band', 'lead', 'o2')]).toEqual([undefined, 5]);
   });
 
-  it('removing the one in use puts the first left in use; the last stays', () => {
+  it('removing the one in use puts the first left in use; the last named leaves a blank one, the devices’ profiles kept', () => {
     let book = saveAs(home(), 'Venue');
     book = removeSetup(book, 's2');
     expect([book.setups.length, book.active]).toEqual([1, 's1']);
-    expect(removeSetup(book, 's1')).toBe(book);
+    expect(removeSetup(book, 's9')).toBe(book);
+    const last = removeSetup(withCrossing(book, 'band', 'lead', 'o2', 5), 's1');
+    expect(last.setups.map((s) => [s.id, s.name, s.base])).toEqual([['s1', 'Setup 1', undefined]]);
+    expect(activeSetup(last)).toEqual(activeSetup(newBook()));
+    expect(last.devices).toEqual(book.devices);
+  });
+
+  it('a device’s profile forgotten follows the defaults again', () => {
+    const book = withProfile(home(), 'Synth', { latency: 20 });
+    expect(profileOf(book, 'Synth').latency).toBe(20);
+    const forgotten = forgetDevice(book, 'Synth');
+    expect(profileOf(forgotten, 'Synth')).toEqual(book.defaults);
+    expect(forgetDevice(forgotten, 'Synth')).toBe(forgotten);
   });
 
   it('say what an input plays, every input’s too, and drop a choice to follow every input’s (decision 003)', () => {

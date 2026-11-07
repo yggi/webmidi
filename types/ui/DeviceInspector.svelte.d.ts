@@ -19,6 +19,8 @@ interface Props {
     ontest?: () => void;
     onpanic?: () => void;
     onremove?: () => void;
+    /** Forget the device's profile, back to the defaults: offered when the frontend passes it (the book keeps one). */
+    onforget?: () => void;
 }
 declare const DeviceInspector: import("svelte").Component<Props, {}, "">;
 type DeviceInspector = ReturnType<typeof DeviceInspector>;
