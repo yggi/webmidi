@@ -10,6 +10,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
+## v0.3.1 — 2026-11-08
+
+A fix found moving Cell studio onto v0.3.0: an output's × stays on its head however wide the matrix. Nothing on the wire changes and nothing breaks a frontend's code, so it is a patch.
+
+### Fixed
+- **An output's × stays on its head in a wide matrix.** A matrix wider than its columns stretches each column, and the × sat at the column's right edge, away from the head it removes; the head and its × are now one box as wide as the head (`PatchMatrix`). Nothing on the wire changes.
+
 ## v0.3.0 — 2026-11-07
 
 The patchbay made robust and easier to edit: inputs under one name (Android's multi-port devices) no longer break the page, an output is removed from the matrix's head, and setups and device profiles can be removed and forgotten. Nothing on the wire changes and nothing breaks a frontend's code; it is a minor version because `removeOutput` and `removeSetup` now act on the last output and the last named setup, where they did nothing, which a frontend's own guard (`canRemove`, say) may want to follow.

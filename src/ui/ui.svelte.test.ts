@@ -375,6 +375,13 @@ describe('PatchMatrix', () => {
     expect(one('[aria-label^="Remove OUT"]')).toBeNull();
   });
 
+  it('pins an output’s × to its head, not to its column, which a wide matrix stretches', () => {
+    matrix(home());
+    const x = one<HTMLButtonElement>('[aria-label^="Remove OUT 1,"]');
+    expect(x.parentElement!.classList.contains('pin')).toBe(true);
+    expect(x.parentElement!.querySelector('button.col')?.textContent).toContain('Circuit Tracks');
+  });
+
   it('offers no × on a piece’s own outputs', () => {
     matrix(home(), { locked: true });
     expect(one('[aria-label^="Remove OUT"]')).toBeNull();

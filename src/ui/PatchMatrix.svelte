@@ -155,7 +155,7 @@
           {#each setup.outputs as o, i (o.key)}
             {@const profile = profileOf(book, o.name)}
             {@const here = isPlugged(o)}
-            <th scope="col" class="head">
+            <th scope="col">
               {#if removing === o.key}
                 <div class="col asking" role="group" aria-label="Remove OUT {i + 1}?">
                   <span class="slot">OUT {i + 1}</span>
@@ -166,24 +166,26 @@
                   </span>
                 </div>
               {:else}
-                <button
-                  type="button"
-                  class="col"
-                  class:absent={o.id !== 'none' && !here}
-                  aria-pressed={selected === o.key}
-                  onclick={() => onselect?.(o.key)}
-                  title="{outLabel(o)}: its settings"
-                >
-                  <span class="top"><span class="led" class:on={here} aria-hidden="true"></span><span class="slot">OUT {i + 1}</span></span>
-                  <span class="name">{outLabel(o)}</span>
-                  <span class="facts">
-                    {#if o.id !== 'none' && !here}<span class="tag gone">Not plugged in</span>{/if}
-                    {#if o.id !== 'none' && profile.mpe}<span class="tag">MPE</span>{/if}
-                  </span>
-                </button>
-                {#if removable}
-                  <button type="button" class="x" aria-label="Remove OUT {i + 1}, {outLabel(o)}" title="Remove this output" onclick={() => (removing = o.key)}>×</button>
-                {/if}
+                <span class="pin">
+                  <button
+                    type="button"
+                    class="col"
+                    class:absent={o.id !== 'none' && !here}
+                    aria-pressed={selected === o.key}
+                    onclick={() => onselect?.(o.key)}
+                    title="{outLabel(o)}: its settings"
+                  >
+                    <span class="top"><span class="led" class:on={here} aria-hidden="true"></span><span class="slot">OUT {i + 1}</span></span>
+                    <span class="name">{outLabel(o)}</span>
+                    <span class="facts">
+                      {#if o.id !== 'none' && !here}<span class="tag gone">Not plugged in</span>{/if}
+                      {#if o.id !== 'none' && profile.mpe}<span class="tag">MPE</span>{/if}
+                    </span>
+                  </button>
+                  {#if removable}
+                    <button type="button" class="x" aria-label="Remove OUT {i + 1}, {outLabel(o)}" title="Remove this output" onclick={() => (removing = o.key)}>×</button>
+                  {/if}
+                </span>
               {/if}
             </th>
           {/each}
@@ -387,8 +389,11 @@
     text-align: left;
     cursor: pointer;
   }
-  .head {
+  /* the head and its ×, one box as wide as the head: a matrix wider than its columns stretches the column, not the head */
+  .pin {
     position: relative;
+    display: inline-block;
+    vertical-align: bottom;
   }
   /* the head's ×: in its top right corner, over the head's own button */
   .x {
