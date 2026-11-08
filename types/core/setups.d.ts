@@ -53,7 +53,10 @@ export interface Setup {
     readonly name: string;
     /** A custom variant's: the id of the named setup it was changed from. A named setup has none. */
     readonly base?: string;
-    /** At least one; an output with id `'none'` is a slot with no device. */
+    /**
+     * At least one; an output with id `'none'` is a slot with no device, and `BUILT_IN` (first, once at most) is this
+     * device's own sound, which sends no MIDI.
+     */
     readonly outputs: readonly SetupOutput[];
     /**
      * What each input plays, by its row (`in:<name>`): one mechanism for whether it is heard and what it drives, the same
@@ -88,6 +91,23 @@ export interface BookStore {
 export declare const inputRow: (port: PortOption) => string;
 export declare const ANY_INPUT = "in:*";
 export declare const DEFAULT_PROFILE: DeviceProfile;
+/**
+ * This device's own sound (a synth, the built-in voices), as an output of a setup: a column of the matrix like a
+ * device's, whose crossings say which of the frontend's rows it plays (`HEARD`). It has no port, no channels, no clock
+ * and no profile, sends no MIDI (`hardwareOutputs` leaves it out) and isn't counted as a device a setup needs
+ * (`fit`). Kept in the setup, so a setup can be MIDI only, or not; first, so a narrow matrix keeps it in view.
+ */
+export declare const BUILT_IN: SetupOutput;
+/** A row's crossing of the built-in: it plays there (any crossing does: the built-in has no channels). */
+export declare const HEARD = 1;
+/** Whether an output is the built-in. */
+export declare const isBuiltIn: (o: {
+    readonly id: string;
+}) => boolean;
+/** Whether a setup has the built-in. */
+export declare const hasBuiltIn: (setup: Setup) => boolean;
+/** A setup's outputs that send MIDI: all but the built-in. */
+export declare const hardwareOutputs: (setup: Setup) => SetupOutput[];
 /** What a custom variant is called after its named setup: "Home - custom". */
 export declare const CUSTOM = " - custom";
 /** A book with one setup, one output and no device: a first visit. */
@@ -133,13 +153,20 @@ export declare function addOutput(book: SetupBook, device?: PortOption): {
     book: SetupBook;
     key: string;
 };
-/** An output given another device: its routes stay, under its key. */
+/** An output given another device: its routes stay, under its key. The built-in is no device's: the book as it is. */
 export declare function chooseDevice(book: SetupBook, key: string, device: PortOption): SetupBook;
 /**
  * An output removed, with its crossings in every context. A setup keeps one output, so the last is left with no device
  * instead, its routes kept for the next device chosen.
  */
 export declare function removeOutput(book: SetupBook, key: string): SetupBook;
+/**
+ * The built-in put in the setup in use, first, hearing the rows given by context (`{ band: ['lead', 'bass'] }`), or
+ * taken out with its crossings (`on` false). The book as it is when it already is so.
+ */
+export declare function withBuiltIn(book: SetupBook, on: boolean, heard?: Readonly<Record<string, readonly string[]>>): SetupBook;
+/** Whether the built-in of the setup in use plays a row in a context: it is there, and the row crosses it. */
+export declare const builtInHears: (book: SetupBook, context: string, row: string) => boolean;
 /** An output of the setup in use sent clock, or not (an output it doesn't have: the book as it is). */
 export declare function withClock(book: SetupBook, key: string, on: boolean): SetupBook;
 /** Whether an output of the setup in use is sent clock. */

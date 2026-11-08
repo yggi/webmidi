@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   activeSetup,
   addOutput,
+  BUILT_IN,
+  builtInHears,
+  hasBuiltIn,
+  HEARD,
+  hardwareOutputs,
+  withBuiltIn,
   ANY_INPUT,
   AS_PLAYED,
   changedFrom,
@@ -406,5 +412,71 @@ describe('hardening (yggi/webmidi#15)', () => {
       ['s1~', undefined],
     ]);
     expect(changedFrom(book)?.id).toBe('s1');
+  });
+});
+
+describe('the built-in (this device’s own sound) as an output', () => {
+  it('is added first, under its own key, hearing the rows asked for in each context; off, it goes with its crossings', () => {
+    const book = withBuiltIn(home(), true, { band: ['lead', 'drums'] });
+    const setup = activeSetup(book);
+    expect(setup.outputs.map((o) => o.key)).toEqual(['builtin', 'o1', 'o2']);
+    expect(hasBuiltIn(setup)).toBe(true);
+    expect([builtInHears(book, 'band', 'lead'), builtInHears(book, 'band', 'bass'), crossingOf(book, 'band', 'drums', BUILT_IN.key)]).toEqual([true, false, HEARD]);
+    expect(withBuiltIn(book, true)).toBe(book);
+    const off = withBuiltIn(book, false);
+    expect([hasBuiltIn(activeSetup(off)), activeSetup(off).routes]).toEqual([false, { band: {} }]);
+    expect(withBuiltIn(off, false)).toBe(off);
+  });
+
+  it('changes no key an output added takes: they are numbered among the outputs that send MIDI', () => {
+    const { key } = addOutput(withBuiltIn(home(), true), { id: 'out-3', name: 'TD-3' });
+    expect(key).toBe('o3');
+    expect(addOutput(withBuiltIn(newBook(), true)).key).toBe('o1');
+  });
+
+  it('is no device: not counted in a setup’s fit, never sent clock, never given a port, and not among the outputs that send MIDI', () => {
+    const book = withBuiltIn(home(), true);
+    const setup = activeSetup(book);
+    expect(fit(setup, [circuit])).toEqual({ plugged: 1, of: 2 });
+    expect(withClock(book, BUILT_IN.key, true)).toBe(book);
+    expect(chooseDevice(book, BUILT_IN.key, circuit)).toBe(book);
+    expect(hardwareOutputs(setup).map((o) => o.key)).toEqual(['o1', 'o2']);
+  });
+
+  it('removed as an output like any other; a setup of the built-in alone, its hardware removed, keeps it', () => {
+    let book = withBuiltIn(home(), true, { band: ['lead'] });
+    expect(hasBuiltIn(activeSetup(removeOutput(book, BUILT_IN.key)))).toBe(false);
+    book = removeOutput(removeOutput(book, 'o2'), 'o1');
+    expect(activeSetup(book).outputs.map((o) => o.key)).toEqual(['builtin']);
+    // the last output removed, the built-in itself: a setup keeps one output, so one with no device takes its place
+    expect(activeSetup(removeOutput(book, BUILT_IN.key)).outputs).toEqual([{ key: 'o1', id: 'none', name: '' }]);
+  });
+
+  it('takes the place of a lone output with no device and no routes, as a first visit’s; one routed stays beside it', () => {
+    expect(activeSetup(withBuiltIn(newBook(), true)).outputs).toEqual([BUILT_IN]);
+    const routed = withCrossing(newBook(), 'band', 'lead', 'o1', 1);
+    expect(activeSetup(withBuiltIn(routed, true)).outputs.map((o) => o.key)).toEqual(['builtin', 'o1']);
+  });
+
+  it('is read back once, first, under its key, however it was kept', () => {
+    const kept = {
+      version: 1,
+      setups: [
+        {
+          id: 's1',
+          name: 'A',
+          outputs: [
+            { key: 'o1', id: 'out-1', name: 'X' },
+            { key: 'b', id: 'builtin', name: '' },
+            { key: 'b2', id: 'builtin', name: '' },
+          ],
+          routes: { band: { lead: { b: 1 } } },
+        },
+      ],
+      active: 's1',
+    };
+    const setup = activeSetup(readBook(kept));
+    expect(setup.outputs).toEqual([BUILT_IN, { key: 'o1', id: 'out-1', name: 'X' }]);
+    expect(setup.routes).toEqual({ band: { lead: { builtin: 1 } } });
   });
 });

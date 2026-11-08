@@ -27,6 +27,15 @@ interface Props {
     locked?: boolean;
     /** Whether the clock row is shown: a frontend with no clock to send passes false. */
     clock?: boolean;
+    /**
+     * This device's own sound as a column (`BUILT_IN`), first: what the frontend calls it ("Synth"), and whether its
+     * crossings are edited here, row by row (`rows`, by default; false: shown as the frontend wrote them in `book`, the
+     * column itself added and removed). None (standalone): no such column, and none offered.
+     */
+    builtIn?: {
+        readonly label: string;
+        readonly rows?: boolean;
+    } | null;
     onchange: (book: SetupBook) => void;
     onselect?: (key: string) => void;
 }

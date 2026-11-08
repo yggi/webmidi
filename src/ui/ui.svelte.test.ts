@@ -8,6 +8,10 @@ import {
   activeSetup,
   addOutput,
   AS_PLAYED,
+  BUILT_IN,
+  builtInHears,
+  hasBuiltIn,
+  withBuiltIn,
   chooseDevice,
   crossingOf,
   DEFAULT_PROFILE,
@@ -380,6 +384,48 @@ describe('PatchMatrix', () => {
     const x = one<HTMLButtonElement>('[aria-label^="Remove OUT 1,"]');
     expect(x.parentElement!.classList.contains('pin')).toBe(true);
     expect(x.parentElement!.querySelector('button.col')?.textContent).toContain('Circuit Tracks');
+  });
+
+  it('draws the built-in first, toggled row by row, numbering the outputs that send MIDI from 1; members, the clock and inputs get none', () => {
+    const { props } = matrix(withBuiltIn(home(), true, { 'piece:a': ['lead'] }), { builtIn: { label: 'Synth' } });
+    expect(all('thead .slot').map((n) => n.textContent)).toEqual(['BUILT-IN', 'OUT 1', 'OUT 2']);
+    expect(all('thead .name').map((n) => n.textContent)).toEqual(['Synth', 'Circuit Tracks', 'Minilogue xd']);
+    expect([rowCells('&lead')[0], rowCells('&pad')[0], rowCells('Clock')[0], rowCells('&bd')[0], rowCells('KeyStep 37')[0]]).toEqual(['ON', '·', '—', '·', 'not heard']);
+    jack('&pad', 'Synth').click();
+    flushSync();
+    expect([builtInHears(props.book, 'piece:a', 'pad'), activeSetup(props.book).name]).toEqual([true, 'Home - custom']);
+    jack('&lead', 'Synth').click();
+    flushSync();
+    expect(builtInHears(props.book, 'piece:a', 'lead')).toBe(false);
+    expect(all('[role=dialog]')).toEqual([]);
+  });
+
+  it('says through which row an input plays on the built-in, and a row heard through another gets a dash', () => {
+    const book = withPlays(withBuiltIn(home(), true), inputRow(keystep), { row: 'lead' });
+    matrix(book, { builtIn: { label: 'Synth' }, rows: [...ROWS, { id: 'keys', label: 'Keys', kind: 'voice', builtIn: false }] });
+    expect([rowCells('KeyStep 37')[0], rowCells('Keys')[0]]).toEqual(['as &lead', '—']);
+  });
+
+  it('adds the built-in hearing every row it can play, and removes it from its head like any output', () => {
+    const { props } = matrix(home(), { builtIn: { label: 'Synth' } });
+    click('+ Synth');
+    expect(activeSetup(props.book).outputs[0]).toEqual(BUILT_IN);
+    expect(['lead', 'pad', '*', 'bd'].map((r) => builtInHears(props.book, 'piece:a', r))).toEqual([true, true, true, false]);
+    expect(buttons()).not.toContain('+ Synth');
+    one<HTMLButtonElement>('[aria-label="Remove BUILT-IN, Synth"]').click();
+    flushSync();
+    click('Remove');
+    expect(hasBuiltIn(activeSetup(props.book))).toBe(false);
+  });
+
+  it('shows the built-in’s crossings, unchanged, where the frontend edits them itself; and no column for a frontend without one', () => {
+    const { props } = matrix(withBuiltIn(home(), true, { 'piece:a': ['lead'] }), { builtIn: { label: 'Sound', rows: false } });
+    expect(jack('&lead', 'Sound').tagName).toBe('SPAN');
+    expect(rowCells('&lead')[0]).toBe('ON');
+    (props as Record<string, unknown>).builtIn = null;
+    flushSync();
+    expect(all('thead .slot').map((n) => n.textContent)).toEqual(['OUT 1', 'OUT 2']);
+    expect(buttons()).not.toContain('+ Sound');
   });
 
   it('offers no × on a piece’s own outputs', () => {

@@ -25,6 +25,11 @@ export interface MatrixRow {
    * that plays along on some parts alone says so (Jambot's bass, pad and stab, its keys' row: false).
    */
   readonly playable?: boolean;
+  /**
+   * Whether the built-in (this device's own sound, `BUILT_IN`) can play it: by default a voice or a kit can. A row
+   * heard here through another (Jambot's keys, through the part they play) says false, and its crossing is a dash.
+   */
+  readonly builtIn?: boolean;
 }
 
 /**

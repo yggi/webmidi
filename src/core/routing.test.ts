@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { fakeAccess, fakeConnection, fakeInput, fakePort } from './fixtures';
 import type { PortAccess } from './port';
-import { adoptPorts, connectMidi, portsMessage, type ChosenPorts } from './routing';
+import { adoptPorts, connectMidi, outputNow, portsMessage, type ChosenPorts } from './routing';
+import { BUILT_IN } from './setups';
 
 const chosen = (out = 'none', outName = '', inp = 'none', inName = ''): ChosenPorts => ({ outPortId: out, outPortName: outName, inPortId: inp, inPortName: inName, outPort: null });
 
@@ -16,6 +17,14 @@ async function connect(access: ReturnType<typeof fakeAccess>, settings: ChosenPo
   live = result.access;
   return result;
 }
+
+describe('outputNow', () => {
+  it('gives the built-in no port, even where a port bears its id', () => {
+    const access = fakeConnection(fakeAccess([], [fakePort('builtin', 'Builtin')]));
+    expect(outputNow(access, BUILT_IN)).toBeNull();
+    expect(outputNow(access, { id: 'builtin', name: 'Builtin' })).toBeNull();
+  });
+});
 
 describe('adoptPorts: a port replugged under another id', () => {
   it('goes by name, and with two ports of one name the first listed is taken', () => {

@@ -10,6 +10,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
+## v0.4.0 — 2026-11-08
+
+The built-in as an output (decision 004): this device's own sound is a column of the matrix, kept in the setup, so the frontends' "play the built-in" switches dissolve into it. A setup's outputs can now include one that is no device, which breaks a frontend's code that sends to, numbers or counts them, so it is a minor version: the migration is under *Changed*. Nothing on the wire changes.
+
+### Added
+- **The built-in, this device's own sound, as an output of a setup** (decision 004): `BUILT_IN`, the matrix's first column where the frontend gives it a label (`PatchMatrix`'s `builtIn`), its crossings the rows it plays (`HEARD`, toggled in place, or shown only with `builtIn.rows: false`), added with *+ <label>* hearing every row it can play and removed by its × like any output. `withBuiltIn`, `hasBuiltIn`, `builtInHears`, `isBuiltIn`, `hardwareOutputs`; `MatrixRow.builtIn: false` for a row heard through another. Kept in the setup, so a setup can be MIDI only; read back once, first. Nothing on the wire changes: it sends no MIDI.
+
+### Changed
+- **A setup's outputs can include the built-in, which is no device**, so this breaks a frontend's code at its next pin: a frontend that sends to, numbers or counts a setup's outputs takes `hardwareOutputs(setup)`. Core already leaves it out where it should: `forwardsOf` sends it nothing, `outputNow` gives it no port, `fit` doesn't count it, `withClock` and `chooseDevice` leave it as it is, and the matrix numbers the outputs that send MIDI from 1 without it, so a piece's MIDI cards name the same slots; an output added takes its key among them too (`addOutput`), so the built-in beside them changes no key.
+
 ## v0.3.1 — 2026-11-08
 
 A fix found moving Cell studio onto v0.3.0: an output's × stays on its head however wide the matrix. Nothing on the wire changes and nothing breaks a frontend's code, so it is a patch.

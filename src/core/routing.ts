@@ -2,6 +2,7 @@
 // @ 8cdb6b8 (adoptPorts, connectMidi, portsMessage). The connection is structural (`PortAccess`), not Web MIDI's class.
 
 import type { MidiPort, PortAccess, PortOption } from './port';
+import { isBuiltIn } from './setups';
 
 /** The ports chosen, as the settings keep them (by id and name; `'none'`, or for the input `'all'`), and the live output they resolve to. */
 export interface ChosenPorts {
@@ -16,9 +17,12 @@ export interface ChosenPorts {
 const idNow = (ports: readonly PortOption[], id: string, name: string): string =>
   id === 'none' || id === 'all' || ports.some((p) => p.id === id) ? id : (ports.find((p) => name && p.name === name)?.id ?? id);
 
-/** The live output a port chosen resolves to now (by id, else by name: see `idNow`), or null: none chosen, or not plugged in. */
+/**
+ * The live output a port chosen resolves to now (by id, else by name: see `idNow`), or null: none chosen, the built-in
+ * (no port: `BUILT_IN`), or not plugged in.
+ */
 export function outputNow(access: Pick<PortAccess, 'outputs' | 'outputPort'>, chosen: PortOption): MidiPort | null {
-  if (chosen.id === 'none') return null;
+  if (chosen.id === 'none' || isBuiltIn(chosen)) return null;
   return access.outputPort(idNow(access.outputs, chosen.id, chosen.name));
 }
 

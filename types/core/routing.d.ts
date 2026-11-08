@@ -7,7 +7,10 @@ export interface ChosenPorts {
     inPortName: string;
     outPort: MidiPort | null;
 }
-/** The live output a port chosen resolves to now (by id, else by name: see `idNow`), or null: none chosen, or not plugged in. */
+/**
+ * The live output a port chosen resolves to now (by id, else by name: see `idNow`), or null: none chosen, the built-in
+ * (no port: `BUILT_IN`), or not plugged in.
+ */
 export declare function outputNow(access: Pick<PortAccess, 'outputs' | 'outputPort'>, chosen: PortOption): MidiPort | null;
 /**
  * Adopt the ports chosen from the connection as it is now: the output by its id (or its name: see `idNow`), none if it
