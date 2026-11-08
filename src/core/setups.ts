@@ -392,7 +392,8 @@ export function withCrossing(book: SetupBook, context: string, row: string, outp
 /** An output added to the setup in use, under a key of its own: its key, and the book. */
 export function addOutput(book: SetupBook, device: PortOption = NO_DEVICE): { book: SetupBook; key: string } {
   const outputs = activeSetup(book).outputs;
-  let n = outputs.length + 1;
+  // (numbered among the outputs that send MIDI: the built-in beside them changes no key)
+  let n = hardwareOutputs(activeSetup(book)).length + 1;
   while (outputs.some((o) => o.key === `o${n}`)) n++;
   const key = `o${n}`;
   return { book: withActive(book, (s) => ({ ...s, outputs: [...s.outputs, { key, id: device.id, name: device.name }] })), key };

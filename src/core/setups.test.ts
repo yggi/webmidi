@@ -428,6 +428,12 @@ describe('the built-in (this device’s own sound) as an output', () => {
     expect(withBuiltIn(off, false)).toBe(off);
   });
 
+  it('changes no key an output added takes: they are numbered among the outputs that send MIDI', () => {
+    const { key } = addOutput(withBuiltIn(home(), true), { id: 'out-3', name: 'TD-3' });
+    expect(key).toBe('o3');
+    expect(addOutput(withBuiltIn(newBook(), true)).key).toBe('o1');
+  });
+
   it('is no device: not counted in a setup’s fit, never sent clock, never given a port, and not among the outputs that send MIDI', () => {
     const book = withBuiltIn(home(), true);
     const setup = activeSetup(book);
