@@ -16,6 +16,11 @@
     activeSetup,
     addOutput,
     ANY_INPUT,
+    hardwareOutputs,
+    hasBuiltIn,
+    HEARD,
+    isBuiltIn,
+    withBuiltIn,
     removeOutput,
     AS_PLAYED,
     inputRow,
@@ -26,6 +31,7 @@
     withProfile,
     type Crossing,
     type SetupBook,
+    type SetupOutput,
   } from '../core/setups';
   import ChannelPicker from './ChannelPicker.svelte';
   import { channelHue, clamp } from './channels';
@@ -56,13 +62,40 @@
     locked?: boolean;
     /** Whether the clock row is shown: a frontend with no clock to send passes false. */
     clock?: boolean;
+    /**
+     * This device's own sound as a column (`BUILT_IN`), first: what the frontend calls it ("Synth"), and whether its
+     * crossings are edited here, row by row (`rows`, by default; false: shown as the frontend wrote them in `book`, the
+     * column itself added and removed). None (standalone): no such column, and none offered.
+     */
+    builtIn?: { readonly label: string; readonly rows?: boolean } | null;
     onchange: (book: SetupBook) => void;
     onselect?: (key: string) => void;
   }
 
-  let { book, context, rows, inputs = [], outputs, heardBy = null, preset = null, selected, lit, locked = false, clock = true, onchange, onselect }: Props = $props();
+  let {
+    book,
+    context,
+    rows,
+    inputs = [],
+    outputs,
+    heardBy = null,
+    preset = null,
+    selected,
+    lit,
+    locked = false,
+    clock = true,
+    builtIn = null,
+    onchange,
+    onselect,
+  }: Props = $props();
 
   const setup = $derived(activeSetup(book));
+  /** The columns: the built-in first where the frontend has one, then the outputs that send MIDI. */
+  const columns = $derived(builtIn ? setup.outputs : hardwareOutputs(setup));
+  /** An output's number, counting the outputs that send MIDI (a piece's MIDI cards name them so); the built-in has none. */
+  const slotOf = (o: SetupOutput) => hardwareOutputs(setup).findIndex((h) => h.key === o.key) + 1;
+  /** The rows the built-in can play: the frontend's voices and kits, but those that say it can't (`builtIn: false`). */
+  const audible = (r: MatrixRow) => (r.kind === 'voice' || r.kind === 'kit') && r.builtIn !== false;
   const routes = $derived(Object.hasOwn(setup.routes, context) ? setup.routes[context]! : {});
   let showEmpty = $state(false);
   const empties = $derived(rows.filter((r) => r.kind === 'empty').length);
@@ -72,7 +105,7 @@
   );
   const crossing = (row: string, key: string): Crossing | undefined => (Object.hasOwn(routes, row) && Object.hasOwn(routes[row]!, key) ? routes[row]![key] : undefined);
   const kitHere = (key: string) => rows.some((r) => r.kind === 'kit' && crossing(r.id, key) !== undefined);
-  const isPlugged = (o: PortOption) => o.id !== 'none' && outputs.some((p) => p.id === o.id || (!!o.name && p.name === o.name));
+  const isPlugged = (o: PortOption) => isBuiltIn(o) || (o.id !== 'none' && outputs.some((p) => p.id === o.id || (!!o.name && p.name === o.name)));
   const spare = $derived(outputs.filter((p) => !setup.outputs.some((o) => o.id === p.id || (!!o.name && o.name === p.name))));
   /** The rows an input can play: the frontend's voices and kits, but those it says can't be played (`playable: false`). */
   const playable = $derived(rows.filter((r) => r.playable ?? (r.kind === 'voice' || r.kind === 'kit')));
@@ -122,6 +155,20 @@
     if (target) onchange(withPlays(book, row, target.role ? { row: target.id, role: target.role } : { row: target.id }));
   }
 
+  /** The built-in added, hearing every row it can play: as the frontend's switch did, on. */
+  function addBuiltIn() {
+    onchange(withBuiltIn(book, true, { [context]: rows.filter(audible).map((r) => r.id) }));
+  }
+
+  /** What an input's row says in the built-in's column: the row it plays there through, or that it isn't heard. */
+  function viaText(row: string): string {
+    const value = playsValue(row);
+    if (value === 'none') return 'not heard';
+    if (value === 'default') return 'as default';
+    if (value === '') return everyInput === 'none' ? 'not heard' : `as ${everyInput}`;
+    return `as ${playable.find((r) => r.id === value)?.label ?? value}`;
+  }
+
   function add() {
     const port = spare[0];
     if (!port) return;
@@ -143,7 +190,7 @@
     onchange(withProfile(book, name, { drums }));
   }
 
-  const outLabel = (o: { id: string; name: string }) => (o.id === 'none' ? 'No device' : o.name || o.id);
+  const outLabel = (o: { id: string; name: string }) => (isBuiltIn(o) ? (builtIn?.label ?? 'Built-in') : o.id === 'none' ? 'No device' : o.name || o.id);
 </script>
 
 <div class="wm-matrix">
@@ -152,13 +199,14 @@
       <thead>
         <tr>
           <th scope="col"><span class="sr">Source</span></th>
-          {#each setup.outputs as o, i (o.key)}
+          {#each columns as o (o.key)}
             {@const profile = profileOf(book, o.name)}
             {@const here = isPlugged(o)}
+            {@const slot = isBuiltIn(o) ? 'BUILT-IN' : `OUT ${slotOf(o)}`}
             <th scope="col">
               {#if removing === o.key}
-                <div class="col asking" role="group" aria-label="Remove OUT {i + 1}?">
-                  <span class="slot">OUT {i + 1}</span>
+                <div class="col asking" role="group" aria-label="Remove {slot}?">
+                  <span class="slot">{slot}</span>
                   <span class="name">Remove {outLabel(o)}?</span>
                   <span class="ask">
                     <button type="button" class="danger" onclick={() => remove(o.key)}>Remove</button>
@@ -170,20 +218,22 @@
                   <button
                     type="button"
                     class="col"
+                    class:builtin={isBuiltIn(o)}
                     class:absent={o.id !== 'none' && !here}
                     aria-pressed={selected === o.key}
                     onclick={() => onselect?.(o.key)}
                     title="{outLabel(o)}: its settings"
                   >
-                    <span class="top"><span class="led" class:on={here} aria-hidden="true"></span><span class="slot">OUT {i + 1}</span></span>
+                    <span class="top"><span class="led" class:on={here} aria-hidden="true"></span><span class="slot">{slot}</span></span>
                     <span class="name">{outLabel(o)}</span>
                     <span class="facts">
+                      {#if isBuiltIn(o)}<span class="tag">This device</span>{/if}
                       {#if o.id !== 'none' && !here}<span class="tag gone">Not plugged in</span>{/if}
-                      {#if o.id !== 'none' && profile.mpe}<span class="tag">MPE</span>{/if}
+                      {#if o.id !== 'none' && !isBuiltIn(o) && profile.mpe}<span class="tag">MPE</span>{/if}
                     </span>
                   </button>
                   {#if removable}
-                    <button type="button" class="x" aria-label="Remove OUT {i + 1}, {outLabel(o)}" title="Remove this output" onclick={() => (removing = o.key)}>×</button>
+                    <button type="button" class="x" aria-label="Remove {slot}, {outLabel(o)}" title="Remove this output" onclick={() => (removing = o.key)}>×</button>
                   {/if}
                 </span>
               {/if}
@@ -191,12 +241,14 @@
           {/each}
           {#if !locked}
             <th scope="col"
-              ><button
-                type="button"
-                class="add"
-                onclick={add}
-                disabled={!spare.length}
-                title={spare.length ? `Add ${outLabel(spare[0]!)}` : 'Every output plugged in is in this setup'}>+ Output</button
+              ><span class="adds"
+                ><button
+                  type="button"
+                  class="add"
+                  onclick={add}
+                  disabled={!spare.length}
+                  title={spare.length ? `Add ${outLabel(spare[0]!)}` : 'Every output plugged in is in this setup'}>+ Output</button
+                >{#if builtIn && !hasBuiltIn(setup)}<button type="button" class="add" onclick={addBuiltIn} title="Play on this device too">+ {builtIn.label}</button>{/if}</span
               ></th
             >
           {/if}
@@ -206,12 +258,16 @@
         {#if clock}
           <tr class="clock">
             <th scope="row"><span class="rowname"><span class="label">Clock</span><span class="tags"><span class="sub">24 ppq</span></span></span></th>
-            {#each setup.outputs as o (o.key)}
+            {#each columns as o (o.key)}
               {@const on = setup.clock.includes(o.key)}
-              <td>
-                <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
-                  {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
-                </button>
+              <td class:here={isBuiltIn(o)}>
+                {#if isBuiltIn(o)}
+                  <span class="via" title="This device keeps its own time">—</span>
+                {:else}
+                  <button type="button" class="jack" aria-pressed={on} aria-label="Clock to {outLabel(o)}" onclick={() => onchange(withClock(book, o.key, !on))}>
+                    {#if on}<span class="chip keep">CLK</span>{:else}<span class="hole"></span>{/if}
+                  </button>
+                {/if}
               </td>
             {/each}
             {#if !locked}<td></td>{/if}
@@ -246,10 +302,32 @@
                 {/if}
               </span>
             </th>
-            {#each setup.outputs as o (o.key)}
+            {#each columns as o (o.key)}
               {@const value = crossing(row.id, o.key)}
-              <td>
-                {#if row.kind === 'member'}
+              <td class:here={isBuiltIn(o)}>
+                {#if isBuiltIn(o)}
+                  {#if row.kind === 'input'}
+                    <span class="via" title="An input plays here through the row it plays">{viaText(row.id)}</span>
+                  {:else if audible(row)}
+                    {#if builtIn?.rows !== false}
+                      <button
+                        type="button"
+                        class="jack"
+                        aria-pressed={value !== undefined}
+                        aria-label="{row.label} to {outLabel(o)}: {value === undefined ? 'not heard' : 'heard'}"
+                        onclick={() => onchange(withCrossing(book, context, row.id, o.key, value === undefined ? HEARD : undefined))}
+                      >
+                        {#if value !== undefined}<span class="chip on" class:lit={lit?.has(`${row.id}|${o.key}`)}>ON</span>{:else}<span class="hole"></span>{/if}
+                      </button>
+                    {:else}
+                      <span class="jack" aria-label="{row.label} to {outLabel(o)}: {value === undefined ? 'not heard' : 'heard'}">
+                        {#if value !== undefined}<span class="chip on">ON</span>{:else}<span class="hole"></span>{/if}
+                      </span>
+                    {/if}
+                  {:else if row.kind !== 'member' && row.kind !== 'empty'}
+                    <span class="via" title="Heard here through the part it plays">—</span>
+                  {/if}
+                {:else if row.kind === 'member'}
                   {#if kitHere(o.key) && row.note !== undefined}
                     {@const n = deviceNote(profileOf(book, o.name).drums, row.note)}
                     {@const gm = row.note}
@@ -441,6 +519,30 @@
   .ask .danger {
     border-color: var(--_warn);
     color: var(--_warn);
+  }
+  .col.builtin {
+    border-color: var(--_accent);
+    background: color-mix(in oklab, var(--_accent) 12%, var(--_panel));
+  }
+  .col.builtin .slot {
+    color: var(--_accent);
+  }
+  td.here {
+    background: color-mix(in oklab, var(--_accent) 6%, transparent);
+  }
+  .chip.on {
+    background: var(--_accent);
+    color: var(--wm-chip-on-ink, #ffffff);
+    font-size: 12px;
+  }
+  .via {
+    color: var(--_muted);
+    font-size: 12px;
+    font-style: italic;
+  }
+  .adds {
+    display: flex;
+    gap: 6px;
   }
   .col[aria-pressed='true'] {
     border-color: var(--_accent);

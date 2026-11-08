@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { forwardsAsPlayed, forwardsOf, forwardsOfInput } from './forward';
-import { addOutput, ANY_INPUT, AS_PLAYED, chooseDevice, inputRow, newBook, withCrossing, withPlays, type SetupBook } from './setups';
+import { addOutput, ANY_INPUT, AS_PLAYED, BUILT_IN, chooseDevice, HEARD, inputRow, newBook, withBuiltIn, withCrossing, withPlays, type SetupBook } from './setups';
 
 const keys = { id: 'in-1', name: 'Keys' };
 const row = inputRow(keys);
@@ -36,6 +36,11 @@ describe('forwardsOf (yggi/webmidi#32)', () => {
     expect(forwardsOf(b, 'band', 'in:Pads', [0x90, 60, 100])).toEqual([]);
     expect(forwardsOf(b, 'piece:a', row, [0x90, 60, 100])).toEqual([]);
     expect(forwardsOf(b, 'band', '__proto__', [0x90, 60, 100])).toEqual([]);
+  });
+
+  it('sends nothing to the built-in, which plays a row but takes no MIDI', () => {
+    const b = withCrossing(withBuiltIn(book(), true), 'band', row, BUILT_IN.key, HEARD);
+    expect(forwardsOf(b, 'band', row, [0x90, 60, 100]).map((f) => f.output)).toEqual(['o1', 'o2']);
   });
 
   it('takes the bytes as Web MIDI gives them (a Uint8Array)', () => {

@@ -63,7 +63,10 @@ export interface Setup {
   readonly name: string;
   /** A custom variant's: the id of the named setup it was changed from. A named setup has none. */
   readonly base?: string;
-  /** At least one; an output with id `'none'` is a slot with no device. */
+  /**
+   * At least one; an output with id `'none'` is a slot with no device, and `BUILT_IN` (first, once at most) is this
+   * device's own sound, which sends no MIDI.
+   */
   readonly outputs: readonly SetupOutput[];
   /**
    * What each input plays, by its row (`in:<name>`): one mechanism for whether it is heard and what it drives, the same
@@ -104,6 +107,22 @@ export const ANY_INPUT = 'in:*';
 export const DEFAULT_PROFILE: DeviceProfile = { drums: {}, bend: 2, mpe: null, latency: 0 };
 
 const NO_DEVICE: PortOption = { id: 'none', name: '' };
+
+/**
+ * This device's own sound (a synth, the built-in voices), as an output of a setup: a column of the matrix like a
+ * device's, whose crossings say which of the frontend's rows it plays (`HEARD`). It has no port, no channels, no clock
+ * and no profile, sends no MIDI (`hardwareOutputs` leaves it out) and isn't counted as a device a setup needs
+ * (`fit`). Kept in the setup, so a setup can be MIDI only, or not; first, so a narrow matrix keeps it in view.
+ */
+export const BUILT_IN: SetupOutput = { key: 'builtin', id: 'builtin', name: '' };
+/** A row's crossing of the built-in: it plays there (any crossing does: the built-in has no channels). */
+export const HEARD = 1;
+/** Whether an output is the built-in. */
+export const isBuiltIn = (o: { readonly id: string }): boolean => o.id === BUILT_IN.id;
+/** Whether a setup has the built-in. */
+export const hasBuiltIn = (setup: Setup): boolean => setup.outputs.some(isBuiltIn);
+/** A setup's outputs that send MIDI: all but the built-in. */
+export const hardwareOutputs = (setup: Setup): SetupOutput[] => setup.outputs.filter((o) => !isBuiltIn(o));
 
 /** What a custom variant is called after its named setup: "Home - custom". */
 export const CUSTOM = ' - custom';
@@ -165,8 +184,25 @@ function readSetup(v: unknown): Setup | null {
       const p = port(o);
       if (p && isRecord(o) && typeof o.key === 'string' && o.key && !outputs.some((c) => c.key === o.key)) outputs.push({ key: o.key, ...p });
     }
+  // the built-in once, first, under its own key: its crossings kept under it, a second one dropped with its crossings
+  const builtIn = outputs.filter(isBuiltIn).map((o) => o.key);
+  const renamed = (key: string) => (key === builtIn[0] ? BUILT_IN.key : key);
+  const gone = new Set(builtIn.slice(1));
+  if (builtIn.length) outputs.splice(0, outputs.length, BUILT_IN, ...outputs.filter((o) => !isBuiltIn(o) && o.key !== BUILT_IN.key));
   const plays = isRecord(v.plays) ? playsRead(v.plays) : heardRead(v.heard);
-  const contexts = isRecord(v.routes) ? Object.fromEntries(Object.entries(v.routes).map(([c, r]) => [c, routes(r)])) : {};
+  const contexts = isRecord(v.routes)
+    ? Object.fromEntries(
+        Object.entries(v.routes).map(([c, r]) => [
+          c,
+          Object.fromEntries(
+            Object.entries(routes(r)).flatMap(([row, crossings]) => {
+              const kept = Object.fromEntries(Object.entries(crossings).flatMap(([k, n]) => (gone.has(k) ? [] : [[renamed(k), n] as const])));
+              return Object.keys(kept).length ? [[row, kept] as const] : [];
+            }),
+          ),
+        ]),
+      )
+    : {};
   return {
     id: v.id,
     name: typeof v.name === 'string' && v.name.trim() ? v.name : v.id,
@@ -174,7 +210,7 @@ function readSetup(v: unknown): Setup | null {
     outputs: outputs.length ? outputs : [{ key: 'o1', ...NO_DEVICE }],
     plays,
     routes: contexts,
-    clock: Array.isArray(v.clock) ? [...new Set(v.clock.filter((k): k is string => typeof k === 'string' && outputs.some((o) => o.key === k)))] : [],
+    clock: Array.isArray(v.clock) ? [...new Set(v.clock.filter((k): k is string => typeof k === 'string' && outputs.some((o) => o.key === k && !isBuiltIn(o))))] : [],
   };
 }
 
@@ -265,7 +301,7 @@ const isPlugged = (o: PortOption, plugged: readonly PortOption[]) => plugged.som
 
 /** How many of a setup's devices are plugged in, of how many it has (slots with no device not counted). */
 export function fit(setup: Setup, plugged: readonly PortOption[]): { plugged: number; of: number } {
-  const devices = setup.outputs.filter((o) => o.id !== 'none');
+  const devices = setup.outputs.filter((o) => o.id !== 'none' && !isBuiltIn(o));
   return { plugged: devices.filter((o) => isPlugged(o, plugged)).length, of: devices.length };
 }
 
@@ -362,8 +398,9 @@ export function addOutput(book: SetupBook, device: PortOption = NO_DEVICE): { bo
   return { book: withActive(book, (s) => ({ ...s, outputs: [...s.outputs, { key, id: device.id, name: device.name }] })), key };
 }
 
-/** An output given another device: its routes stay, under its key. */
+/** An output given another device: its routes stay, under its key. The built-in is no device's: the book as it is. */
 export function chooseDevice(book: SetupBook, key: string, device: PortOption): SetupBook {
+  if (key === BUILT_IN.key || isBuiltIn(device)) return book;
   return withActive(book, (s) => ({ ...s, outputs: s.outputs.map((o) => (o.key === key ? { key, id: device.id, name: device.name } : o)) }));
 }
 
@@ -374,26 +411,51 @@ export function chooseDevice(book: SetupBook, key: string, device: PortOption): 
 export function removeOutput(book: SetupBook, key: string): SetupBook {
   return withActive(book, (s) => {
     if (!s.outputs.some((o) => o.key === key)) return s;
+    // (the built-in alone: an output with no device takes its place, under a key of its own)
+    if (s.outputs.length < 2 && key === BUILT_IN.key) return { ...s, outputs: [{ key: 'o1', ...NO_DEVICE }], clock: [], routes: stripped(s.routes, key) };
     if (s.outputs.length < 2) return s.outputs[0]!.id === 'none' ? s : { ...s, outputs: [{ key, ...NO_DEVICE }] };
-    const strip = (r: Routes): Routes =>
-      Object.fromEntries(
-        Object.entries(r)
-          .map(([row, c]) => [row, Object.fromEntries(Object.entries(c).filter(([k]) => k !== key))] as const)
-          .filter(([, c]) => Object.keys(c).length),
-      );
-    return {
-      ...s,
-      outputs: s.outputs.filter((o) => o.key !== key),
-      clock: s.clock.filter((k) => k !== key),
-      routes: Object.fromEntries(Object.entries(s.routes).map(([c, r]) => [c, strip(r)])),
-    };
+    return { ...s, outputs: s.outputs.filter((o) => o.key !== key), clock: s.clock.filter((k) => k !== key), routes: stripped(s.routes, key) };
   });
 }
+
+/** Every context's routes with an output's crossings taken out, rows left with none dropped. */
+const stripped = (routes: Readonly<Record<string, Routes>>, key: string): Record<string, Routes> =>
+  Object.fromEntries(
+    Object.entries(routes).map(([c, r]) => [
+      c,
+      Object.fromEntries(
+        Object.entries(r)
+          .map(([row, crossings]) => [row, Object.fromEntries(Object.entries(crossings).filter(([k]) => k !== key))] as const)
+          .filter(([, crossings]) => Object.keys(crossings).length),
+      ),
+    ]),
+  );
+
+/**
+ * The built-in put in the setup in use, first, hearing the rows given by context (`{ band: ['lead', 'bass'] }`), or
+ * taken out with its crossings (`on` false). The book as it is when it already is so.
+ */
+export function withBuiltIn(book: SetupBook, on: boolean, heard: Readonly<Record<string, readonly string[]>> = {}): SetupBook {
+  const setup = activeSetup(book);
+  if (hasBuiltIn(setup) === on) return book;
+  if (!on) return removeOutput(book, BUILT_IN.key);
+  // (a setup of one output with no device: the built-in takes that slot's place, as a first visit's would)
+  const lone =
+    setup.outputs.length === 1 &&
+    setup.outputs[0]!.id === 'none' &&
+    !Object.values(setup.routes).some((r) => Object.values(r).some((c) => Object.hasOwn(c, setup.outputs[0]!.key)));
+  let next = withActive(book, (s) => ({ ...s, outputs: [BUILT_IN, ...(lone ? [] : s.outputs)] }));
+  for (const [context, rows] of Object.entries(heard)) for (const row of rows) next = withCrossing(next, context, row, BUILT_IN.key, HEARD);
+  return next;
+}
+
+/** Whether the built-in of the setup in use plays a row in a context: it is there, and the row crosses it. */
+export const builtInHears = (book: SetupBook, context: string, row: string): boolean => crossingOf(book, context, row, BUILT_IN.key) !== undefined;
 
 /** An output of the setup in use sent clock, or not (an output it doesn't have: the book as it is). */
 export function withClock(book: SetupBook, key: string, on: boolean): SetupBook {
   return withActive(book, (s) =>
-    !s.outputs.some((o) => o.key === key) || s.clock.includes(key) === on ? s : { ...s, clock: on ? [...s.clock, key] : s.clock.filter((k) => k !== key) },
+    !s.outputs.some((o) => o.key === key && !isBuiltIn(o)) || s.clock.includes(key) === on ? s : { ...s, clock: on ? [...s.clock, key] : s.clock.filter((k) => k !== key) },
   );
 }
 

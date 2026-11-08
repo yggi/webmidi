@@ -34,7 +34,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 
 - `MidiStatus.svelte` the connection: a light, the message, Connect, or Refresh ports and All notes off; the setup's devices missing
 - `DeviceInspector.svelte` one output: its port (one not plugged in kept), its device's profile (clock, drum map, bend, MPE, latency, forgetting it), the channels routed to it, test note, notes off, remove; ports under one name told apart by their place
-- `PatchMatrix.svelte` the patch: the clock first, then the frontend's rows (`rows.ts`, `MatrixRow`) and the inputs (`inputRows`, one row per name) down, the outputs across, each head with its × to remove it; a jack opens `ChannelPicker.svelte`; kit members' notes by each drum map; Heard per input; it takes the book and calls back a new one
+- `PatchMatrix.svelte` the patch: the clock first, then the frontend's rows (`rows.ts`, `MatrixRow`) and the inputs (`inputRows`, one row per name) down, the outputs across (the built-in first, where the frontend has one: decision 004), each head with its × to remove it; a jack opens `ChannelPicker.svelte`; kit members' notes by each drum map; Heard per input; it takes the book and calls back a new one
 - `SetupPicker.svelte` the setups as chips (devices plugged in, the custom variant marked), Save… (overwrite, save as new, discard), Manage… (rename or remove the named setup in use, a variant's too; the last removed leaves a blank one), the setup suggested, export and import
 - `ChannelMeter.svelte` the 16 channels of an output, used and sounding; `channels.ts` a channel's hue, the same in every component
 - `ui.svelte.test.ts` the components mounted in jsdom (`// @vitest-environment jsdom`; Svelte's browser build)

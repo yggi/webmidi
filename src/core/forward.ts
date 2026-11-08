@@ -4,7 +4,7 @@
 
 import type { PortOption } from './port';
 import { isHeard, playsOf, type PlayableRow } from './plays';
-import { activeSetup, ANY_INPUT, AS_PLAYED, inputRow, type SetupBook } from './setups';
+import { activeSetup, ANY_INPUT, AS_PLAYED, BUILT_IN, inputRow, type SetupBook } from './setups';
 
 /** A message to send to one output of the setup in use, by its key. */
 export interface Forward {
@@ -15,7 +15,7 @@ export interface Forward {
 /**
  * The messages a raw message on `row` sends, by the setup in use's crossings of that row in `context`: a channel voice
  * message (status 0x80–0xEF) once to each output crossed, its channel replaced by the crossing's (1–16), or kept as it
- * came (`AS_PLAYED`). Nothing else is forwarded: a system message (0xF0–0xFF: SysEx, the clock, Start and Stop, which are
+ * came (`AS_PLAYED`); the built-in, which takes no MIDI, none. Nothing else is forwarded: a system message (0xF0–0xFF: SysEx, the clock, Start and Stop, which are
  * the clock row's and a device's own) and a message with no status byte (Web MIDI delivers whole messages).
  */
 export function forwardsOf(book: SetupBook, context: string, row: string, data: ArrayLike<number>): Forward[] {
@@ -24,10 +24,17 @@ export function forwardsOf(book: SetupBook, context: string, row: string, data: 
   const routes = activeSetup(book).routes;
   const crossings = Object.hasOwn(routes, context) && Object.hasOwn(routes[context]!, row) ? routes[context]![row]! : {};
   const bytes = Array.from(data);
-  return Object.entries(crossings).map(([output, channel]) => ({
-    output,
-    data: channel === AS_PLAYED ? bytes : [(status & 0xf0) | (channel - 1), ...bytes.slice(1)],
-  }));
+  // (the built-in plays a row, and takes no MIDI)
+  return Object.entries(crossings).flatMap(([output, channel]) =>
+    output === BUILT_IN.key
+      ? []
+      : [
+          {
+            output,
+            data: channel === AS_PLAYED ? bytes : [(status & 0xf0) | (channel - 1), ...bytes.slice(1)],
+          },
+        ],
+  );
 }
 
 /**
