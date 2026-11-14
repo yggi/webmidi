@@ -1,0 +1,478 @@
+<title>webmidi Control Surfaces</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: a rack, as the patchbay's mockup. The page being played on the left (eight strips from one definition),
+     the inspector and the wire on the right, the patch under them; on a phone the right column drops under the page. */
+  :root {
+    --bg: #eceef2;
+    --panel: #f8f9fb;
+    --panel-2: #e2e5eb;
+    --line: #c9ced8;
+    --ink: #1c2029;
+    --muted: #5a6172;
+    --faint: #8b91a0;
+    --accent: #2f62d8;
+    --live: #1f9d55;
+    --warn: #c47a12;
+    --mute: #c2413b;
+    --cap: #2a2f3a;
+    --shadow: 0 1px 0 rgb(255 255 255 / 0.7) inset, 0 1px 2px rgb(20 24 34 / 0.08);
+    --font-ui: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --font-label: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+    --font-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --r: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15171c; --panel: #1d2027; --panel-2: #262a33; --line: #343945; --ink: #e9ebf0; --muted: #a2a8b6;
+      --faint: #6c7282; --accent: #7aa2ff; --live: #3fd17f; --warn: #f0a63a; --mute: #f0726b; --cap: #d5d9e2;
+      --shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 1px 2px rgb(0 0 0 / 0.4);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15171c; --panel: #1d2027; --panel-2: #262a33; --line: #343945; --ink: #e9ebf0; --muted: #a2a8b6;
+    --faint: #6c7282; --accent: #7aa2ff; --live: #3fd17f; --warn: #f0a63a; --mute: #f0726b; --cap: #d5d9e2;
+    --shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 1px 2px rgb(0 0 0 / 0.4);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink); font: 15px/1.45 var(--font-ui);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 20px 40px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 14px; }
+  h1, h2, h3, p { margin: 0; }
+  h1, h2 { text-wrap: balance; }
+  button, select, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :is(button, select, input, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn {
+    min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r);
+    background: var(--panel); font: 600 14px var(--font-label); letter-spacing: 0.02em; box-shadow: var(--shadow);
+  }
+  .btn:hover { border-color: var(--faint); }
+
+  .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+  .head h1 { font: 700 26px/1.1 var(--font-label); letter-spacing: 0.01em; }
+  .head h1 small { display: block; font: 500 14px var(--font-ui); color: var(--muted); margin-top: 4px; }
+  .modes { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 3px; background: var(--panel-2); gap: 2px; }
+  .modes button { border: 0; background: transparent; padding: 6px 14px; border-radius: 6px; font: 600 14px var(--font-label); color: var(--muted); }
+  .modes button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+
+  .rack { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .rack { grid-template-columns: minmax(0, 1fr); } }
+  .side { display: grid; gap: 14px; min-width: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); min-width: 0; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 0; }
+  .card-head h2 { font: 700 15px var(--font-label); letter-spacing: 0.06em; text-transform: uppercase; }
+  .card-body { padding: 10px 14px 14px; display: grid; gap: 10px; }
+  .hint { color: var(--muted); font-size: 14px; }
+
+  /* the page: strips side by side, scrolling sideways in their own box when narrow */
+  #surface:fullscreen { border-radius: 0; display: grid; grid-template-rows: auto 1fr; background: var(--bg); }
+  #surface:fullscreen .strips { align-items: center; justify-content: center; }
+  .strips { display: flex; gap: 8px; padding: 12px 14px 16px; overflow-x: auto; touch-action: pan-x; }
+  .strip {
+    flex: 0 0 76px; display: grid; gap: 10px; justify-items: center; padding: 10px 6px; border-radius: 8px;
+    background: var(--panel-2); border: 1px solid var(--line);
+  }
+  .strip.master { margin-left: 8px; align-content: end; }
+  .strip > .num { font: 700 13px var(--font-num); color: var(--muted); }
+  .ctl { display: grid; gap: 4px; justify-items: center; border-radius: 6px; padding: 2px; outline-offset: 2px; }
+  .ctl .name { font: 600 11px/1 var(--font-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .ctl .cc { font: 500 10px/1 var(--font-num); color: var(--faint); }
+  .ctl .cc.bad { color: var(--mute); }
+  .ctl [role] { touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+  .knob {
+    --x: 0; width: 40px; height: 40px; border-radius: 50%; position: relative;
+    background: conic-gradient(from 225deg, var(--accent) calc(var(--x) * 270deg), var(--line) 0 270deg, transparent 0);
+  }
+  .knob::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: var(--panel); box-shadow: var(--shadow); }
+  .knob::after {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 2px; height: 13px; margin: -15px 0 0 -1px; background: var(--cap);
+    border-radius: 1px; transform-origin: 50% 15px; transform: rotate(calc(-135deg + var(--x) * 270deg));
+  }
+  .fader { --x: 0; width: 34px; height: 150px; position: relative; }
+  .fader::before { content: ""; position: absolute; left: 15px; width: 4px; top: 0; bottom: 0; border-radius: 2px; background: linear-gradient(to top, var(--accent) calc(var(--x) * 100%), var(--line) 0); }
+  .fader::after {
+    content: ""; position: absolute; left: 3px; width: 28px; height: 14px; border-radius: 3px; background: var(--cap);
+    bottom: calc(var(--x) * (100% - 14px)); box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  }
+  .switch {
+    width: 46px; height: 26px; border-radius: 5px; border: 1px solid var(--line); background: var(--panel);
+    font: 700 11px/24px var(--font-label); letter-spacing: 0.08em; text-align: center; color: var(--muted); cursor: pointer;
+  }
+  .switch[aria-checked="true"] { background: var(--mute); border-color: var(--mute); color: var(--panel); }
+  .moved { animation: moved 0.5s; }
+  @keyframes moved { from { box-shadow: 0 0 0 3px color-mix(in oklab, var(--live) 60%, transparent); } to { box-shadow: 0 0 0 3px transparent; } }
+  @media (prefers-reduced-motion: reduce) { .moved { animation: none; } }
+
+  /* edit mode: a control is chosen, not played; every instance of the one chosen is marked */
+  .editing .ctl { cursor: pointer; }
+  .editing .ctl [role] { pointer-events: none; }
+  .editing .ctl.same { outline: 1px dashed var(--accent); }
+  .editing .ctl.chosen { outline: 2px solid var(--accent); }
+
+  .field { display: grid; gap: 4px; }
+  .field > span { font: 600 12px/1 var(--font-label); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+  .field input, .field select { min-height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); min-width: 0; width: 100%; }
+  .field input.expr { font: 500 14px var(--font-num); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .note { font-size: 13.5px; color: var(--muted); padding: 8px 10px; border-radius: 6px; background: var(--panel-2); }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note.err { color: var(--mute); }
+
+  .log { margin: 0; padding: 0; list-style: none; font: 500 12.5px/1.7 var(--font-num); min-height: 128px; }
+  .log li { display: flex; gap: 10px; white-space: nowrap; overflow: hidden; }
+  .log .bytes { color: var(--ink); flex: none; }
+  .log .what { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .log .in .bytes { color: var(--live); }
+  .log .none { color: var(--faint); font-family: var(--font-ui); }
+
+  .matrix { overflow-x: auto; padding: 10px 14px 14px; }
+  table { border-collapse: separate; border-spacing: 4px; }
+  th, td { padding: 0; }
+  thead th { font: 600 14px/1.15 var(--font-label); text-align: left; padding: 8px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); min-width: 108px; }
+  tbody th { text-align: left; font: 600 14px var(--font-num); white-space: nowrap; padding-right: 12px; }
+  .is-page { border-color: var(--accent); color: var(--accent); }
+  tbody th.is-page { color: var(--accent); }
+  .tag { display: inline-block; font: 600 10px/1 var(--font-label); letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 5px; border-radius: 4px; background: var(--bg); color: var(--muted); margin-left: 4px; }
+  td { text-align: center; height: 34px; }
+  .jack { display: inline-block; min-width: 22px; height: 22px; border-radius: 11px; border: 1.5px solid var(--line); }
+  .jack.on { border: 0; padding: 0 9px; background: var(--accent); color: var(--panel); font: 700 12px/22px var(--font-num); }
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <h1>Control surfaces <small>A mockup: one page, an 8-channel mixer, built from a single strip repeated.</small></h1>
+    <div class="modes" role="group" aria-label="Mode">
+      <button id="mode-play" aria-pressed="true">Play</button>
+      <button id="mode-edit" aria-pressed="false">Edit</button>
+    </div>
+  </header>
+
+  <div class="rack">
+    <section class="card" id="surface">
+      <div class="card-head">
+        <h2>Page · DM-8 mixer</h2>
+        <button class="btn" id="full">Full screen</button>
+      </div>
+      <div class="strips" id="strips"></div>
+    </section>
+
+    <aside class="side">
+      <section class="card" id="inspector" hidden>
+        <div class="card-head"><h2>Control</h2></div>
+        <div class="card-body">
+          <p class="note" id="scope"></p>
+          <label class="field"><span>Label</span><input id="f-label" autocomplete="off"></label>
+          <label class="field"><span>Kind</span>
+            <select id="f-type"><option value="knob">Knob</option><option value="fader">Fader</option><option value="switch">Switch</option></select>
+          </label>
+          <label class="field"><span>Sends and receives: control change number</span><input id="f-cc" class="expr" autocomplete="off" spellcheck="false"></label>
+          <div class="pair">
+            <label class="field"><span>Value from</span><input id="f-lo" class="expr" type="number" min="0" max="127"></label>
+            <label class="field"><span>to</span><input id="f-hi" class="expr" type="number" min="0" max="127"></label>
+          </div>
+          <p class="note" id="resolved"></p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>On the wire</h2><button class="btn" id="feedback">Mixer moves a control</button></div>
+        <div class="card-body">
+          <ul class="log" id="log" aria-live="off"></ul>
+          <p class="hint">A control sends only when its number changes. What the mixer sends back moves the control and is not echoed.</p>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><h2>In the patch</h2><p class="hint">An active page is a row (what it sends) and a column (what it receives). The page names no port.</p></div>
+    <div class="matrix">
+      <table>
+        <thead><tr><td></td><th>DM-8</th><th>Minilogue xd</th><th class="is-page">DM-8 mixer <span class="tag">page</span></th></tr></thead>
+        <tbody>
+          <tr><th>Clock</th><td><span class="jack"></span></td><td><span class="jack on">●</span></td><td></td></tr>
+          <tr><th class="is-page">DM-8 mixer <span class="tag">page</span></th><td><span class="jack on">as sent</span></td><td><span class="jack"></span></td><td></td></tr>
+          <tr><th>in: DM-8</th><td><span class="jack"></span></td><td><span class="jack"></span></td><td><span class="jack on">●</span></td></tr>
+          <tr><th>in: KeyStep 37</th><td><span class="jack"></span></td><td><span class="jack on">1</span></td><td><span class="jack"></span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ---- the page, as its file would hold it: one strip, repeated over ch 1 … 8, and a control of its own ----
+  const page = {
+    channel: 1,
+    strip: {
+      repeat: { name: 'ch', from: 1, to: 8 },
+      controls: [
+        { id: 'high', type: 'knob', label: 'High', cc: '10 + ch', range: [0, 127] },
+        { id: 'mid', type: 'knob', label: 'Mid', cc: '20 + ch', range: [0, 127] },
+        { id: 'mute', type: 'switch', label: 'Mute', cc: '30 + ch', range: [0, 127] },
+        { id: 'level', type: 'fader', label: 'Level', cc: 'ch', range: [0, 127] },
+      ],
+    },
+    master: { id: 'master', type: 'fader', label: 'Main', cc: '40', range: [0, 127] },
+  };
+
+  // ---- expressions: parsed, never eval'ed; arithmetic and a fixed set of functions over the names in scope ----
+  const FNS = { min: Math.min, max: Math.max, round: Math.round, floor: Math.floor, clamp: (v, a, b) => Math.min(b, Math.max(a, v)) };
+  function compile(src, names) {
+    const tokens = [];
+    const re = /\s*(\d+(?:\.\d+)?|[a-z_]\w*|[-+*/%(),])/giy;
+    let at = 0;
+    for (let m; (m = re.exec(src)); at = re.lastIndex) tokens.push(m[1]);
+    if (src.slice(at).trim() || !tokens.length) throw new Error(tokens.length ? `Can't read “${src.slice(at).trim()}”.` : 'Give a number or an expression.');
+    let i = 0;
+    const eat = (t) => (tokens[i] === t ? (i++, true) : false);
+    const primary = () => {
+      const t = tokens[i++];
+      if (t === undefined) throw new Error('The expression ends too soon.');
+      if (/^\d/.test(t)) return () => Number(t);
+      if (t === '(') { const e = sum(); if (!eat(')')) throw new Error('A “)” is missing.'); return e; }
+      if (t === '-') { const e = primary(); return (env) => -e(env); }
+      if (!/^[a-z_]/i.test(t)) throw new Error(`“${t}” is out of place.`);
+      if (eat('(')) {
+        if (!Object.hasOwn(FNS, t)) throw new Error(`No function “${t}”. There are: ${Object.keys(FNS).join(', ')}.`);
+        const args = [];
+        if (!eat(')')) { do args.push(sum()); while (eat(',')); if (!eat(')')) throw new Error('A “)” is missing.'); }
+        return (env) => FNS[t](...args.map((a) => a(env)));
+      }
+      if (!names.includes(t)) throw new Error(`No name “${t}” here. In scope: ${names.join(', ') || 'none'}.`);
+      return (env) => env[t];
+    };
+    const binary = (next, ops) => () => {
+      let left = next();
+      while (Object.hasOwn(ops, tokens[i] ?? '')) { const op = ops[tokens[i++]], l = left, r = next(); left = (env) => op(l(env), r(env)); }
+      return left;
+    };
+    const product = binary(primary, { '*': (a, b) => a * b, '/': (a, b) => a / b, '%': (a, b) => a % b });
+    const sum = binary(product, { '+': (a, b) => a + b, '-': (a, b) => a - b });
+    const e = sum();
+    if (i < tokens.length) throw new Error(`“${tokens[i]}” is out of place.`);
+    return e;
+  }
+
+  // ---- instances: the strip once per ch; each control's number resolved in its instance's scope ----
+  const instances = () => {
+    const { name, from, to } = page.strip.repeat;
+    const list = [];
+    for (let v = from; v <= to; v++) for (const def of page.strip.controls) list.push({ def, key: `${def.id}@${v}`, scope: { [name]: v }, strip: v });
+    list.push({ def: page.master, key: 'master', scope: {}, strip: null });
+    return list;
+  };
+  const numberOf = (inst) => {
+    try {
+      const n = Math.round(compile(inst.def.cc, Object.keys(inst.scope))(inst.scope));
+      return Number.isFinite(n) && n >= 0 && n <= 127 ? { n } : { error: `${n} is not a controller number (0 to 127).` };
+    } catch (e) { return { error: e.message }; }
+  };
+  const wireOf = (inst, x) => Math.round(inst.def.range[0] + x * (inst.def.range[1] - inst.def.range[0]));
+
+  const values = new Map(); // key → x, 0 … 1
+  const sent = new Map(); // key → the last number put on the wire
+  const xOf = (key) => values.get(key) ?? 0;
+  for (const inst of instances()) values.set(inst.key, inst.def.type === 'fader' ? 0.72 : inst.def.type === 'knob' ? 0.5 : 0);
+
+  // ---- the wire ----
+  const hex = (b) => b.map((v) => v.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+  const where = (inst) => (inst.strip === null ? inst.def.label : `strip ${inst.strip} · ${inst.def.label}`);
+  const lines = [];
+  function log(dir, bytes, inst) {
+    lines.unshift({ dir, bytes, text: `${dir === 'in' ? '← ' : '→ '}CC ${bytes[1]} = ${bytes[2]}  ${where(inst)}` });
+    lines.length = Math.min(lines.length, 7);
+    const ul = document.getElementById('log');
+    ul.replaceChildren(...lines.map((l) => {
+      const li = document.createElement('li');
+      li.className = l.dir;
+      li.innerHTML = '<span class="bytes"></span><span class="what"></span>';
+      li.children[0].textContent = hex(l.bytes);
+      li.children[1].textContent = l.text;
+      return li;
+    }));
+  }
+  function send(inst) {
+    const num = numberOf(inst);
+    if (num.error) return;
+    const v = wireOf(inst, xOf(inst.key));
+    if (sent.get(inst.key) === v) return; // only when the number on the wire changes
+    sent.set(inst.key, v);
+    log('out', [0xb0 | (page.channel - 1), num.n, v], inst);
+  }
+
+  // ---- drawing ----
+  let editing = false;
+  let chosen = null; // { id, key }
+  const strips = document.getElementById('strips');
+  const elOf = (key) => strips.querySelector(`[data-key="${key}"]`);
+  function paint(inst) {
+    const part = elOf(inst.key)?.querySelector('[role]');
+    if (!part) return;
+    const x = xOf(inst.key);
+    part.style.setProperty('--x', x);
+    if (inst.def.type === 'switch') { part.setAttribute('aria-checked', String(x >= 0.5)); part.textContent = x >= 0.5 ? 'ON' : 'OFF'; }
+    else part.setAttribute('aria-valuenow', String(wireOf(inst, x)));
+  }
+  function set(inst, x, fromWire = false) {
+    values.set(inst.key, Math.min(1, Math.max(0, x)));
+    paint(inst);
+    if (!fromWire) send(inst);
+  }
+  function control(inst) {
+    const { def } = inst;
+    const num = numberOf(inst);
+    const el = document.createElement('div');
+    el.className = 'ctl';
+    el.dataset.key = inst.key;
+    el.dataset.id = def.id;
+    const part = document.createElement('div');
+    part.className = def.type;
+    part.tabIndex = 0;
+    part.setAttribute('aria-label', `${where(inst)}, control change ${num.error ? 'unset' : num.n}`);
+    if (def.type === 'switch') {
+      part.setAttribute('role', 'switch');
+      const flip = () => set(inst, xOf(inst.key) >= 0.5 ? 0 : 1);
+      part.addEventListener('pointerdown', flip);
+      part.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); } });
+    } else {
+      part.setAttribute('role', 'slider');
+      part.setAttribute('aria-valuemin', String(def.range[0]));
+      part.setAttribute('aria-valuemax', String(def.range[1]));
+      if (def.type === 'fader') part.setAttribute('aria-orientation', 'vertical');
+      // each control captures its own pointer, so several fingers move several controls
+      part.addEventListener('pointerdown', (e) => {
+        part.setPointerCapture(e.pointerId);
+        const rect = part.getBoundingClientRect(), x0 = xOf(inst.key), y0 = e.clientY;
+        const at = (ev) => (def.type === 'fader' ? 1 - (ev.clientY - rect.top - 7) / (rect.height - 14) : x0 - (ev.clientY - y0) / 140);
+        if (def.type === 'fader') set(inst, at(e));
+        const move = (ev) => ev.pointerId === e.pointerId && set(inst, at(ev));
+        const up = (ev) => { if (ev.pointerId !== e.pointerId) return; part.removeEventListener('pointermove', move); part.removeEventListener('pointerup', up); part.removeEventListener('pointercancel', up); };
+        part.addEventListener('pointermove', move);
+        part.addEventListener('pointerup', up);
+        part.addEventListener('pointercancel', up);
+      });
+      part.addEventListener('keydown', (e) => {
+        const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key];
+        if (d) { e.preventDefault(); set(inst, xOf(inst.key) + d / 127); }
+      });
+    }
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = def.label;
+    const cc = document.createElement('span');
+    cc.className = num.error ? 'cc bad' : 'cc';
+    cc.textContent = num.error ? 'CC ?' : `CC ${num.n}`;
+    el.append(part, name, cc);
+    el.addEventListener('click', () => { if (editing) choose(def.id, inst.key); });
+    return el;
+  }
+  function draw() {
+    strips.classList.toggle('editing', editing);
+    const all = instances();
+    const cols = new Map();
+    for (const inst of all) {
+      const k = inst.strip ?? 'master';
+      if (!cols.has(k)) {
+        const col = document.createElement('div');
+        col.className = inst.strip === null ? 'strip master' : 'strip';
+        const num = document.createElement('span');
+        num.className = 'num';
+        num.textContent = inst.strip ?? 'M';
+        col.append(num);
+        cols.set(k, col);
+      }
+      const el = control(inst);
+      if (chosen && chosen.id === inst.def.id) el.classList.add(chosen.key === inst.key ? 'chosen' : 'same');
+      cols.get(k).append(el);
+    }
+    strips.replaceChildren(...cols.values());
+    all.forEach(paint);
+  }
+
+  // ---- the inspector: the definition is edited, and every instance follows ----
+  const $ = (id) => document.getElementById(id);
+  const defOf = (id) => (id === 'master' ? page.master : page.strip.controls.find((c) => c.id === id));
+  function choose(id, key) {
+    chosen = { id, key };
+    draw();
+    inspect();
+  }
+  function inspect() {
+    $('inspector').hidden = !editing;
+    if (!editing) return;
+    if (!chosen) chosen = { id: 'high', key: 'high@3' };
+    const def = defOf(chosen.id);
+    const inst = instances().find((i) => i.key === chosen.key);
+    const { from, to, name } = page.strip.repeat;
+    $('scope').innerHTML = inst.strip === null
+      ? 'A control of the page itself: <b>one instance</b>.'
+      : `Part of <b>strip</b>, repeated for <b>${name} = ${from} … ${to}</b>. A change here changes all ${to - from + 1} strips.`;
+    if (document.activeElement !== $('f-label')) $('f-label').value = def.label;
+    $('f-type').value = def.type;
+    if (document.activeElement !== $('f-cc')) $('f-cc').value = def.cc;
+    $('f-lo').value = def.range[0];
+    $('f-hi').value = def.range[1];
+    const num = numberOf(inst);
+    const r = $('resolved');
+    r.classList.toggle('err', !!num.error);
+    if (num.error) r.textContent = num.error;
+    else {
+      const all = instances().filter((i) => i.def === def).map((i) => numberOf(i).n);
+      r.innerHTML = inst.strip === null ? `Sends <b>CC ${num.n}</b> on channel ${page.channel}.` : `In strip ${inst.strip} this is <b>CC ${num.n}</b>; across the strips, CC ${all[0]} … ${all[all.length - 1]}, on channel ${page.channel}.`;
+    }
+  }
+  const edit = (change) => { change(defOf(chosen.id)); sent.clear(); draw(); inspect(); };
+  $('f-label').addEventListener('input', (e) => edit((d) => (d.label = e.target.value.slice(0, 12))));
+  $('f-type').addEventListener('change', (e) => edit((d) => (d.type = e.target.value)));
+  $('f-cc').addEventListener('input', (e) => edit((d) => (d.cc = e.target.value.slice(0, 200))));
+  const bound = (v) => Math.min(127, Math.max(0, Math.round(Number(v) || 0)));
+  $('f-lo').addEventListener('change', (e) => edit((d) => (d.range = [bound(e.target.value), d.range[1]])));
+  $('f-hi').addEventListener('change', (e) => edit((d) => (d.range = [d.range[0], bound(e.target.value)])));
+
+  // ---- the head ----
+  function mode(edit) {
+    editing = edit;
+    $('mode-play').setAttribute('aria-pressed', String(!edit));
+    $('mode-edit').setAttribute('aria-pressed', String(edit));
+    if (!edit) chosen = null;
+    else chosen ??= { id: 'high', key: 'high@3' };
+    draw();
+    inspect();
+  }
+  $('mode-play').addEventListener('click', () => mode(false));
+  $('mode-edit').addEventListener('click', () => mode(true));
+  $('full').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else $('surface').requestFullscreen?.()?.catch(() => {});
+  });
+
+  // ---- the mixer answers: a message arrives on the page's column, the control bound to its number moves ----
+  $('feedback').addEventListener('click', () => {
+    const all = instances().filter((i) => !numberOf(i).error);
+    const inst = all[Math.floor(Math.random() * all.length)];
+    if (!inst) return;
+    const v = inst.def.type === 'switch' ? (xOf(inst.key) >= 0.5 ? inst.def.range[0] : inst.def.range[1]) : Math.floor(Math.random() * 128);
+    const span = inst.def.range[1] - inst.def.range[0];
+    log('in', [0xb0 | (page.channel - 1), numberOf(inst).n, v], inst);
+    sent.set(inst.key, v); // what arrived is not sent back
+    set(inst, span ? (v - inst.def.range[0]) / span : 0, true);
+    const el = elOf(inst.key)?.querySelector('[role]');
+    el?.classList.remove('moved');
+    void el?.offsetWidth;
+    el?.classList.add('moved');
+  });
+
+  draw();
+  $('log').innerHTML = '<li class="none">Move a control, or let the mixer move one.</li>';
+})();
+</script>
