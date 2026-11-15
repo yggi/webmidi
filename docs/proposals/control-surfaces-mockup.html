@@ -3,8 +3,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
-  /* Layout: a rack, as the patchbay's mockup. The page being played on the left (eight strips from one definition),
-     the inspector and the wire on the right, the patch under them; on a phone the right column drops under the page. */
+  /* Layout: a rack, as the patchbay's mockup. The panel being played on the left (eight strips from one definition),
+     the inspector and the wire on the right, the patch under them; on a phone the right column drops under the panel. */
   :root {
     --bg: #eceef2;
     --panel: #f8f9fb;
@@ -72,7 +72,7 @@
   .card-body { padding: 10px 14px 14px; display: grid; gap: 10px; }
   .hint { color: var(--muted); font-size: 14px; }
 
-  /* the page: strips side by side, scrolling sideways in their own box when narrow */
+  /* the panel: strips side by side, scrolling sideways in their own box when narrow */
   #surface:fullscreen { border-radius: 0; display: grid; grid-template-rows: auto 1fr; background: var(--bg); }
   #surface:fullscreen .strips { align-items: center; justify-content: center; }
   .strips { display: flex; gap: 8px; padding: 12px 14px 16px; overflow-x: auto; touch-action: pan-x; }
@@ -138,8 +138,8 @@
   th, td { padding: 0; }
   thead th { font: 600 14px/1.15 var(--font-label); text-align: left; padding: 8px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); min-width: 108px; }
   tbody th { text-align: left; font: 600 14px var(--font-num); white-space: nowrap; padding-right: 12px; }
-  .is-page { border-color: var(--accent); color: var(--accent); }
-  tbody th.is-page { color: var(--accent); }
+  .is-panel { border-color: var(--accent); color: var(--accent); }
+  tbody th.is-panel { color: var(--accent); }
   .tag { display: inline-block; font: 600 10px/1 var(--font-label); letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 5px; border-radius: 4px; background: var(--bg); color: var(--muted); margin-left: 4px; }
   td { text-align: center; height: 34px; }
   .jack { display: inline-block; min-width: 22px; height: 22px; border-radius: 11px; border: 1.5px solid var(--line); }
@@ -148,7 +148,7 @@
 
 <div class="wrap">
   <header class="head">
-    <h1>Control surfaces <small>A mockup: one page, an 8-channel mixer, built from a single strip repeated.</small></h1>
+    <h1>Control surfaces <small>A mockup: one panel, an 8-channel mixer, built from a single strip repeated.</small></h1>
     <div class="modes" role="group" aria-label="Mode">
       <button id="mode-play" aria-pressed="true">Play</button>
       <button id="mode-edit" aria-pressed="false">Edit</button>
@@ -158,7 +158,7 @@
   <div class="rack">
     <section class="card" id="surface">
       <div class="card-head">
-        <h2>Page · DM-8 mixer</h2>
+        <h2>Panel · DM-8 mixer</h2>
         <button class="btn" id="full">Full screen</button>
       </div>
       <div class="strips" id="strips"></div>
@@ -193,13 +193,13 @@
   </div>
 
   <section class="card">
-    <div class="card-head"><h2>In the patch</h2><p class="hint">An active page is a row (what it sends) and a column (what it receives). The page names no port.</p></div>
+    <div class="card-head"><h2>In the patch</h2><p class="hint">An active panel is a row (what it sends) and a column (what it receives). The panel names no port.</p></div>
     <div class="matrix">
       <table>
-        <thead><tr><td></td><th>DM-8</th><th>Minilogue xd</th><th class="is-page">DM-8 mixer <span class="tag">page</span></th></tr></thead>
+        <thead><tr><td></td><th>DM-8</th><th>Minilogue xd</th><th class="is-panel">DM-8 mixer <span class="tag">panel</span></th></tr></thead>
         <tbody>
           <tr><th>Clock</th><td><span class="jack"></span></td><td><span class="jack on">●</span></td><td></td></tr>
-          <tr><th class="is-page">DM-8 mixer <span class="tag">page</span></th><td><span class="jack on">as sent</span></td><td><span class="jack"></span></td><td></td></tr>
+          <tr><th class="is-panel">DM-8 mixer <span class="tag">panel</span></th><td><span class="jack on">as sent</span></td><td><span class="jack"></span></td><td></td></tr>
           <tr><th>in: DM-8</th><td><span class="jack"></span></td><td><span class="jack"></span></td><td><span class="jack on">●</span></td></tr>
           <tr><th>in: KeyStep 37</th><td><span class="jack"></span></td><td><span class="jack on">1</span></td><td><span class="jack"></span></td></tr>
         </tbody>
@@ -210,8 +210,8 @@
 
 <script>
 (() => {
-  // ---- the page, as its file would hold it: one strip, repeated over ch 1 … 8, and a control of its own ----
-  const page = {
+  // ---- the panel, as its file would hold it: one strip, repeated over ch 1 … 8, and a control of its own ----
+  const panel = {
     channel: 1,
     strip: {
       repeat: { name: 'ch', from: 1, to: 8 },
@@ -265,10 +265,10 @@
 
   // ---- instances: the strip once per ch; each control's number resolved in its instance's scope ----
   const instances = () => {
-    const { name, from, to } = page.strip.repeat;
+    const { name, from, to } = panel.strip.repeat;
     const list = [];
-    for (let v = from; v <= to; v++) for (const def of page.strip.controls) list.push({ def, key: `${def.id}@${v}`, scope: { [name]: v }, strip: v });
-    list.push({ def: page.master, key: 'master', scope: {}, strip: null });
+    for (let v = from; v <= to; v++) for (const def of panel.strip.controls) list.push({ def, key: `${def.id}@${v}`, scope: { [name]: v }, strip: v });
+    list.push({ def: panel.master, key: 'master', scope: {}, strip: null });
     return list;
   };
   const numberOf = (inst) => {
@@ -307,7 +307,7 @@
     const v = wireOf(inst, xOf(inst.key));
     if (sent.get(inst.key) === v) return; // only when the number on the wire changes
     sent.set(inst.key, v);
-    log('out', [0xb0 | (page.channel - 1), num.n, v], inst);
+    log('out', [0xb0 | (panel.channel - 1), num.n, v], inst);
   }
 
   // ---- drawing ----
@@ -401,7 +401,7 @@
 
   // ---- the inspector: the definition is edited, and every instance follows ----
   const $ = (id) => document.getElementById(id);
-  const defOf = (id) => (id === 'master' ? page.master : page.strip.controls.find((c) => c.id === id));
+  const defOf = (id) => (id === 'master' ? panel.master : panel.strip.controls.find((c) => c.id === id));
   function choose(id, key) {
     chosen = { id, key };
     draw();
@@ -413,9 +413,9 @@
     if (!chosen) chosen = { id: 'high', key: 'high@3' };
     const def = defOf(chosen.id);
     const inst = instances().find((i) => i.key === chosen.key);
-    const { from, to, name } = page.strip.repeat;
+    const { from, to, name } = panel.strip.repeat;
     $('scope').innerHTML = inst.strip === null
-      ? 'A control of the page itself: <b>one instance</b>.'
+      ? 'A control of the panel itself: <b>one instance</b>.'
       : `Part of <b>strip</b>, repeated for <b>${name} = ${from} … ${to}</b>. A change here changes all ${to - from + 1} strips.`;
     if (document.activeElement !== $('f-label')) $('f-label').value = def.label;
     $('f-type').value = def.type;
@@ -428,7 +428,7 @@
     if (num.error) r.textContent = num.error;
     else {
       const all = instances().filter((i) => i.def === def).map((i) => numberOf(i).n);
-      r.innerHTML = inst.strip === null ? `Sends <b>CC ${num.n}</b> on channel ${page.channel}.` : `In strip ${inst.strip} this is <b>CC ${num.n}</b>; across the strips, CC ${all[0]} … ${all[all.length - 1]}, on channel ${page.channel}.`;
+      r.innerHTML = inst.strip === null ? `Sends <b>CC ${num.n}</b> on channel ${panel.channel}.` : `In strip ${inst.strip} this is <b>CC ${num.n}</b>; across the strips, CC ${all[0]} … ${all[all.length - 1]}, on channel ${panel.channel}.`;
     }
   }
   const edit = (change) => { change(defOf(chosen.id)); sent.clear(); draw(); inspect(); };
@@ -456,14 +456,14 @@
     else $('surface').requestFullscreen?.()?.catch(() => {});
   });
 
-  // ---- the mixer answers: a message arrives on the page's column, the control bound to its number moves ----
+  // ---- the mixer answers: a message arrives on the panel's column, the control bound to its number moves ----
   $('feedback').addEventListener('click', () => {
     const all = instances().filter((i) => !numberOf(i).error);
     const inst = all[Math.floor(Math.random() * all.length)];
     if (!inst) return;
     const v = inst.def.type === 'switch' ? (xOf(inst.key) >= 0.5 ? inst.def.range[0] : inst.def.range[1]) : Math.floor(Math.random() * 128);
     const span = inst.def.range[1] - inst.def.range[0];
-    log('in', [0xb0 | (page.channel - 1), numberOf(inst).n, v], inst);
+    log('in', [0xb0 | (panel.channel - 1), numberOf(inst).n, v], inst);
     sent.set(inst.key, v); // what arrived is not sent back
     set(inst, span ? (v - inst.def.range[0]) / span : 0, true);
     const el = elOf(inst.key)?.querySelector('[role]');
