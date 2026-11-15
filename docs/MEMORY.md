@@ -10,13 +10,14 @@ Its frontends: Cell studio and Jambot, then KO-Multitool. The language, [yggi/ce
 
 ## The family
 
-The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts. Core runs `midi-rx` version 1 (`src/contracts.test.ts`): 6 vectors pass, 11 are outside the layer core reads; the pitch-bend and transport vectors are checked against what core writes, and cells' own copy of the bend encoding is held to them too ([architecture.md](architecture.md#the-contracts)).
+The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts. Core runs `midi-rx` version 1 (`src/contracts.test.ts`): 12 vectors pass (6 read as a player's notes, 6 more by the wire's reader, `readChannelMessage`), 5 are outside the layer core reads; the pitch-bend and transport vectors are checked against what core writes, and cells' own copy of the bend encoding is held to them too ([architecture.md](architecture.md#the-contracts)).
 
 ## Map
 
 Module by module: [architecture.md](architecture.md).
 
-- `src/core/` (`@yggi/webmidi/core`, pure): a message read (`surfaces.ts`), the keyboard's layout, drum maps, ports and adopting them (`port.ts`, `routing.ts`), the clock offset (`clock.ts`), bends and MPE, notes out (`out.ts`, `MidiOut`), the clock out (`clock-out.ts`), the patchbay's book (`setups.ts` and its neighbours, decisions 002 and 003), SysEx assembled (`sysex.ts`)
+- `src/core/` (`@yggi/webmidi/core`, pure): a message read (`surfaces.ts` for a player, `messages.ts` the wire both ways), the keyboard's layout, drum maps, ports and adopting them (`port.ts`, `routing.ts`), the clock offset (`clock.ts`), bends and MPE, notes out (`out.ts`, `MidiOut`), the clock out (`clock-out.ts`), the patchbay's book (`setups.ts` and its neighbours, decisions 002 and 003), SysEx assembled (`sysex.ts`)
+- `src/core/panels/` (`@yggi/webmidi/panels`, pure, decision 005): a control panel kept, its expressions, instantiated, played (`PanelRuntime`), the library
 - `src/web/` (`@yggi/webmidi/web`): Web MIDI asked for and connected (`access.ts`), the ports in full (`ports.ts`), a SysEx transport (`transport.ts`), the book in `localStorage` (`book-store.ts`)
 - `src/ui/` (`@yggi/webmidi/ui`): the patchbay's Svelte components, presentational, coloured by `--wm-*` custom properties
 - `src/testing/` (`@yggi/webmidi/testing`, tests only): core's and web's fakes re-exported
@@ -33,3 +34,4 @@ One line each; the record has the rationale. → [decisions/](decisions/README.m
 - 002 · Setups: a device's profile by port name, shared by every setup; the routes in the setup, by context; the inputs as rows of the matrix, thru a crossing · → decisions/002-setups-device-profiles-and-inputs-as-rows.md
 - 003 · What an input plays: one mechanism for heard and assigned (`none`, `default`, a row kept with its role), the setup's in every context; a preset fills it in by an input's kind; forwarding as played · → decisions/003-what-an-input-plays.md
 - 004 · The built-in as an output: this device's own sound a column of the matrix, first, kept in the setup, its crossings the rows it plays; no device, no MIDI, not counted; the frontends' switches dissolve into it · → decisions/004-the-built-in-as-an-output.md
+- 005 · Control panels: a panel is data and a virtual device (a row and a column of the matrix, no port named), its strips instances of one template, its formulas a total language parsed here; `@yggi/webmidi/panels`, outside 1.0 · → decisions/005-control-panels.md

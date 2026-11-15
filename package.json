@@ -9,6 +9,10 @@
       "types": "./types/core/index.d.ts",
       "default": "./src/core/index.ts"
     },
+    "./panels": {
+      "types": "./types/core/panels/index.d.ts",
+      "default": "./src/core/panels/index.ts"
+    },
     "./web": {
       "types": "./types/web/index.d.ts",
       "default": "./src/web/index.ts"

@@ -6,6 +6,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 
 `index.ts` is the surface, `@yggi/webmidi/core`; every module is re-exported there.
 
+- `messages.ts` the wire both ways: every channel message read and written in the contract's terms (`readChannelMessage`, `writeChannelMessage`), a 14-bit controller (`controlChange14`), an NRPN or RPN written whole (`parameterMessages`) and read out of a stream of control changes (`ParameterReader`)
 - `surfaces.ts` a raw message to a note or the sustain pedal; the computer's keys and drum keys; `ignoreKeyEvent` (a field, a repeat, a modifier), duck-typed
 - `keyboard.ts` the on-screen keyboard's layout, its keys' names, a strike's velocity by height
 - `drum-presets.ts` drum maps by General MIDI note (GM, Novation Circuit), `deviceNote` out and `gmNotesFor` back
@@ -17,6 +18,17 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `setups.ts` the patchbay's book (decision 002): device profiles by port name, named setups with their outputs, what each input plays (`plays`, decision 003), routes per context (inputs as rows, `AS_PLAYED`) and the outputs sent clock, a setup's fit to the ports plugged in, a setup as a file; `setups-from.ts` Cell studio's and Jambot's stores migrated once; `setup-ports.ts` a setup's live ports by id or name (`portsOf`), and ports kept by id named once they're seen (`namePorts`), neither making a custom variant; `plays.ts` what an input plays among a frontend's rows (`playsOf`, by row, else role), heard (`isHeard`, `heardOf`), listened to (`listenOf`); `input-kinds.ts` an input's kind by its port's name, presets (`applyPreset`); `forward.ts` what an input row's crossing sends (`forwardsOf`, `forwardsOfInput`): a channel message re-channelled or as played, no system message
 - `sysex.ts` whole SysEx messages out of a byte stream (`SysexAssembler`, lifted from ep133-sysex)
 - `host.d.ts` the one host global core uses
+
+## Map of src/core/panels/
+
+`index.ts` is the surface, `@yggi/webmidi/panels` (decision 005): control panels, the pure part, under core's gate and exported apart from `@yggi/webmidi/core`.
+
+- `expr.ts` a panel's expressions: a total language (numbers, names, arithmetic, comparison, a conditional, eight functions), parsed and never `eval`ed, refused in words (`compileExpression`)
+- `model.ts` a panel as it is kept: controls, bindings (`kind`, `number`, `range`), groups that nest, repeat over a parameter and use templates, the grid; `readPanel` from anything; `panelRow`
+- `instantiate.ts` a panel resolved to what is drawn and played: groups repeated, templates filled in, every expression a number, each control with a key (`strips[3]/level`); what can't be resolved said and left out; at most 2,000 instances
+- `runtime.ts` `PanelRuntime`: a touch in, bytes out (only when the number on the wire changes); a message in, the controls moved (not echoed, a held control left); a keyboard's and a pads' notes; `silence`
+- `library.ts` the panels kept (`PanelLibrary`, `PanelStore`), a panel as a file (`.midipanel.json`: `exportPanel`, `importPanel`)
+- `examples.ts` `EXAMPLE_MIXER`: eight strips of one template, the model's test
 
 ## Map of src/web/
 
@@ -45,4 +57,4 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 
 ## The contracts
 
-The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts. Core runs `midi-rx` version 1 (`src/contracts.test.ts`, the vectors copied into `fixtures/contracts/` with the hub's commit): 6 vectors pass, a note-off's release velocity among them, and 11 are outside the layer core reads (framing is the browser's; core reads notes and the sustain pedal, and a frontend gets every other message raw). The pitch-bend and transport vectors are checked against what core writes. Cells writes pitch bends into MIDI files with its own copy of the encoding; the duplication is accepted, and the contract's bend vectors are the one encoding both are held to (core is checked here; cells doesn't run `midi-rx`).
+The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts. Core runs `midi-rx` version 1 (`src/contracts.test.ts`, the vectors copied into `fixtures/contracts/` with the hub's commit): 12 vectors pass, and 5 are outside the layer core reads (framing, which is the browser's, and the clock in). 6 pass as a player's reader delivers them (`parseMidiMessage`, `parseSustain`), a note-off's release velocity among them; those and 6 more pass through the wire's reader (`readChannelMessage`) as the vectors spell them: a note-on at velocity 0, control changes, the bends, aftertouch, a program change. The pitch-bend and transport vectors are checked against what core writes. Cells writes pitch bends into MIDI files with its own copy of the encoding; the duplication is accepted, and the contract's bend vectors are the one encoding both are held to (core is checked here; cells doesn't run `midi-rx`).
