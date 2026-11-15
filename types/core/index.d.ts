@@ -3,6 +3,7 @@
  * as interfaces (`MidiPort`, `PortAccess`, `OutputClock`), so it runs in a browser, a worker or node alike.
  */
 export * from './surfaces';
+export * from './messages';
 export * from './keyboard';
 export * from './drum-presets';
 export * from './port';

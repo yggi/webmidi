@@ -5,7 +5,8 @@
  * the contract is the rule. A vector core doesn't meet is recorded here, with what core does, not changed to fit.
  *
  * Core reads the layer above the bytes: Web MIDI frames the stream and hands over whole messages, and core reads each
- * (`parseMidiMessage`: notes; `parseSustain`: the sustain pedal); every other message reaches a frontend raw. So a
+ * (`parseMidiMessage`: notes; `parseSustain`: the sustain pedal); and beside them the wire itself
+ * (`readChannelMessage`: every channel message, as the contract names it). So a
  * vector runs here as a browser delivers it, its bytes cut into messages at each status byte. Each vector is run and
  * passes, or is recorded as outside that layer, or as differing, with the reason; what core does with the ones it
  * doesn't run is asserted too, so a change in core shows here.
@@ -15,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { bendMessage } from './core/bend';
 import { ClockOut } from './core/clock-out';
 import { fakePort } from './core/fixtures';
+import { readChannelMessage } from './core/messages';
 import { parseMidiMessage, parseSustain } from './core/surfaces';
 
 interface Message {
@@ -44,20 +46,26 @@ const delivered = (bytes: readonly number[]): Message[] =>
 /** Run, and passed. */
 const RUN = ['note_on', 'note_off', 'note_below_the_piano_range', 'channel_is_the_low_nibble', 'three_note_chord_in_one_drain', 'a_truncated_message_completes_nothing'];
 
+/** Run through the wire's reader alone (`readChannelMessage`), and passed: what a player's reader (`delivered`) reads otherwise, or not at all. */
+const WIRE = [
+  'note_on_velocity_zero_is_still_a_note_on_at_the_wire',
+  'two_control_changes_in_one_drain',
+  'pitch_bend_centre',
+  'pitch_bend_full_up',
+  'channel_aftertouch',
+  'program_change',
+];
+
+/** What the wire's reader delivers from a stream: every channel message, in the contract's terms as they are. */
+const onTheWire = (bytes: readonly number[]): Message[] => messages(bytes).flatMap((m): Message[] => [readChannelMessage(m)].filter((r) => r !== null));
+
 /** Outside the layer core reads, and why. */
 const OUTSIDE: Record<string, string> = {
-  note_on_velocity_zero_is_still_a_note_on_at_the_wire:
-    'the vector leaves the zero-velocity release to the consumer, and parseMidiMessage is that consumer: it reads a note-on at 0 as a release',
-  two_control_changes_in_one_drain: 'core reads one controller, the sustain pedal (CC 64); the others reach a frontend raw (MIDI learn)',
   running_status: 'framing: the browser expands running status, and Web MIDI delivers whole messages',
   realtime_byte_inside_a_message: 'framing: the browser lifts a real-time byte out of the message it interrupts',
   active_sensing_inside_a_message: 'framing, as the real-time byte; and core reads no active sensing',
-  pitch_bend_centre: 'core reads no pitch bend in; it writes them, and its encoding is the vector’s (checked below)',
-  pitch_bend_full_up: 'core reads no pitch bend in; it writes them, and its encoding is the vector’s (checked below)',
   transport_start_then_clock_then_stop: 'core reads no clock in (no MIDI clock in yet); it writes this alphabet (checked below)',
-  channel_aftertouch: 'core reads no aftertouch; the note after it is read (checked below)',
-  program_change: 'core reads no program change; it reaches a frontend raw',
-  a_new_status_abandons_the_unfinished_one: 'framing: Web MIDI delivers no unfinished message; and core reads no CC 74',
+  a_new_status_abandons_the_unfinished_one: 'framing: Web MIDI delivers no unfinished message',
 };
 
 /** Read by core, and not as the vector says: none. */
@@ -70,7 +78,7 @@ const unrecorded = (names: readonly string[], recorded: readonly string[]) => ({
 });
 
 describe('the midi-rx contract (music-commons contracts/midi-rx, version 1)', () => {
-  const recorded = [...RUN, ...Object.keys(OUTSIDE), ...Object.keys(DIFFERS)];
+  const recorded = [...RUN, ...WIRE, ...Object.keys(OUTSIDE), ...Object.keys(DIFFERS)];
 
   it('is shown firing: a vector the hub adds, or one recorded twice, is caught', () => {
     expect(unrecorded(['a', 'b', 'new'], ['a', 'b'])).toEqual({ missing: ['new'], extra: [] });
@@ -86,7 +94,7 @@ describe('the midi-rx contract (music-commons contracts/midi-rx, version 1)', ()
         recorded,
       ),
     ).toEqual({ missing: [], extra: [] });
-    expect([RUN.length, Object.keys(OUTSIDE).length, Object.keys(DIFFERS).length]).toEqual([6, 11, 0]);
+    expect([RUN.length, WIRE.length, Object.keys(OUTSIDE).length, Object.keys(DIFFERS).length]).toEqual([6, 6, 5, 0]);
   });
 
   it.each(RUN)('%s: core delivers every message the stream completes, in order, none lost and none invented', (name) => {
@@ -96,11 +104,16 @@ describe('the midi-rx contract (music-commons contracts/midi-rx, version 1)', ()
     v.expect.forEach((m, i) => expect(got[i], `${name} #${i}`).toMatchObject(m));
   });
 
-  it('a note-on at velocity 0: outside, a release to core, as the vector asks of the consumer', () => {
+  it.each([...RUN, ...WIRE])('%s: the wire’s reader delivers every channel message the stream completes, as the vector spells it', (name) => {
+    const v = vector(name);
+    expect(onTheWire(v.bytes)).toEqual(v.expect);
+  });
+
+  it('a note-on at velocity 0: a note-on on the wire, and a release to a player, as the vector asks of the consumer', () => {
     expect(delivered(vector('note_on_velocity_zero_is_still_a_note_on_at_the_wire').bytes)).toEqual([{ type: 'note_off', channel: 0, note: 60, velocity: 0 }]);
   });
 
-  it('what core reads none of, delivered whole: nothing (a controller other than the pedal, a program change, aftertouch, a bend, the clock)', () => {
+  it('what a player’s reader reads none of, delivered whole: nothing (a controller other than the pedal, a program change, aftertouch, a bend, the clock)', () => {
     for (const name of ['two_control_changes_in_one_drain', 'program_change', 'pitch_bend_centre', 'pitch_bend_full_up', 'transport_start_then_clock_then_stop'])
       expect(delivered(vector(name).bytes), name).toEqual([]);
     // (the note after the aftertouch is read)

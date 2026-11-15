@@ -6,6 +6,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 
 `index.ts` is the surface, `@yggi/webmidi/core`; every module is re-exported there.
 
+- `messages.ts` the wire both ways: every channel message read and written in the contract's terms (`readChannelMessage`, `writeChannelMessage`), a 14-bit controller (`controlChange14`), an NRPN or RPN written whole (`parameterMessages`) and read out of a stream of control changes (`ParameterReader`)
 - `surfaces.ts` a raw message to a note or the sustain pedal; the computer's keys and drum keys; `ignoreKeyEvent` (a field, a repeat, a modifier), duck-typed
 - `keyboard.ts` the on-screen keyboard's layout, its keys' names, a strike's velocity by height
 - `drum-presets.ts` drum maps by General MIDI note (GM, Novation Circuit), `deviceNote` out and `gmNotesFor` back
@@ -45,4 +46,4 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 
 ## The contracts
 
-The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts. Core runs `midi-rx` version 1 (`src/contracts.test.ts`, the vectors copied into `fixtures/contracts/` with the hub's commit): 6 vectors pass, a note-off's release velocity among them, and 11 are outside the layer core reads (framing is the browser's; core reads notes and the sustain pedal, and a frontend gets every other message raw). The pitch-bend and transport vectors are checked against what core writes. Cells writes pitch bends into MIDI files with its own copy of the encoding; the duplication is accepted, and the contract's bend vectors are the one encoding both are held to (core is checked here; cells doesn't run `midi-rx`).
+The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts. Core runs `midi-rx` version 1 (`src/contracts.test.ts`, the vectors copied into `fixtures/contracts/` with the hub's commit): 12 vectors pass, and 5 are outside the layer core reads (framing, which is the browser's, and the clock in). 6 pass as a player's reader delivers them (`parseMidiMessage`, `parseSustain`), a note-off's release velocity among them; those and 6 more pass through the wire's reader (`readChannelMessage`) as the vectors spell them: a note-on at velocity 0, control changes, the bends, aftertouch, a program change. The pitch-bend and transport vectors are checked against what core writes. Cells writes pitch bends into MIDI files with its own copy of the encoding; the duplication is accepted, and the contract's bend vectors are the one encoding both are held to (core is checked here; cells doesn't run `midi-rx`).

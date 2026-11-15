@@ -10,13 +10,13 @@ Its frontends: Cell studio and Jambot, then KO-Multitool. The language, [yggi/ce
 
 ## The family
 
-The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts. Core runs `midi-rx` version 1 (`src/contracts.test.ts`): 6 vectors pass, 11 are outside the layer core reads; the pitch-bend and transport vectors are checked against what core writes, and cells' own copy of the bend encoding is held to them too ([architecture.md](architecture.md#the-contracts)).
+The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the contracts. Core runs `midi-rx` version 1 (`src/contracts.test.ts`): 12 vectors pass (6 read as a player's notes, 6 more by the wire's reader, `readChannelMessage`), 5 are outside the layer core reads; the pitch-bend and transport vectors are checked against what core writes, and cells' own copy of the bend encoding is held to them too ([architecture.md](architecture.md#the-contracts)).
 
 ## Map
 
 Module by module: [architecture.md](architecture.md).
 
-- `src/core/` (`@yggi/webmidi/core`, pure): a message read (`surfaces.ts`), the keyboard's layout, drum maps, ports and adopting them (`port.ts`, `routing.ts`), the clock offset (`clock.ts`), bends and MPE, notes out (`out.ts`, `MidiOut`), the clock out (`clock-out.ts`), the patchbay's book (`setups.ts` and its neighbours, decisions 002 and 003), SysEx assembled (`sysex.ts`)
+- `src/core/` (`@yggi/webmidi/core`, pure): a message read (`surfaces.ts` for a player, `messages.ts` the wire both ways), the keyboard's layout, drum maps, ports and adopting them (`port.ts`, `routing.ts`), the clock offset (`clock.ts`), bends and MPE, notes out (`out.ts`, `MidiOut`), the clock out (`clock-out.ts`), the patchbay's book (`setups.ts` and its neighbours, decisions 002 and 003), SysEx assembled (`sysex.ts`)
 - `src/web/` (`@yggi/webmidi/web`): Web MIDI asked for and connected (`access.ts`), the ports in full (`ports.ts`), a SysEx transport (`transport.ts`), the book in `localStorage` (`book-store.ts`)
 - `src/ui/` (`@yggi/webmidi/ui`): the patchbay's Svelte components, presentational, coloured by `--wm-*` custom properties
 - `src/testing/` (`@yggi/webmidi/testing`, tests only): core's and web's fakes re-exported

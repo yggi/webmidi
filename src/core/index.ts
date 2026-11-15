@@ -4,6 +4,8 @@
  */
 // Messages in: notes and the sustain pedal off the wire, the computer's keys, the on-screen keyboard.
 export * from './surfaces';
+// The wire itself, both ways: every channel message, 14-bit controllers, NRPNs and RPNs.
+export * from './messages';
 export * from './keyboard';
 export * from './drum-presets';
 // Ports: what a connection is, and adopting the ones chosen as they come and go.
