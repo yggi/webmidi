@@ -6,6 +6,7 @@
 export * from './expr';
 export * from './model';
 export * from './instantiate';
+export * from './edit';
 export * from './runtime';
 export * from './library';
 export * from './rack';

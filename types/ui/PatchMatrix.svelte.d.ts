@@ -30,11 +30,14 @@ interface Props {
     /**
      * This device's own sound as a column (`BUILT_IN`), first: what the frontend calls it ("Synth"), and whether its
      * crossings are edited here, row by row (`rows`, by default; false: shown as the frontend wrote them in `book`, the
-     * column itself added and removed). None (standalone): no such column, and none offered.
+     * column itself added and removed). `direct`: the built-in plays MIDI itself (the standalone page's synth), so an
+     * input's and a panel's row cross it on or off, where otherwise an input is heard through the row it plays. None:
+     * no such column, and none offered.
      */
     builtIn?: {
         readonly label: string;
         readonly rows?: boolean;
+        readonly direct?: boolean;
     } | null;
     /** The library's control panels, by id and name: those the setup has active are rows and columns, the others chips that add them. None: no panels here. */
     panels?: readonly {

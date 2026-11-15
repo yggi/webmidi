@@ -3,9 +3,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EXAMPLE_MIXER, EXAMPLE_PLAY, type Panel } from '../../core/panels/index';
+import { EXAMPLE_MIXER, EXAMPLE_PLAY, instantiate, type Panel } from '../../core/panels/index';
 import { drag, stepKey } from './drag';
 import Keys from './Keys.svelte';
+import PanelEditor from './PanelEditor.svelte';
 import PanelView from './PanelView.svelte';
 
 let mounted: Record<string, unknown>[] = [];
@@ -265,5 +266,106 @@ describe('@yggi/webmidi/ui/panels', () => {
     const palette = (name: string) => /\/\* palette:[\s\S]*?\/\* end palette \*\//.exec(readFileSync(`src/ui/${name}.svelte`, 'utf8'))?.[0].replace(/\.wm-[a-z]+/g, '.root');
     expect(palette('panels/PanelView')).toBe(palette('PatchMatrix'));
     expect(palette('panels/Keys')).toBe(palette('PatchMatrix'));
+  });
+});
+
+describe('PanelEditor', () => {
+  /** A panel being edited, each change kept as a frontend would keep it. */
+  function edit(panel: Panel) {
+    const props = $state({ panel, onchange: (next: Panel) => void (props.panel = next) });
+    mounted.push(mount(PanelEditor, { target: document.body, props }));
+    flushSync();
+    return props;
+  }
+  const press = (el: Element | undefined) => {
+    (el as HTMLElement).click();
+    flushSync();
+  };
+  const type = (el: Element, value: string) => {
+    (el as HTMLInputElement).value = value;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    flushSync();
+  };
+  const button = (text: string) => all('.wm-editor button').find((b) => b.textContent?.trim() === text);
+  const numbers = (panel: Panel, id: string) =>
+    instantiate(panel)
+      .controls.filter((c) => c.key.endsWith(`/${id}`))
+      .map((c) => c.bindings[0]?.number);
+
+  it('chooses a control by a press on any of its instances, marks them all, and a change to its binding changes them all', () => {
+    const props = edit(EXAMPLE_MIXER);
+    expect(one('.inspector .eyebrow').textContent).toBe('Panel');
+    press(all('[aria-label="Edit High"]')[2]);
+    expect(all('.ctl.picked').length).toBe(8);
+    expect(one('.inspector .scope').textContent).toBe('One definition, drawn 8 times: a change here changes them all.');
+    expect(one('.comes').textContent).toBe('cc 11 … 18, channel 1, sends 0 … 127, in 8 places');
+    type(one('[aria-label="Number, or an expression"]'), '50 + ch * 2');
+    expect(numbers(props.panel, 'high')).toEqual([52, 54, 56, 58, 60, 62, 64, 66]);
+    expect(one('.comes').textContent).toBe('cc 52 … 66, channel 1, sends 0 … 127, in 8 places');
+    // a control chosen is not played: nothing is a slider to move
+    expect((one('.ctl.picked .widget') as HTMLElement & { inert: boolean }).inert).toBe(true);
+  });
+
+  it('says of an expression it can’t read that it isn’t resolved, keeps it as typed, and undoes and redoes', () => {
+    const props = edit(EXAMPLE_MIXER);
+    press(all('[aria-label="Edit Level"]')[0]);
+    type(one('[aria-label="Number, or an expression"]'), 'chan');
+    expect(one('.comes').textContent).toContain('Not resolved');
+    expect(one('.errors summary').textContent).toContain('8 things in this panel couldn’t be read');
+    press(button('Undo'));
+    expect(numbers(props.panel, 'level')).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    press(button('Redo'));
+    expect(numbers(props.panel, 'level')).toEqual(Array.from({ length: 8 }, () => undefined));
+    expect((button('Redo') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('sets a binding’s kind, range and channel, adds one and removes one', () => {
+    const props = edit(EXAMPLE_PLAY);
+    press(one('[aria-label="Edit Mod"]'));
+    type(one('[aria-label="What it speaks"]'), 'cc14');
+    type(one('[aria-label="To"]'), '8000');
+    type(one('[aria-label="Channel"]'), '3');
+    const mod = () => instantiate(props.panel).controls.find((c) => c.key === 'wheels/mod')!.bindings;
+    expect(mod()).toEqual([{ kind: 'cc14', channel: 2, number: 1, lo: 0, hi: 8000, axis: 'x' }]);
+    press(button('Add a binding'));
+    expect(mod().length).toBe(2);
+    press(one('[aria-label="Remove binding 1"]'));
+    expect(mod()).toEqual([{ kind: 'cc', channel: 0, number: 1, lo: 0, hi: 127, axis: 'x' }]);
+  });
+
+  it('adds into the panel, beside the control chosen and into the group chosen; a group repeats, and lays its children out', () => {
+    const props = edit({ id: 'p', name: 'P', children: [] });
+    press(button('Group'));
+    expect(one('.inspector .eyebrow').textContent).toBe('Group');
+    press(button('Fader'));
+    press(button('Knob'));
+    expect(props.panel.children).toMatchObject([{ group: 'group', children: [{ id: 'fader' }, { id: 'knob' }] }]);
+    // (the knob is chosen now: the group is chosen again by its ground)
+    press(one('section.group'));
+    press(one('.inspector .switch'));
+    type(one('[aria-label="Repeat to"]'), '3');
+    type(all('.inspector select')[0]!, 'strip');
+    expect(instantiate(props.panel).controls.map((c) => c.key)).toEqual(['group[1]/fader', 'group[1]/knob', 'group[2]/fader', 'group[2]/knob', 'group[3]/fader', 'group[3]/knob']);
+    expect(all('.group.strip').length).toBe(3);
+    press(all('[aria-label="Edit Knob"]')[1]);
+    type(one('[aria-label="Number, or an expression"]'), '20 + ch');
+    expect(one('.comes').textContent).toBe('cc 21 … 23, channel 1, sends 0 … 127, in 3 places');
+  });
+
+  it('moves, duplicates and deletes what is chosen; names the panel; and starts afresh on another panel', () => {
+    const props = edit(EXAMPLE_PLAY);
+    press(one('[aria-label="Edit Mod"]'));
+    press(button('Earlier'));
+    press(button('Duplicate'));
+    const wheels = () => (props.panel.children[1] as unknown as { children: { id: string }[] }).children.map((c) => c.id);
+    expect(wheels()).toEqual(['mod', 'mod2', 'bend']);
+    press(button('Delete'));
+    expect(wheels()).toEqual(['mod', 'bend']);
+    expect(one('.inspector .eyebrow').textContent).toBe('Panel');
+    type(all('.inspector input')[0]!, 'Stage');
+    expect(props.panel.name).toBe('Stage');
+    props.panel = EXAMPLE_MIXER;
+    flushSync();
+    expect((button('Undo') as HTMLButtonElement).disabled).toBe(true);
   });
 });

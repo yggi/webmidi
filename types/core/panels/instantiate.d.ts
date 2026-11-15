@@ -1,4 +1,4 @@
-import { type BindingKind, type Cell, type ControlType, type Panel } from './model';
+import { type BindingKind, type Cell, type ControlType, type NodePath, type Panel } from './model';
 /** The most controls and groups a panel instantiates to; what is past it is left out, and said. */
 export declare const MAX_INSTANCES = 2000;
 /** A binding with its numbers: the channel 0–15, as on the wire. */
@@ -16,6 +16,8 @@ export interface ControlInstance {
     readonly kind: 'control';
     /** Its place in the panel, the same each time the panel is instantiated: `strips[3]/level`. */
     readonly key: string;
+    /** Where it is defined: every instance of one definition has the same, so an editor finds and marks them all. */
+    readonly source: NodePath;
     readonly type: ControlType;
     readonly label: string;
     /** Where it starts, 0 … 1. */
@@ -30,6 +32,7 @@ export interface ControlInstance {
 export interface GroupInstance {
     readonly kind: 'group';
     readonly key: string;
+    readonly source: NodePath;
     readonly label: string;
     readonly columns?: number;
     readonly cell?: Cell;

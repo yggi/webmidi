@@ -9,7 +9,7 @@
    * other a grid; a child's `cell` places it. What the panel couldn't resolve is said under its name.
    */
 import { PanelRuntime } from '../../core/panels/index';
-import type { Panel } from '../../core/panels/index';
+import { type NodePath, type Panel } from '../../core/panels/index';
 interface Props {
     /** The panel to play, with a runtime of the view's own; or `runtime`. */
     panel?: Panel;
@@ -22,6 +22,13 @@ interface Props {
     onsend: (data: number[]) => void;
     /** Whether its name and the full-screen button are shown (true by default). */
     bar?: boolean;
+    /**
+     * Given, the view is an editor's: a control or a group pressed is chosen, not played (its place in the panel, the
+     * same for every instance of one definition), and a press on the panel's ground chooses none.
+     */
+    onselect?: (source: NodePath | null) => void;
+    /** The place chosen: every instance of it is marked. */
+    selected?: NodePath | null;
 }
 declare const PanelView: import("svelte").Component<Props, {
     receive: (data: ArrayLike<number>) => void;

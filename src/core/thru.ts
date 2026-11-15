@@ -1,0 +1,57 @@
+/**
+ * What a page adds to a message it passes on (docs/proposals/patchbay.md, section 4: "the page measures what it adds
+ * before it claims to be a router"): the time from when the port saw the message (the event's `timeStamp`) to when
+ * the page sent it on, both on the page's clock, over the last messages passed. It is the page's own delay only: not
+ * the device's, the cable's or the driver's. Pure: the frontend gives both times.
+ */
+
+/** The delay over the messages kept, in milliseconds. */
+export interface ThruStats {
+  /** How many messages it is over (at most the meter's size), and how many were passed on in all. */
+  readonly count: number;
+  readonly total: number;
+  /** Half the messages were passed on within this. */
+  readonly median: number;
+  /** 95 in 100 were passed on within this. */
+  readonly p95: number;
+  readonly worst: number;
+}
+
+export class ThruMeter {
+  private readonly kept: number[] = [];
+  private next = 0;
+  private total = 0;
+
+  /** A meter over the last `size` messages (256 by default). */
+  constructor(private readonly size = 256) {}
+
+  /**
+   * A message passed on: when its port saw it and when it was sent, in ms on one clock. A time that is no number is
+   * left out; a message sent "before" it was seen (clocks that disagree by a hair) counts as 0.
+   */
+  add(seen: number, sent: number): void {
+    const delay = sent - seen;
+    if (!Number.isFinite(delay)) return;
+    this.kept[this.next] = Math.max(0, delay);
+    this.next = (this.next + 1) % Math.max(1, this.size);
+    this.total++;
+  }
+
+  /** The delay over the messages kept, or null: none yet. */
+  get stats(): ThruStats | null {
+    if (!this.kept.length) return null;
+    const sorted = [...this.kept].sort((a, b) => a - b);
+    // (nearest rank: the smallest delay that at least that share of the messages are within)
+    const within = (share: number) => sorted[Math.max(0, Math.ceil(share * sorted.length) - 1)]!;
+    return { count: sorted.length, total: this.total, median: within(0.5), p95: within(0.95), worst: sorted.at(-1)! };
+  }
+
+  reset(): void {
+    this.kept.length = 0;
+    this.next = 0;
+    this.total = 0;
+  }
+}
+
+/** A delay in words: tenths of a millisecond under 10 ms, whole ones from there ("0.8 ms", "12 ms"). */
+export const delayText = (ms: number): string => `${ms < 10 ? Math.round(ms * 10) / 10 : Math.round(ms)} ms`;

@@ -9,6 +9,7 @@ export * from './drum-presets';
 export * from './port';
 export * from './routing';
 export * from './clock';
+export * from './thru';
 export * from './bend';
 export * from './rotation';
 export * from './out';

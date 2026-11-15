@@ -13,6 +13,8 @@ export * from './port';
 export * from './routing';
 // Time: the audio clock against the page's, which timestamps read.
 export * from './clock';
+// What a page adds to a message it passes on, measured.
+export * from './thru';
 // Out: notes, with their bends and channels, and the clock.
 export * from './bend';
 export * from './rotation';

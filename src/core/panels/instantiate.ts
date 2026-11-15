@@ -5,7 +5,20 @@
  * a panel with a mistake in it still plays the rest.
  */
 import { compileExpression, type Expression, type Scope } from './expr';
-import { isGroup, MAX_DEPTH, type Binding, type BindingKind, type Cell, type Control, type ControlType, type Group, type Num, type Panel, type PanelNode } from './model';
+import {
+  isGroup,
+  MAX_DEPTH,
+  type Binding,
+  type BindingKind,
+  type Cell,
+  type Control,
+  type ControlType,
+  type Group,
+  type NodePath,
+  type Num,
+  type Panel,
+  type PanelNode,
+} from './model';
 
 /** The most controls and groups a panel instantiates to; what is past it is left out, and said. */
 export const MAX_INSTANCES = 2000;
@@ -26,6 +39,8 @@ export interface ControlInstance {
   readonly kind: 'control';
   /** Its place in the panel, the same each time the panel is instantiated: `strips[3]/level`. */
   readonly key: string;
+  /** Where it is defined: every instance of one definition has the same, so an editor finds and marks them all. */
+  readonly source: NodePath;
   readonly type: ControlType;
   readonly label: string;
   /** Where it starts, 0 … 1. */
@@ -41,6 +56,7 @@ export interface ControlInstance {
 export interface GroupInstance {
   readonly kind: 'group';
   readonly key: string;
+  readonly source: NodePath;
   readonly label: string;
   readonly columns?: number;
   readonly cell?: Cell;
@@ -133,13 +149,14 @@ export function instantiate(panel: Panel): PanelInstance {
     return { kind: b.kind, channel: channelOf(b.channel, scope, channel, where), number, lo: end(b.range?.[0], 0), hi: end(b.range?.[1], top), axis: b.axis ?? 'x' };
   };
 
-  const control = (c: Control, scope: Scope, channel: number, key: string): ControlInstance => {
+  const control = (c: Control, scope: Scope, channel: number, key: string, source: NodePath): ControlInstance => {
     const low = c.low ?? DEFAULT_KEYS.low;
     const high = Math.max(low, c.high ?? DEFAULT_KEYS.high);
     const notes = c.type === 'keyboard' ? Array.from({ length: high - low + 1 }, (_, i) => low + i) : c.type === 'pads' ? (c.notes ?? DEFAULT_PADS) : [];
     const instance: ControlInstance = {
       kind: 'control',
       key,
+      source,
       type: c.type,
       label: labelOf(c.label, scope, key),
       value: c.value ?? 0,
@@ -153,8 +170,8 @@ export function instantiate(panel: Panel): PanelInstance {
   };
 
   /** One instance of a group: its children inline, in the scope it stands in, or a template's, in the scope `with` gives. */
-  const body = (g: Group, scope: Scope, channel: number, key: string, depth: number, used: readonly string[]): { columns?: number; children: InstanceNode[] } => {
-    if (g.use === undefined) return { columns: g.columns, children: nodes(g.children ?? [], scope, channel, key, depth + 1, used) };
+  const body = (g: Group, scope: Scope, channel: number, key: string, depth: number, used: readonly string[], source: NodePath): { columns?: number; children: InstanceNode[] } => {
+    if (g.use === undefined) return { columns: g.columns, children: nodes(g.children ?? [], scope, channel, key, depth + 1, used, source) };
     const t = panel.templates && Object.hasOwn(panel.templates, g.use) ? panel.templates[g.use]! : null;
     if (!t) return (errors.push(`${key}: there is no template “${g.use}”.`), { children: [] });
     if (used.includes(g.use)) return (errors.push(`${key}: the template “${g.use}” uses itself.`), { children: [] });
@@ -164,17 +181,17 @@ export function instantiate(panel: Panel): PanelInstance {
       if (v === null) return { children: [] };
       given[p] = v;
     }
-    return { columns: g.columns ?? t.columns, children: nodes(t.children, given, channel, key, depth + 1, [...used, g.use]) };
+    return { columns: g.columns ?? t.columns, children: nodes(t.children, given, channel, key, depth + 1, [...used, g.use], { template: g.use, at: [] }) };
   };
 
-  const group = (g: Group, scope: Scope, inherited: number, parent: string, depth: number, used: readonly string[]): GroupInstance[] => {
+  const group = (g: Group, scope: Scope, inherited: number, parent: string, depth: number, used: readonly string[], source: NodePath): GroupInstance[] => {
     const base = `${parent}${g.group}`;
     const one = (inner: Scope, key: string, value?: number): GroupInstance[] => {
       if (!room()) return [];
       const channel = channelOf(g.channel, inner, inherited, key);
       const own = value !== undefined && g.overrides && Object.hasOwn(g.overrides, String(value)) ? g.overrides[String(value)]!.label : undefined;
-      const { columns, children } = body(g, inner, channel, key, depth, used);
-      return [{ kind: 'group', key, label: labelOf(own ?? g.label, inner, key), ...(columns ? { columns } : {}), ...(g.cell ? { cell: g.cell } : {}), children }];
+      const { columns, children } = body(g, inner, channel, key, depth, used, source);
+      return [{ kind: 'group', key, source, label: labelOf(own ?? g.label, inner, key), ...(columns ? { columns } : {}), ...(g.cell ? { cell: g.cell } : {}), children }];
     };
     if (!g.repeat) return one(scope, base);
     const from = valueOf(g.repeat.from, scope, base);
@@ -185,22 +202,23 @@ export function instantiate(panel: Panel): PanelInstance {
     return out;
   };
 
-  function nodes(children: readonly PanelNode[], scope: Scope, channel: number, parent: string, depth: number, used: readonly string[]): InstanceNode[] {
+  function nodes(children: readonly PanelNode[], scope: Scope, channel: number, parent: string, depth: number, used: readonly string[], home: NodePath): InstanceNode[] {
     if (depth > MAX_DEPTH) return (errors.push(`${parent}: groups are nested more than ${MAX_DEPTH} deep.`), []);
     const prefix = parent ? `${parent}/` : '';
     return children.flatMap((n, i): InstanceNode[] => {
+      const source: NodePath = { ...home, at: [...home.at, i] };
       if (isGroup(n)) {
-        const made = group(n, scope, channel, prefix, depth, used);
+        const made = group(n, scope, channel, prefix, depth, used, source);
         return made.filter((g) => (keys.has(g.key) ? (errors.push(`${g.key}: two groups under one name; the second is left out.`), false) : (keys.add(g.key), true)));
       }
       const key = `${prefix}${n.id ?? `#${i + 1}`}`;
       if (keys.has(key)) return (errors.push(`${key}: two controls under one id; the second is left out.`), []);
       if (!room()) return [];
       keys.add(key);
-      return [control(n, scope, channel, key)];
+      return [control(n, scope, channel, key, source)];
     });
   }
 
-  const children = nodes(panel.children, {}, channelOf(panel.channel, {}, 0, panel.name), '', 1, []);
+  const children = nodes(panel.children, {}, channelOf(panel.channel, {}, 0, panel.name), '', 1, [], { at: [] });
   return { id: panel.id, name: panel.name, ...(panel.columns ? { columns: panel.columns } : {}), children, controls, errors, truncated: full };
 }

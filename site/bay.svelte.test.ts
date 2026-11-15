@@ -3,7 +3,22 @@
 // input, and the page drawn over it.
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
-import { activeSetup, AS_PLAYED, chooseDevice, inputRow, memoryStore, panelKey, panelsOf, withCrossing, withPanelActive } from '../src/core/index';
+import {
+  activeSetup,
+  AS_PLAYED,
+  BUILT_IN,
+  builtInHears,
+  chooseDevice,
+  HEARD,
+  inputRow,
+  memoryStore,
+  newBook,
+  panelKey,
+  panelsOf,
+  withBuiltIn,
+  withCrossing,
+  withPanelActive,
+} from '../src/core/index';
 import { exportPanel, memoryPanelStore, readLibrary } from '../src/core/panels/index';
 import { fakeAccess, fakeInput, fakePort, installMidi, uninstallMidi } from '../src/testing/index';
 import App from './App.svelte';
@@ -18,16 +33,18 @@ afterEach(() => {
 });
 
 /** A mixer with its own port each way, and a keyboard; a page connected to them. */
-async function rig() {
+async function rig(clock: number[] = []) {
   const mixerIn = fakeInput('in-1', 'DM-8');
   const keys = fakeInput('in-2', 'KeyStep 37');
   const mixerOut = fakePort('out-1', 'DM-8');
   const synth = fakePort('out-2', 'Minilogue xd');
   installMidi(fakeAccess([mixerIn, keys], [mixerOut, synth]));
-  const stores = { book: memoryStore(), panels: memoryPanelStore() };
-  const bay = new Bay(stores.book, stores.panels);
+  // (a book kept from before, blank: a first visit's own start is another test's)
+  const stores = { book: memoryStore(JSON.parse(JSON.stringify(newBook()))), panels: memoryPanelStore() };
+  const played: number[][] = [];
+  const bay = new Bay(stores.book, stores.panels, { play: (data) => void played.push(Array.from(data)) }, () => clock.shift() ?? 0);
   await bay.connect();
-  return { bay, stores, mixerIn, keys, mixerOut, synth };
+  return { bay, stores, mixerIn, keys, mixerOut, synth, played };
 }
 
 describe('the standalone patchbay', () => {
@@ -69,6 +86,45 @@ describe('the standalone patchbay', () => {
     expect(synth.sent.slice(1).map((m) => m.data)).toEqual([[0x90, 60, 100], ...Array.from({ length: 16 }, (_, ch) => [0xb0 | ch, 123, 0])]);
   });
 
+  it('plays a panel and an input on the page’s own sound where their rows cross the built-in, with no device at all', async () => {
+    const { bay, keys, mixerIn, played, synth } = await rig();
+    let book = withBuiltIn(bay.book, true);
+    book = withPanelActive(book, 'play', true);
+    book = withCrossing(book, CONTEXT, panelKey('play'), BUILT_IN.key, HEARD);
+    bay.keep(withCrossing(book, CONTEXT, inputRow({ id: 'in-2', name: 'KeyStep 37' }), BUILT_IN.key, HEARD));
+    for (const data of bay.runtimeOf('play')!.strike('play/keys', 60, 90)) bay.played('play', data);
+    keys.play([0x90, 64, 100]);
+    mixerIn.play([0x90, 67, 100]);
+    expect(played).toEqual([
+      [0x90, 60, 90],
+      [0x90, 64, 100],
+    ]);
+    expect([synth.sent.length, bay.thru]).toEqual([0, null]);
+    bay.panic();
+    expect(played.slice(2)).toEqual([[0x80, 60, 0], ...Array.from({ length: 16 }, (_, ch) => [0xb0 | ch, 123, 0])]);
+  });
+
+  it('starts a first visit with the keys’ panel on the page’s own sound, and leaves a book that was kept as it is', async () => {
+    const sound = { play: () => {} };
+    const first = new Bay(memoryStore(), memoryPanelStore(), sound);
+    expect([first.shown, builtInHears(first.book, CONTEXT, panelKey('play'))]).toEqual(['play', true]);
+    const kept = memoryStore(JSON.parse(JSON.stringify(chooseDevice(newBook(), 'o1', { id: 'a', name: 'A' }))));
+    expect(new Bay(kept, memoryPanelStore(), sound).shown).toBeNull();
+  });
+
+  it('measures what it adds to a message it passes on to an output, from the port seeing it to the page sending it, and nothing else', async () => {
+    const { bay, keys, mixerIn } = await rig([12, 14.5, 30]);
+    expect(bay.thru).toBeNull();
+    bay.keep(withCrossing(chooseDevice(bay.book, 'o1', { id: 'out-2', name: 'Minilogue xd' }), CONTEXT, inputRow({ id: 'in-2', name: 'KeyStep 37' }), 'o1', AS_PLAYED));
+    keys.play([0x90, 60, 100], 10);
+    keys.play([0x80, 60, 0], 14);
+    // (an input routed nowhere is not passed on, and not measured)
+    mixerIn.play([0xb0, 1, 1], 0);
+    expect(bay.thru).toEqual({ count: 2, total: 2, median: 0.5, p95: 2, worst: 2 });
+    bay.resetThru();
+    expect(bay.thru).toBeNull();
+  });
+
   it('releases a panel’s notes on its row when it is taken out of the setup, and finds a setup’s port again after a replug', async () => {
     const { bay, synth } = await rig();
     let book = chooseDevice(bay.book, 'o1', { id: 'old-id', name: 'Minilogue xd' });
@@ -101,7 +157,7 @@ describe('the standalone patchbay', () => {
       ([...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) as HTMLButtonElement).click();
       flushSync();
     };
-    expect(chips()).toEqual(['+ DM-8', '+ Minilogue xd', '+ DM-8 mixer', '+ Keys and pads']);
+    expect(chips()).toEqual(['+ DM-8', '+ Minilogue xd', '+ Synth', '+ DM-8 mixer', '+ Keys and pads']);
     expect(document.querySelector('.hint')?.textContent).toContain('No panel in this setup yet');
     press('+ DM-8');
     press('+ DM-8 mixer');
