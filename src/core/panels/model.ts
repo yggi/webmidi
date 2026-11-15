@@ -8,6 +8,7 @@
  * may repeat over a parameter, and holds its children inline or takes them from a template with its parameters given:
  * eight mixer strips are one template used by a group repeated eight times, so a change to the strip changes all eight.
  */
+import { panelKey } from '../setups';
 import { MAX_EXPRESSION } from './expr';
 
 /** A number, or an expression that gives one in the scope it stands in. */
@@ -113,7 +114,7 @@ export interface Panel {
 }
 
 /** A panel's row and column in the patch: an active panel is both. */
-export const panelRow = (id: string): string => `panel:${id}`;
+export const panelRow = panelKey;
 
 export const isGroup = (node: PanelNode): node is Group => 'group' in node;
 

@@ -20,30 +20,39 @@
   import XYPad from './XYPad.svelte';
 
   interface Props {
-    panel: Panel;
+    /** The panel to play, with a runtime of the view's own; or `runtime`. */
+    panel?: Panel;
+    /**
+     * A runtime the frontend keeps (a `PanelRack`'s: the panel plays on, and follows what it is sent, while no view
+     * shows it). The view draws it and plays it, and leaves its notes to the frontend when it goes.
+     */
+    runtime?: PanelRuntime;
     /** Each message a touch makes, in order: the frontend sends it on the panel's row. */
     onsend: (data: number[]) => void;
     /** Whether its name and the full-screen button are shown (true by default). */
     bar?: boolean;
   }
 
-  let { panel, onsend, bar = true }: Props = $props();
+  let { panel, runtime: given, onsend, bar = true }: Props = $props();
 
-  const runtime = $derived(new PanelRuntime(panel));
-  /** Bumped with every change of a value: the runtime keeps the values, and a widget reads its own through this. */
+  const NOTHING: Panel = { id: '', name: '', children: [] };
+  const runtime = $derived(given ?? new PanelRuntime(panel ?? NOTHING));
+  /** Bumped with every change of a value: the runtime keeps the values and says when one changes, and a widget reads its own through this. */
   let turn = $state(0);
   const valueOf = (key: string) => (void turn, runtime.value(key));
-  const send = (messages: number[][]) => (messages.forEach((m) => onsend(m)), turn++);
+  const send = (messages: number[][]) => messages.forEach((m) => onsend(m));
 
-  // a panel replaced, or the view gone: every note it holds is released
+  $effect(() => runtime.watch(() => turn++));
+  // its own panel replaced, or the view gone: every note it holds is released (a runtime it was given is the frontend's)
   $effect(() => {
     const playing = runtime;
-    return () => playing.silence().forEach((m) => onsend(m));
+    const own = !given;
+    return () => own && playing.silence().forEach((m) => onsend(m));
   });
 
   /** A message the panel's column was sent: its controls move (and nothing is sent back). */
   export function receive(data: ArrayLike<number>): void {
-    if (runtime.receive(data).length) turn++;
+    runtime.receive(data);
   }
 
   /** Every note sounding released, as on leaving. */

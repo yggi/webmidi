@@ -10,3 +10,5 @@ export * from './ports';
 export * from './transport';
 // The patchbay's book of setups, kept in localStorage.
 export * from './book-store';
+// The control panels' library, kept in localStorage.
+export * from './panel-store';

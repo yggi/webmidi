@@ -21,6 +21,7 @@ Module by module: [architecture.md](architecture.md).
 - `src/web/` (`@yggi/webmidi/web`): Web MIDI asked for and connected (`access.ts`), the ports in full (`ports.ts`), a SysEx transport (`transport.ts`), the book in `localStorage` (`book-store.ts`)
 - `src/ui/` (`@yggi/webmidi/ui`): the patchbay's Svelte components, presentational, coloured by `--wm-*` custom properties
 - `src/ui/panels/` (`@yggi/webmidi/ui/panels`): a panel to play (`PanelView`), its widgets, the on-screen keyboard (`Keys`)
+- `site/`: the standalone patchbay page (Vite; `npm run site`), published by hand (`.github/workflows/site.yml`); not in the package
 - `src/testing/` (`@yggi/webmidi/testing`, tests only): core's and web's fakes re-exported
 
 ## Gates
@@ -37,3 +38,4 @@ One line each; the record has the rationale. → [decisions/](decisions/README.m
 - 004 · The built-in as an output: this device's own sound a column of the matrix, first, kept in the setup, its crossings the rows it plays; no device, no MIDI, not counted; the frontends' switches dissolve into it · → decisions/004-the-built-in-as-an-output.md
 - 005 · Control panels: a panel is data and a virtual device (a row and a column of the matrix, no port named), its strips instances of one template, its formulas a total language parsed here; `@yggi/webmidi/panels`, outside 1.0 · → decisions/005-control-panels.md
 - 006 · A port kept is its name's: found by its name once known (an id may be another device's after a replug), by its id only when kept without a name; one port to one output (`matchPorts`) · → decisions/006-a-port-kept-is-its-names.md
+- 007 · Panels in the patch: a setup names its active panels (`Setup.panels`), each a row and a column under `panel:<id>`; a panel is no port (`panelForwardsOf`, a `PanelRack`), and only inputs' and panels' rows cross its column · → decisions/007-panels-in-the-patch.md

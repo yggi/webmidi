@@ -8,4 +8,5 @@ export * from './model';
 export * from './instantiate';
 export * from './runtime';
 export * from './library';
+export * from './rack';
 export * from './examples';

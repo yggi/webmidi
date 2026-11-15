@@ -42,7 +42,7 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "check": "tsc -p tsconfig.pure.json && tsc -p tsconfig.web.json && svelte-check --tsconfig ./tsconfig.ui.json --fail-on-warnings && tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.pure.json && tsc -p tsconfig.web.json && svelte-check --tsconfig ./tsconfig.ui.json --fail-on-warnings && svelte-check --tsconfig ./site/tsconfig.json --fail-on-warnings && tsc -p tsconfig.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -52,7 +52,9 @@
     "postverify": "sh tools/verified.sh end",
     "verify:docs": "npm run format:check && vitest run src/docs.test.ts tools/reading-list.test.ts tools/docs-only.test.ts tools/conflict-markers.test.ts tools/changelog.test.ts",
     "changelog": "node tools/changelog.mjs",
-    "types": "tsc -p tsconfig.types.json && node tools/ui-types.mjs"
+    "types": "tsc -p tsconfig.types.json && node tools/ui-types.mjs",
+    "site": "vite --config site/vite.config.ts",
+    "site:build": "vite build --config site/vite.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -69,6 +71,7 @@
     "svelte2tsx": "^0.7.63",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",
+    "vite": "^8.3.8",
     "vitest": "^5.0.3"
   },
   "engines": {

@@ -6,6 +6,8 @@ export interface ControlValue {
     readonly y: number;
 }
 export declare class PanelRuntime {
+    /** The panel as it was given: a rack keeps a runtime while this is the same. */
+    readonly source: Panel;
     readonly panel: PanelInstance;
     private readonly byKey;
     private readonly values;
@@ -17,6 +19,13 @@ export declare class PanelRuntime {
     private readonly parameters;
     /** A keyboard's and a pads' notes sounding, as `key:note`. */
     private readonly struck;
+    private readonly watchers;
+    /**
+     * Told whenever a control's value changes, by a touch or by what was received: a view that draws a runtime it
+     * doesn't own (the panel plays on while the view is away). Returns how to stop being told.
+     */
+    watch(changed: () => void): () => void;
+    private tell;
     constructor(panel: Panel);
     /** A control's values now; a key the panel has none for reads 0. */
     value(key: string): ControlValue;

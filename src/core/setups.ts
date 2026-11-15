@@ -81,6 +81,12 @@ export interface Setup {
   readonly routes: Readonly<Record<string, Routes>>;
   /** The outputs sent MIDI clock (24 ticks a beat, Start, Stop, Continue), by key: the matrix's clock row, in every context. */
   readonly clock: readonly string[];
+  /**
+   * The control panels active in it, by id, in order (decision 007): each a row of the matrix for what it sends and a
+   * column for what it is sent, both under `panelKey`. The panels themselves are kept apart, in a library
+   * (`@yggi/webmidi/panels`); one this names that the library lacks is shown as missing, its crossings kept.
+   */
+  readonly panels?: readonly string[];
 }
 
 /** Everything kept: the device profiles, the setups (at least one) and which is in use. */
@@ -211,6 +217,9 @@ function readSetup(v: unknown): Setup | null {
     plays,
     routes: contexts,
     clock: Array.isArray(v.clock) ? [...new Set(v.clock.filter((k): k is string => typeof k === 'string' && outputs.some((o) => o.key === k && !isBuiltIn(o))))] : [],
+    ...(Array.isArray(v.panels) && v.panels.some((id) => typeof id === 'string' && id)
+      ? { panels: [...new Set(v.panels.filter((id): id is string => typeof id === 'string' && !!id && id.length <= 64))] }
+      : {}),
   };
 }
 
@@ -471,6 +480,29 @@ export function withClock(book: SetupBook, key: string, on: boolean): SetupBook 
   return withActive(book, (s) =>
     !s.outputs.some((o) => o.key === key && !isBuiltIn(o)) || s.clock.includes(key) === on ? s : { ...s, clock: on ? [...s.clock, key] : s.clock.filter((k) => k !== key) },
   );
+}
+
+/** A panel's row and its column in the matrix, by its id: what it sends is routed from the one, what it is sent to the other. */
+export const panelKey = (id: string): string => `panel:${id}`;
+/** Whether a row or a column is a panel's. */
+export const isPanelKey = (key: string): boolean => key.startsWith('panel:');
+/** The panels active in a setup, by id. */
+export const panelsOf = (setup: Setup): readonly string[] => setup.panels ?? [];
+
+/**
+ * A panel made active in the setup in use, last, or taken out of it with its crossings in every context: its row's,
+ * and those of its column in every other row. The book as it is when it already is so.
+ */
+export function withPanelActive(book: SetupBook, id: string, on: boolean): SetupBook {
+  return withActive(book, (s) => {
+    if (!id || panelsOf(s).includes(id) === on) return s;
+    if (on) return { ...s, panels: [...panelsOf(s), id] };
+    const key = panelKey(id);
+    const routes = Object.fromEntries(Object.entries(stripped(s.routes, key)).map(([c, r]) => [c, Object.fromEntries(Object.entries(r).filter(([row]) => row !== key))]));
+    const { panels: _panels, ...rest } = s;
+    const left = panelsOf(s).filter((p) => p !== id);
+    return { ...rest, ...(left.length ? { panels: left } : {}), routes };
+  });
 }
 
 /** Whether an output of the setup in use is sent clock. */
