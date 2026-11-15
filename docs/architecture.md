@@ -11,6 +11,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `keyboard.ts` the on-screen keyboard's layout, its keys' names, a strike's velocity by height
 - `drum-presets.ts` drum maps by General MIDI note (GM, Novation Circuit), `deviceNote` out and `gmNotesFor` back
 - `port.ts` what a port and a connection are (`MidiPort`, `PortOption`, `PortAccess`), and which port plugged in a port kept is now (`matchPorts`, decision 006: by its name, one port to one kept); `routing.ts` adopting the ports chosen (`ChosenPorts`), a replugged one by its name; a frontend that keeps no port names passes `''` as `outPortName` and `inPortName`, and a port is adopted by its id alone; `fixtures.ts` the fake ports, access and connection, shipped through `@yggi/webmidi/testing`
+- `thru.ts` what a page adds to a message it passes on (`ThruMeter`): the delay from the port seeing it to the page sending it, its median, what 95 in 100 are within, the worst, over the last 256
 - `clock.ts` the audio clock against the page's (`clockOffset`): the pair estimate, its slew, jumps confirmed, a `leap` followed at once
 - `bend.ts` cents as 14-bit bends, a note's bends with ramps sampled; `rotation.ts` MPE channels
 - `out.ts` `MidiOut`: `OutNote`s to a port, timestamped, note-offs kept after their note-ons, retriggers, drum maps, silencing that cuts nothing sent since; a run (a glide) struck as the horizon reaches each note
@@ -26,6 +27,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `expr.ts` a panel's expressions: a total language (numbers, names, arithmetic, comparison, a conditional, eight functions), parsed and never `eval`ed, refused in words (`compileExpression`)
 - `model.ts` a panel as it is kept: controls, bindings (`kind`, `number`, `range`), groups that nest, repeat over a parameter and use templates, the grid; `readPanel` from anything; `panelRow`
 - `instantiate.ts` a panel resolved to what is drawn and played: groups repeated, templates filled in, every expression a number, each control with a key (`strips[3]/level`); what can't be resolved said and left out; at most 2,000 instances
+- `edit.ts` a panel edited, each operation a new panel: a node by its place (`NodePath`, which every instance of one definition shares), updated, inserted (into its template for a group that uses one), removed, moved, duplicated; a new control bound so it does something at once
 - `runtime.ts` `PanelRuntime`: a touch in, bytes out (only when the number on the wire changes); a message in, the controls moved (not echoed, a held control left); a keyboard's and a pads' notes; `silence`
 - `library.ts` the panels kept (`PanelLibrary`, `PanelStore`), a panel as a file (`.midipanel.json`: `exportPanel`, `importPanel`)
 - `rack.ts` `PanelRack`: a runtime for each panel a setup has active, kept while its panel is the same, silenced when it goes (decision 007)
@@ -57,6 +59,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 `index.ts` is the surface, `@yggi/webmidi/ui/panels` (decision 005): control panels to play, apart from `@yggi/webmidi/ui`.
 
 - `PanelView.svelte` a panel laid out and played: a group a row, a strip (`columns: 1`) or a grid, each control its widget, driven by core's `PanelRuntime`; `onsend` with each message a touch makes, `receive` for what the panel's column is sent, `silence`; full screen, or over the window where the browser has none; what the panel couldn't resolve said under its name; every note released on leaving
+- `PanelEditor.svelte` a panel edited: the panel as it will be played, a control or a group pressed to choose it (every instance of one definition marked), and what is chosen field by field: a binding in one line with what it comes to in each instance, a group's layout and repeat, add, move, duplicate, delete, undo; it calls back the panel changed, read through `readPanel`
 - `Keys.svelte` the on-screen keyboard over core's `keyboardLayout`: louder lower down, a slide playing each key it crosses, several fingers; it stands on its own too, and carries the palette
 - `Knob.svelte`, `Fader.svelte`, `XYPad.svelte`, `Toggle.svelte` (a button and a switch), `Pads.svelte`: the view's widgets, drawn from its palette; `drag.ts` a drag that keeps its pointer, so several fingers move several controls, and a slider's keys
 - `panels.svelte.test.ts` the view and the keyboard mounted in jsdom
@@ -65,7 +68,8 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 
 The standalone patchbay page ([proposals/patchbay.md](proposals/patchbay.md), section 4), not in the package: `npm run site` serves it, `npm run site:build` builds it into `dist-site/`, and `.github/workflows/site.yml` publishes that on GitHub Pages when run by hand.
 
-- `bay.svelte.ts` `Bay`: what the page keeps and does: the connection, the book and the panels' library in `localStorage`, a `PanelRack`, a message from an input or a panel sent where its row is crossed (`forwardsOf`, `forwardsOfInput`, `panelForwardsOf`), a test note, all notes off, a panel's file in and out
+- `bay.svelte.ts` `Bay`: what the page keeps and does: the connection, the book and the panels' library in `localStorage`, a `PanelRack`, a message from an input or a panel sent where its row is crossed (`forwardsOf`, `forwardsOfInput`, `panelForwardsOf`), a test note, all notes off, a panel's file in and out, a panel edited, made and deleted, the delay it adds measured (`ThruMeter`), and rows crossed with the built-in played on its own sound
+- `synth.ts` the page's own sound, the built-in of its setups: a small Web Audio synth that takes MIDI (notes, drums on channel 10, the bend, the pedal, volume and filter), so a panel sounds with no device, and where there is no Web MIDI
 - `App.svelte` the page drawn: `MidiStatus`, `SetupPicker`, `PatchMatrix` (inputs and panels down, outputs and panels across, no clock), the panel being played (`PanelView` over the rack's runtime), the last messages through the patch
 - `bay.svelte.test.ts` the page end to end on the fake Web MIDI
 

@@ -91,6 +91,14 @@ export interface Panel {
     readonly templates?: Readonly<Record<string, Template>>;
     readonly children: readonly PanelNode[];
 }
+/**
+ * Where a node is defined: its place among the children of the panel, or of one of its templates, as indices down
+ * from the top (`[0, 2]`: the third child of the first). The empty path is the panel, or the template, itself.
+ */
+export interface NodePath {
+    readonly template?: string;
+    readonly at: readonly number[];
+}
 /** A panel's row and column in the patch: an active panel is both. */
 export declare const panelRow: (id: string) => string;
 export declare const isGroup: (node: PanelNode) => node is Group;

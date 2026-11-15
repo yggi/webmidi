@@ -6,8 +6,16 @@
  */
 import {
   activeSetup,
+  BUILT_IN,
+  HEARD,
+  newBook,
+  overwrite,
+  withBuiltIn,
+  withCrossing,
+  builtInHears,
   forwardsOf,
   forwardsOfInput,
+  inputRow,
   hardwareOutputs,
   loadBook,
   namePorts,
@@ -16,11 +24,14 @@ import {
   panelsOf,
   portsMessage,
   portsOf,
+  ThruMeter,
+  withPanelActive,
   type BookStore,
   type Forward,
   type MidiPort,
   type PortOption,
   type SetupBook,
+  type ThruStats,
 } from '../src/core/index';
 import {
   EXAMPLE_MIXER,
@@ -30,6 +41,9 @@ import {
   loadLibrary,
   PanelRack,
   panelOf,
+  removePanel,
+  withPanel,
+  type Panel,
   type PanelLibrary,
   type PanelRuntime,
   type PanelStore,
@@ -64,6 +78,9 @@ export class Bay {
   /** The panel being played, by id. */
   shown: string | null = $state(null);
   seen: readonly Seen[] = $state.raw([]);
+  /** What the page added to the messages it passed on from an input to an output: its own delay, measured. */
+  thru: ThruStats | null = $state.raw(null);
+  private readonly meter = new ThruMeter();
   /** Bumped when the rack's runtimes change, for what reads one. */
   private racked = $state(0);
 
@@ -74,18 +91,24 @@ export class Bay {
   constructor(
     private readonly books: BookStore,
     private readonly panels: PanelStore,
+    /** The page's own sound, the built-in of its setups: what a row crossed with it is played on. None: silent. */
+    private readonly sound: { play(data: ArrayLike<number>): void } | null = null,
+    /** The page's clock, in ms: the one an input's messages are stamped on. */
+    private readonly now: () => number = () => performance.now(),
   ) {
-    this.book = loadBook(books);
     const kept = loadLibrary(panels);
-    // (a first visit starts with two panels to play)
+    // (a first visit starts with two panels, and the one with keys playing the page's own sound: something to hear at once)
     this.library = kept.panels.length ? kept : { version: 1, panels: [EXAMPLE_MIXER, EXAMPLE_PLAY] };
+    this.book = loadBook(books, () =>
+      sound ? overwrite(withCrossing(withPanelActive(withBuiltIn(newBook(), true), EXAMPLE_PLAY.id, true), CONTEXT, panelKey(EXAMPLE_PLAY.id), BUILT_IN.key, HEARD)) : null,
+    );
     this.adopt();
   }
 
   /** Ask for Web MIDI and take the ports as they are; in words why not, when it can't. */
   async connect(): Promise<void> {
     this.connecting = true;
-    const result = await MidiAccess.connect({ onMessage: (data, source) => this.heard(data, source), onChange: () => this.refresh() });
+    const result = await MidiAccess.connect({ onMessage: (data, source, timeStamp) => this.heard(data, source, timeStamp), onChange: () => this.refresh() });
     this.connecting = false;
     if (typeof result === 'string') return void (this.message = result);
     this.midi = result;
@@ -137,20 +160,28 @@ export class Bay {
     return id === null ? undefined : this.rack.runtime(id);
   }
 
-  private send(forwards: readonly Forward[], from: string, book: SetupBook): void {
+  /** Messages sent to their outputs: how many reached a port plugged in. */
+  private send(forwards: readonly Forward[], from: string, book: SetupBook): number {
     const setup = activeSetup(book);
+    let reached = 0;
     for (const f of forwards) {
-      this.ports.get(f.output)?.send(f.data);
+      const port = this.ports.get(f.output);
+      port?.send(f.data);
+      if (port) reached++;
       this.note(from, setup.outputs.find((o) => o.key === f.output)?.name || f.output, f.data);
     }
+    return reached;
   }
 
   /** A message on a row, sent where the row is crossed: to outputs, and to panels. */
-  private route(row: string | PortOption, data: ArrayLike<number>, from: string, book: SetupBook = this.book): void {
-    this.send(typeof row === 'string' ? forwardsOf(book, CONTEXT, row, data) : forwardsOfInput(book, CONTEXT, row, data), from, book);
+  private route(row: string | PortOption, data: ArrayLike<number>, from: string, book: SetupBook = this.book): number {
+    // (the built-in takes MIDI here: a row crossed with it is played on the page's own sound)
+    if (this.sound && builtInHears(book, CONTEXT, typeof row === 'string' ? row : inputRow(row))) (this.sound.play(data), this.note(from, 'Synth', data));
+    const reached = this.send(typeof row === 'string' ? forwardsOf(book, CONTEXT, row, data) : forwardsOfInput(book, CONTEXT, row, data), from, book);
     const toPanels = panelForwardsOf(book, CONTEXT, row, data);
     this.rack.receive(toPanels);
     for (const f of toPanels) this.note(from, panelOf(this.library, f.panel)?.name ?? f.panel, f.data);
+    return reached;
   }
 
   /** A message a panel made, by a touch. */
@@ -159,8 +190,17 @@ export class Bay {
   }
 
   /** A message from an input, by its port's name. */
-  private heard(data: ArrayLike<number>, source: string): void {
-    this.route({ id: source, name: source }, data, source);
+  private heard(data: ArrayLike<number>, source: string, seen: number): void {
+    if (!this.route({ id: source, name: source }, data, source)) return;
+    // (passed on to an output: the time from the port seeing it to the page having sent it)
+    this.meter.add(seen, this.now());
+    this.thru = this.meter.stats;
+  }
+
+  /** The measurement begun again. */
+  resetThru(): void {
+    this.meter.reset();
+    this.thru = null;
   }
 
   private note(from: string, to: string, data: ArrayLike<number>): void {
@@ -177,16 +217,43 @@ export class Bay {
   /** All notes off, on every channel of one output, or of every output; the panels' notes released too. */
   panic(key?: string): void {
     for (const id of panelsOf(activeSetup(this.book))) for (const data of this.rack.runtime(id)?.silence() ?? []) this.played(id, data);
+    if (key === undefined) for (let ch = 0; ch < 16; ch++) this.sound?.play([0xb0 | ch, 123, 0]);
     for (const [k, port] of this.ports) if (key === undefined || k === key) for (let ch = 0; ch < 16; ch++) port?.send([0xb0 | ch, 123, 0]);
+  }
+
+  private keepLibrary(library: PanelLibrary): void {
+    this.library = library;
+    this.panels.save(library);
+    this.adopt();
+  }
+
+  /** A panel changed in the editor: kept, and played anew where it is active (its notes released first). */
+  editPanel(panel: Panel): void {
+    this.keepLibrary(withPanel(this.library, panel));
+  }
+
+  /** A new, empty panel in the library, active in the setup and shown: its id. */
+  newPanel(): string {
+    let n = this.library.panels.length + 1;
+    while (panelOf(this.library, `p${n}`)) n++;
+    const id = `p${n}`;
+    this.keepLibrary(withPanel(this.library, { id, name: `Panel ${n}`, children: [] }));
+    this.keep(withPanelActive(this.book, id, true));
+    this.shown = id;
+    return id;
+  }
+
+  /** A panel taken out of the library, and out of the setup in use with its routes. */
+  deletePanel(id: string): void {
+    this.keep(withPanelActive(this.book, id, false));
+    this.keepLibrary(removePanel(this.library, id));
   }
 
   /** A panel's file added to the library, or in words why not. */
   importPanel(text: string): string | null {
     const next = importPanel(this.library, text);
     if (typeof next === 'string') return next;
-    this.library = next;
-    this.panels.save(next);
-    this.adopt();
+    this.keepLibrary(next);
     return null;
   }
 

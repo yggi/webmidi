@@ -728,6 +728,17 @@ describe('PatchMatrix', () => {
     expect([panelsOf(activeSetup(props.book)), crossingOf(props.book, 'piece:a', inputRow(keystep), panelKey('mixer'))]).toEqual([[], undefined]);
   });
 
+  it('crosses an input’s and a panel’s row with a built-in that plays MIDI itself, on or off (`direct`: the standalone page’s synth)', () => {
+    const book = withPanelActive(withBuiltIn(home(), true), 'mixer', true);
+    const { props } = matrix(book, { builtIn: { label: 'Synth', direct: true }, panels: [{ id: 'mixer', name: 'Mixer' }] });
+    expect([rowCells('KeyStep 37')[0], rowCells('Mixer')[0]]).toEqual(['·', '·']);
+    jack('KeyStep 37', 'Synth').click();
+    jack('Mixer', 'Synth').click();
+    flushSync();
+    expect([builtInHears(props.book, 'piece:a', inputRow(keystep)), builtInHears(props.book, 'piece:a', panelKey('mixer'))]).toEqual([true, true]);
+    expect([rowCells('KeyStep 37')[0], rowCells('Mixer')[0]]).toEqual(['ON', 'ON']);
+  });
+
   it('says of an active panel the library lacks that it is missing, its crossings kept; a frontend with no panels draws none', () => {
     const book = withCrossing(withPanelActive(home(), 'gone', true), 'piece:a', panelKey('gone'), 'o1', 4);
     const { props } = matrix(book, { panels: [{ id: 'mixer', name: 'Mixer' }] });

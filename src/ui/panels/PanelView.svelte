@@ -10,7 +10,7 @@
    * other a grid; a child's `cell` places it. What the panel couldn't resolve is said under its name.
    */
   import { PanelRuntime, type ControlInstance, type InstanceNode } from '../../core/panels/index';
-  import type { Cell, Panel } from '../../core/panels/index';
+  import { samePath, type Cell, type NodePath, type Panel } from '../../core/panels/index';
   import { isBlackKey } from '../../core/keyboard';
   import Fader from './Fader.svelte';
   import Keys from './Keys.svelte';
@@ -31,9 +31,24 @@
     onsend: (data: number[]) => void;
     /** Whether its name and the full-screen button are shown (true by default). */
     bar?: boolean;
+    /**
+     * Given, the view is an editor's: a control or a group pressed is chosen, not played (its place in the panel, the
+     * same for every instance of one definition), and a press on the panel's ground chooses none.
+     */
+    onselect?: (source: NodePath | null) => void;
+    /** The place chosen: every instance of it is marked. */
+    selected?: NodePath | null;
   }
 
-  let { panel, runtime: given, onsend, bar = true }: Props = $props();
+  let { panel, runtime: given, onsend, bar = true, onselect, selected = null }: Props = $props();
+
+  /** A press that chooses, in an editor: it goes no further, so a control in a group chooses the control. */
+  const choose = (e: Event, source: NodePath | null) => {
+    if (!onselect) return;
+    e.stopPropagation();
+    onselect(source);
+  };
+  const byKey = (e: KeyboardEvent, source: NodePath) => (e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget && (e.preventDefault(), choose(e, source));
 
   const NOTHING: Panel = { id: '', name: '', children: [] };
   const runtime = $derived(given ?? new PanelRuntime(panel ?? NOTHING));
@@ -99,41 +114,55 @@
 {#snippet control(c: ControlInstance)}
   {@const v = valueOf(c.key)}
   {@const name = c.label || c.key}
-  <div class="ctl {c.type}" style={place(c.cell)} style:--whites={c.type === 'keyboard' ? c.notes.filter((n) => !isBlackKey(n)).length : undefined}>
-    {#if c.type === 'knob'}
-      <Knob
-        value={v.x}
-        label={name}
-        readout={readout(c, v.x)}
-        rest={c.value}
-        onpress={() => runtime.press(c.key)}
-        onmove={(x) => send(runtime.move(c.key, { x }))}
-        onlift={() => runtime.lift(c.key)}
-      />
-    {:else if c.type === 'fader'}
-      <Fader
-        value={v.x}
-        label={name}
-        readout={readout(c, v.x)}
-        onpress={() => runtime.press(c.key)}
-        onmove={(x) => send(runtime.move(c.key, { x }))}
-        onlift={() => runtime.lift(c.key)}
-      />
-    {:else if c.type === 'xy'}
-      <XYPad x={v.x} y={v.y} label={name} onpress={() => runtime.press(c.key)} onmove={(to) => send(runtime.move(c.key, to))} onlift={() => runtime.lift(c.key)} />
-    {:else if c.type === 'button' || c.type === 'switch'}
-      <Toggle on={v.x > 0} label={name} kind={c.type} onpress={() => runtime.press(c.key)} onmove={(x) => send(runtime.move(c.key, { x }))} onlift={() => runtime.lift(c.key)} />
-    {:else if c.type === 'keyboard'}
-      <Keys
-        low={c.notes[0] ?? 48}
-        high={c.notes.at(-1) ?? 72}
-        label={name}
-        onstrike={(n, vel) => send(runtime.strike(c.key, n, vel))}
-        onunstrike={(n) => send(runtime.unstrike(c.key, n))}
-      />
-    {:else if c.type === 'pads'}
-      <Pads notes={c.notes} label={name} onstrike={(n, vel) => send(runtime.strike(c.key, n, vel))} onunstrike={(n) => send(runtime.unstrike(c.key, n))} />
-    {/if}
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_no_noninteractive_tabindex -->
+  <div
+    class="ctl {c.type}"
+    class:picked={samePath(c.source, selected)}
+    style={place(c.cell)}
+    style:--whites={c.type === 'keyboard' ? c.notes.filter((n) => !isBlackKey(n)).length : undefined}
+    role={onselect ? 'button' : undefined}
+    tabindex={onselect ? 0 : undefined}
+    aria-label={onselect ? `Edit ${name}` : undefined}
+    aria-pressed={onselect ? samePath(c.source, selected) : undefined}
+    onclick={(e) => choose(e, c.source)}
+    onkeydown={(e) => onselect && byKey(e, c.source)}
+  >
+    <div class="widget" inert={!!onselect}>
+      {#if c.type === 'knob'}
+        <Knob
+          value={v.x}
+          label={name}
+          readout={readout(c, v.x)}
+          rest={c.value}
+          onpress={() => runtime.press(c.key)}
+          onmove={(x) => send(runtime.move(c.key, { x }))}
+          onlift={() => runtime.lift(c.key)}
+        />
+      {:else if c.type === 'fader'}
+        <Fader
+          value={v.x}
+          label={name}
+          readout={readout(c, v.x)}
+          onpress={() => runtime.press(c.key)}
+          onmove={(x) => send(runtime.move(c.key, { x }))}
+          onlift={() => runtime.lift(c.key)}
+        />
+      {:else if c.type === 'xy'}
+        <XYPad x={v.x} y={v.y} label={name} onpress={() => runtime.press(c.key)} onmove={(to) => send(runtime.move(c.key, to))} onlift={() => runtime.lift(c.key)} />
+      {:else if c.type === 'button' || c.type === 'switch'}
+        <Toggle on={v.x > 0} label={name} kind={c.type} onpress={() => runtime.press(c.key)} onmove={(x) => send(runtime.move(c.key, { x }))} onlift={() => runtime.lift(c.key)} />
+      {:else if c.type === 'keyboard'}
+        <Keys
+          low={c.notes[0] ?? 48}
+          high={c.notes.at(-1) ?? 72}
+          label={name}
+          onstrike={(n, vel) => send(runtime.strike(c.key, n, vel))}
+          onunstrike={(n) => send(runtime.unstrike(c.key, n))}
+        />
+      {:else if c.type === 'pads'}
+        <Pads notes={c.notes} label={name} onstrike={(n, vel) => send(runtime.strike(c.key, n, vel))} onunstrike={(n) => send(runtime.unstrike(c.key, n))} />
+      {/if}
+    </div>
     {#if c.label}<span class="name" class:text={c.type === 'label'}>{c.label}</span>{/if}
     {#if (c.type === 'knob' || c.type === 'fader') && c.bindings.length}<span class="num" aria-hidden="true">{readout(c, v.x)}</span>{/if}
   </div>
@@ -143,7 +172,16 @@
   {#if n.kind === 'control'}
     {@render control(n)}
   {:else}
-    <section class="group {shape(n.columns)}" style={place(n.cell)} aria-label={n.label || n.key}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex, a11y_click_events_have_key_events -->
+    <section
+      class="group {shape(n.columns)}"
+      class:picked={samePath(n.source, selected)}
+      style={place(n.cell)}
+      aria-label={n.label || n.key}
+      tabindex={onselect ? 0 : undefined}
+      onclick={(e) => choose(e, n.source)}
+      onkeydown={(e) => onselect && byKey(e, n.source)}
+    >
       {#if n.label}<h4>{n.label}</h4>{/if}
       <div class="cells {shape(n.columns)}" style={grid(n.columns)}>
         {#each n.children as child (child.key)}{@render node(child)}{/each}
@@ -152,7 +190,8 @@
   {/if}
 {/snippet}
 
-<div class="wm-panel" class:full class:filling bind:this={root}>
+<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+<div class="wm-panel" class:full class:filling class:editing={!!onselect} bind:this={root} onclick={(e) => choose(e, null)}>
   {#if bar}
     <header>
       <span class="title">{runtime.panel.name}</span>
@@ -345,6 +384,32 @@
     width: calc(var(--_unit) * 0.5 * var(--whites));
     max-width: 100%;
     align-self: end;
+  }
+  /* the widget itself: no box of its own, so the control lays out as if it weren't there */
+  .widget {
+    display: contents;
+  }
+  /* an editor's: a control and a group are pressed to choose them, and every instance of the one chosen is marked */
+  .editing :is(.ctl, .group) {
+    cursor: pointer;
+  }
+  .editing .ctl {
+    min-height: 28px;
+    padding: 3px;
+    border-radius: 8px;
+    outline: 1px dashed transparent;
+    outline-offset: 1px;
+  }
+  .editing .ctl:hover {
+    outline-color: var(--_faint);
+  }
+  .editing :is(.ctl, .group).picked {
+    outline: 2px solid var(--_accent);
+    outline-offset: 1px;
+  }
+  .editing :is(.ctl, .group):focus-visible {
+    outline: 2px solid var(--_accent);
+    outline-offset: 3px;
   }
   .name {
     max-width: 100%;

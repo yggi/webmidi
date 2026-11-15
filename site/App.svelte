@@ -3,10 +3,10 @@
    * The standalone patchbay, drawn: the connection, the setups, the patch (inputs and panels down, outputs and panels
    * across), the panel being played, and the last messages that went through. Everything it does is `Bay`'s.
    */
-  import { activeSetup, panelsOf } from '../src/core/index';
+  import { activeSetup, delayText, panelsOf } from '../src/core/index';
   import { panelOf } from '../src/core/panels/index';
   import { MidiStatus, PatchMatrix, SetupPicker } from '../src/ui/index';
-  import { PanelView } from '../src/ui/panels/index';
+  import { PanelEditor, PanelView } from '../src/ui/panels/index';
   import { CONTEXT, type Bay } from './bay.svelte';
 
   let { bay }: { bay: Bay } = $props();
@@ -14,6 +14,9 @@
   const active = $derived(panelsOf(activeSetup(bay.book)).flatMap((id) => panelOf(bay.library, id) ?? []));
   const runtime = $derived(bay.runtimeOf(bay.shown));
   let problem: string | null = $state(null);
+  /** Whether the panel shown is being edited, not played. */
+  let editing = $state(false);
+  const shownPanel = $derived(bay.shown === null ? undefined : panelOf(bay.library, bay.shown));
   let file: HTMLInputElement | undefined = $state();
 
   async function chosen() {
@@ -67,6 +70,7 @@
       outputs={bay.outputs}
       panels={bay.library.panels}
       clock={false}
+      builtIn={{ label: 'Synth', direct: true }}
       onchange={(book) => bay.keep(book)}
       onpanel={(id) => (bay.shown = id)}
       ontest={(key) => bay.test(key)}
@@ -83,12 +87,19 @@
         {/each}
       </div>
       <span class="grow"></span>
+      <button type="button" aria-pressed={editing} onclick={() => (editing = !editing)} disabled={!shownPanel}>{editing ? 'Done editing' : 'Edit'}</button>
+      <button type="button" onclick={() => (bay.newPanel(), (editing = true))}>New panel</button>
       <button type="button" onclick={() => file?.click()}>Open a panel’s file…</button>
       <button type="button" onclick={save} disabled={!runtime}>Save this panel’s file</button>
       <input bind:this={file} type="file" accept=".json,application/json" hidden onchange={chosen} />
     </div>
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
-    {#if runtime && bay.shown !== null}
+    {#if editing && shownPanel}
+      <PanelEditor panel={shownPanel} onchange={(panel) => bay.editPanel(panel)} />
+      <div class="bar">
+        <span class="grow"></span><button type="button" class="danger" onclick={() => (bay.deletePanel(shownPanel.id), (editing = false))}>Delete this panel</button>
+      </div>
+    {:else if runtime && bay.shown !== null}
       {@const id = bay.shown}
       {#key runtime}
         <PanelView {runtime} onsend={(data) => bay.played(id, data)} />
@@ -107,7 +118,18 @@
     {:else}
       <p class="hint">Nothing yet. A message appears here when a crossing sends it on.</p>
     {/if}
-    <p class="hint">A browser passes each message on when the page gets to it, so this adds a little time to every one: fine for a fader, audible on tight drums.</p>
+    <div class="bar">
+      {#if bay.thru}
+        <p class="thru" role="status">
+          This page added <strong>{delayText(bay.thru.median)}</strong> to a message passed on (the median); 95 in 100 within <strong>{delayText(bay.thru.p95)}</strong>, the worst
+          <strong>{delayText(bay.thru.worst)}</strong>, over the last {bay.thru.count} of {bay.thru.total}.
+        </p>
+        <button type="button" onclick={() => bay.resetThru()}>Measure again</button>
+      {:else}
+        <p class="hint">Play an input that is routed to an output, and the time this page adds to each message is measured here.</p>
+      {/if}
+    </div>
+    <p class="hint">It is the page’s own delay, from the port seeing a message to the page sending it on: not the device’s, or the cable’s.</p>
   </section>
 </main>
 
@@ -197,6 +219,12 @@
       sans-serif;
     cursor: pointer;
   }
+  button.danger {
+    color: var(--warn);
+  }
+  button[aria-pressed='true'] {
+    border-color: currentColor;
+  }
   button:disabled {
     opacity: 0.5;
     cursor: default;
@@ -207,6 +235,11 @@
   .hint {
     margin: 0;
     color: var(--muted);
+    font-size: 14px;
+  }
+  .thru {
+    flex: 1 1 320px;
+    margin: 0;
     font-size: 14px;
   }
   .problem {

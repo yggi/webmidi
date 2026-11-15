@@ -18,5 +18,5 @@ Decision 005 made a panel a virtual device and left open how the book says so. T
 ## Consequences
 
 - The standalone page (`site/`) is the first to wire it: inputs and panels down, outputs and panels across.
-- Not yet: what a panel plays among a frontend's rows (decision 003's Plays, for a panel's keyboard on the built-in sound), so a panel is not heard on the built-in.
+- A built-in that plays MIDI itself (the standalone page's synth) is crossed directly by an input's and a panel's row, on or off (`PatchMatrix`'s `builtIn.direct`, added 2026-11-15): the page plays such a row's messages on its own sound. Not yet: what a panel plays among a frontend's rows (decision 003's Plays), so in a frontend whose built-in plays its voices a panel is not heard on it.
 - Two panels may send to each other; neither echoes what it receives, so nothing loops.
