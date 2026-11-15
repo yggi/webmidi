@@ -20,6 +20,7 @@ Module by module: [architecture.md](architecture.md).
 - `src/core/panels/` (`@yggi/webmidi/panels`, pure, decision 005): a control panel kept, its expressions, instantiated, played (`PanelRuntime`), the library
 - `src/web/` (`@yggi/webmidi/web`): Web MIDI asked for and connected (`access.ts`), the ports in full (`ports.ts`), a SysEx transport (`transport.ts`), the book in `localStorage` (`book-store.ts`)
 - `src/ui/` (`@yggi/webmidi/ui`): the patchbay's Svelte components, presentational, coloured by `--wm-*` custom properties
+- `src/ui/panels/` (`@yggi/webmidi/ui/panels`): a panel to play (`PanelView`), its widgets, the on-screen keyboard (`Keys`)
 - `src/testing/` (`@yggi/webmidi/testing`, tests only): core's and web's fakes re-exported
 
 ## Gates

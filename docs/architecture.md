@@ -51,6 +51,15 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `ChannelMeter.svelte` the 16 channels of an output, used and sounding; `channels.ts` a channel's hue, the same in every component
 - `ui.svelte.test.ts` the components mounted in jsdom (`// @vitest-environment jsdom`; Svelte's browser build)
 
+## Map of src/ui/panels/
+
+`index.ts` is the surface, `@yggi/webmidi/ui/panels` (decision 005): control panels to play, apart from `@yggi/webmidi/ui`.
+
+- `PanelView.svelte` a panel laid out and played: a group a row, a strip (`columns: 1`) or a grid, each control its widget, driven by core's `PanelRuntime`; `onsend` with each message a touch makes, `receive` for what the panel's column is sent, `silence`; full screen, or over the window where the browser has none; what the panel couldn't resolve said under its name; every note released on leaving
+- `Keys.svelte` the on-screen keyboard over core's `keyboardLayout`: louder lower down, a slide playing each key it crosses, several fingers; it stands on its own too, and carries the palette
+- `Knob.svelte`, `Fader.svelte`, `XYPad.svelte`, `Toggle.svelte` (a button and a switch), `Pads.svelte`: the view's widgets, drawn from its palette; `drag.ts` a drag that keeps its pointer, so several fingers move several controls, and a slider's keys
+- `panels.svelte.test.ts` the view and the keyboard mounted in jsdom
+
 ## src/testing/
 
 `index.ts` is `@yggi/webmidi/testing`, for tests only: core's and web's `fixtures.ts` re-exported, so a frontend's tests drive the fakes webmidi's own do (yggi/webmidi#6). `testing.test.ts` holds it to its surface, to the web gate and to `npm pack`.

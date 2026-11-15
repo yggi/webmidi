@@ -4,3 +4,9 @@ import type { Panel } from './model';
  * 30 + ch, Level on CC ch), and a main fader of the panel's own. 8 strips, 32 controls in them, 33 in all.
  */
 export declare const EXAMPLE_MIXER: Panel;
+/**
+ * A panel of every kind of control, to play a synth from: an XY pad on the filter (cutoff across, resonance up), the
+ * bend and the modulation as faders, two program buttons' worth of switches, a 14-bit volume, an NRPN, the drum pads
+ * on channel 10, and two octaves of keys.
+ */
+export declare const EXAMPLE_PLAY: Panel;
