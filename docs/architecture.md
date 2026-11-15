@@ -19,6 +19,17 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `sysex.ts` whole SysEx messages out of a byte stream (`SysexAssembler`, lifted from ep133-sysex)
 - `host.d.ts` the one host global core uses
 
+## Map of src/core/panels/
+
+`index.ts` is the surface, `@yggi/webmidi/panels` (decision 005): control panels, the pure part, under core's gate and exported apart from `@yggi/webmidi/core`.
+
+- `expr.ts` a panel's expressions: a total language (numbers, names, arithmetic, comparison, a conditional, eight functions), parsed and never `eval`ed, refused in words (`compileExpression`)
+- `model.ts` a panel as it is kept: controls, bindings (`kind`, `number`, `range`), groups that nest, repeat over a parameter and use templates, the grid; `readPanel` from anything; `panelRow`
+- `instantiate.ts` a panel resolved to what is drawn and played: groups repeated, templates filled in, every expression a number, each control with a key (`strips[3]/level`); what can't be resolved said and left out; at most 2,000 instances
+- `runtime.ts` `PanelRuntime`: a touch in, bytes out (only when the number on the wire changes); a message in, the controls moved (not echoed, a held control left); a keyboard's and a pads' notes; `silence`
+- `library.ts` the panels kept (`PanelLibrary`, `PanelStore`), a panel as a file (`.midipanel.json`: `exportPanel`, `importPanel`)
+- `examples.ts` `EXAMPLE_MIXER`: eight strips of one template, the model's test
+
 ## Map of src/web/
 
 `index.ts` is the surface, `@yggi/webmidi/web`. Lifted from Cell studio's `src/midi/access.ts` @ 85175ce and KO-Multitool's `src/lib/transport/midi.ts` @ 8b4b49e, merged: one place asks for Web MIDI.
