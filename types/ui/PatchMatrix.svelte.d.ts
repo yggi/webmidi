@@ -36,6 +36,13 @@ interface Props {
         readonly label: string;
         readonly rows?: boolean;
     } | null;
+    /** The library's control panels, by id and name: those the setup has active are rows and columns, the others chips that add them. None: no panels here. */
+    panels?: readonly {
+        readonly id: string;
+        readonly name: string;
+    }[];
+    /** A panel's head pressed, by its id: the frontend shows it to play. */
+    onpanel?: (id: string) => void;
     onchange: (book: SetupBook) => void;
     /**
      * An output's head pressed, by key: the frontend shows its details itself (and may mark it with `selected`). Left

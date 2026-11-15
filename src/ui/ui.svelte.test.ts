@@ -19,6 +19,9 @@ import {
   inputRow,
   newBook,
   overwrite,
+  panelKey,
+  panelsOf,
+  withPanelActive,
   profileOf,
   renameSetup,
   saveAs,
@@ -683,6 +686,63 @@ describe('PatchMatrix', () => {
     props.book = newBook();
     flushSync();
     expect(one('.nothing').textContent).toContain('no MIDI device plugged in');
+  });
+
+  it('draws the setup’s active panels as rows and columns, the library’s others as chips; a panel’s row is routed like an input’s, its column on or off (decision 007)', () => {
+    const library = [
+      { id: 'mixer', name: 'Mixer' },
+      { id: 'play', name: 'Keys and pads' },
+    ];
+    const onpanel = vi.fn();
+    const { props } = matrix(withPanelActive(home(), 'mixer', true), { panels: library, onpanel });
+    expect(all('.tray .dev').map((b) => b.textContent)).toEqual(['+ Keys and pads']);
+    expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['Clock', '&lead', '&pad', 'Kit', 'Mixer', 'KeyStep 37']);
+    expect(all('thead .slot').map((n) => n.textContent)).toEqual(['OUT 1', 'OUT 2', 'PANEL']);
+    // its own column: a dash; a voice's row is the frontend's to send, so nothing; an input's row a jack
+    expect([rowCells('Mixer'), rowCells('&lead'), rowCells('KeyStep 37'), rowCells('Clock')]).toEqual([
+      ['·', '·', '—'],
+      ['·', '1', '·'],
+      ['·', '·', '·'],
+      ['·', '·', '·'],
+    ]);
+    expect(jack('&lead', 'the panel Mixer')).toBeUndefined();
+    jack('Mixer', 'Circuit Tracks').click();
+    flushSync();
+    click('= As played');
+    jack('KeyStep 37', 'the panel Mixer').click();
+    flushSync();
+    expect([crossingOf(props.book, 'piece:a', panelKey('mixer'), 'o1'), crossingOf(props.book, 'piece:a', inputRow(keystep), panelKey('mixer'))]).toEqual([AS_PLAYED, AS_PLAYED]);
+    expect(rowCells('KeyStep 37')).toEqual(['·', '·', 'ON']);
+    (all('thead button.col').at(-1) as HTMLButtonElement).click();
+    expect(onpanel).toHaveBeenCalledWith('mixer');
+    click('+ Keys and pads');
+    expect(panelsOf(activeSetup(props.book))).toEqual(['mixer', 'play']);
+    // out at once with nothing routed; asked about with routes, which go with it
+    one<HTMLButtonElement>('[aria-label="Remove the panel Keys and pads"]').click();
+    flushSync();
+    expect(panelsOf(activeSetup(props.book))).toEqual(['mixer']);
+    one<HTMLButtonElement>('[aria-label="Remove the panel Mixer"]').click();
+    flushSync();
+    expect(one('[role=group][aria-label^="Remove"]').getAttribute('aria-label')).toBe('Remove the panel Mixer?');
+    click('Remove');
+    expect([panelsOf(activeSetup(props.book)), crossingOf(props.book, 'piece:a', inputRow(keystep), panelKey('mixer'))]).toEqual([[], undefined]);
+  });
+
+  it('says of an active panel the library lacks that it is missing, its crossings kept; a frontend with no panels draws none', () => {
+    const book = withCrossing(withPanelActive(home(), 'gone', true), 'piece:a', panelKey('gone'), 'o1', 4);
+    const { props } = matrix(book, { panels: [{ id: 'mixer', name: 'Mixer' }] });
+    expect(
+      all('tbody tr')
+        .find((r) => r.textContent?.includes('gone'))!
+        .querySelector('.sub:not(.in)')!.textContent,
+    ).toBe('not in the library');
+    expect(all('thead .col.absent .tag').map((t) => t.textContent)).toEqual(['Not in the library']);
+    expect(rowCells('gone')).toEqual(['4', '·', '—']);
+    props.book = home();
+    (props as Record<string, unknown>).panels = undefined;
+    flushSync();
+    expect(all('.tray .dev.panel')).toEqual([]);
+    expect(all('thead .slot').map((n) => n.textContent)).toEqual(['OUT 1', 'OUT 2']);
   });
 
   it('locked (a piece routed by its cards): its rows shown, not pressed, no output to add; the inputs and the clock still the setup’s (yggi/webmidi#22)', () => {

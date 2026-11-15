@@ -30,6 +30,8 @@ interface Bound {
 const unit = (v: number): number => (Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0);
 
 export class PanelRuntime {
+  /** The panel as it was given: a rack keeps a runtime while this is the same. */
+  readonly source: Panel;
   readonly panel: PanelInstance;
   private readonly byKey = new Map<string, ControlInstance>();
   private readonly values = new Map<string, ControlValue>();
@@ -41,8 +43,22 @@ export class PanelRuntime {
   private readonly parameters = new ParameterReader();
   /** A keyboard's and a pads' notes sounding, as `key:note`. */
   private readonly struck = new Set<string>();
+  private readonly watchers = new Set<() => void>();
+
+  /**
+   * Told whenever a control's value changes, by a touch or by what was received: a view that draws a runtime it
+   * doesn't own (the panel plays on while the view is away). Returns how to stop being told.
+   */
+  watch(changed: () => void): () => void {
+    this.watchers.add(changed);
+    return () => void this.watchers.delete(changed);
+  }
+  private tell(): void {
+    for (const w of [...this.watchers]) w();
+  }
 
   constructor(panel: Panel) {
+    this.source = panel;
     this.panel = instantiate(panel);
     for (const control of this.panel.controls) {
       this.byKey.set(control.key, control);
@@ -83,7 +99,9 @@ export class PanelRuntime {
     const was = this.value(key);
     const value = { x: to.x === undefined ? was.x : unit(to.x), y: to.y === undefined ? was.y : unit(to.y) };
     this.values.set(key, value);
-    return control.bindings.flatMap((binding, i) => this.send(binding, `${key}#${i}`, value[binding.axis]));
+    const sent = control.bindings.flatMap((binding, i) => this.send(binding, `${key}#${i}`, value[binding.axis]));
+    this.tell();
+    return sent;
   }
 
   /** What a binding sends for a value, when it is not what is already on the wire. */
@@ -162,6 +180,7 @@ export class PanelRuntime {
         take(`pressure:${channel}`, () => m.pressure);
         break;
     }
+    if (moved.size) this.tell();
     return [...moved];
   }
 
@@ -197,6 +216,7 @@ export class PanelRuntime {
         out.push(...this.send(b, `${control.key}#${i}`, 0));
       });
     this.held.clear();
+    if (out.length) this.tell();
     return out;
   }
 }

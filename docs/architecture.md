@@ -15,7 +15,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `bend.ts` cents as 14-bit bends, a note's bends with ramps sampled; `rotation.ts` MPE channels
 - `out.ts` `MidiOut`: `OutNote`s to a port, timestamped, note-offs kept after their note-ons, retriggers, drum maps, silencing that cuts nothing sent since; a run (a glide) struck as the horizon reaches each note
 - `clock-out.ts` `ClockOut`: 24 ticks a beat from the times a frontend passes in, Start, Stop, Continue and Song Position
-- `setups.ts` the patchbay's book (decision 002): device profiles by port name, named setups with their outputs, what each input plays (`plays`, decision 003), routes per context (inputs as rows, `AS_PLAYED`) and the outputs sent clock, a setup's fit to the ports plugged in, a setup as a file; `setups-from.ts` Cell studio's and Jambot's stores migrated once; `setup-ports.ts` a setup's live ports by id or name (`portsOf`), and ports kept by id named once they're seen (`namePorts`), neither making a custom variant; `plays.ts` what an input plays among a frontend's rows (`playsOf`, by row, else role), heard (`isHeard`, `heardOf`), listened to (`listenOf`); `input-kinds.ts` an input's kind by its port's name, presets (`applyPreset`); `forward.ts` what an input row's crossing sends (`forwardsOf`, `forwardsOfInput`): a channel message re-channelled or as played, no system message
+- `setups.ts` the patchbay's book (decision 002; its active control panels, decision 007): device profiles by port name, named setups with their outputs, what each input plays (`plays`, decision 003), routes per context (inputs as rows, `AS_PLAYED`) and the outputs sent clock, a setup's fit to the ports plugged in, a setup as a file; `setups-from.ts` Cell studio's and Jambot's stores migrated once; `setup-ports.ts` a setup's live ports by id or name (`portsOf`), and ports kept by id named once they're seen (`namePorts`), neither making a custom variant; `plays.ts` what an input plays among a frontend's rows (`playsOf`, by row, else role), heard (`isHeard`, `heardOf`), listened to (`listenOf`); `input-kinds.ts` an input's kind by its port's name, presets (`applyPreset`); `forward.ts` what an input row's crossing sends (`forwardsOf`, `forwardsOfInput`; to a panel's column, `panelForwardsOf`): a channel message re-channelled or as played, no system message
 - `sysex.ts` whole SysEx messages out of a byte stream (`SysexAssembler`, lifted from ep133-sysex)
 - `host.d.ts` the one host global core uses
 
@@ -28,7 +28,8 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `instantiate.ts` a panel resolved to what is drawn and played: groups repeated, templates filled in, every expression a number, each control with a key (`strips[3]/level`); what can't be resolved said and left out; at most 2,000 instances
 - `runtime.ts` `PanelRuntime`: a touch in, bytes out (only when the number on the wire changes); a message in, the controls moved (not echoed, a held control left); a keyboard's and a pads' notes; `silence`
 - `library.ts` the panels kept (`PanelLibrary`, `PanelStore`), a panel as a file (`.midipanel.json`: `exportPanel`, `importPanel`)
-- `examples.ts` `EXAMPLE_MIXER`: eight strips of one template, the model's test
+- `rack.ts` `PanelRack`: a runtime for each panel a setup has active, kept while its panel is the same, silenced when it goes (decision 007)
+- `examples.ts` `EXAMPLE_MIXER`: eight strips of one template, the model's test; `EXAMPLE_PLAY`: every kind of control
 
 ## Map of src/web/
 
@@ -37,7 +38,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `access.ts` `requestAccess(sysex)` (the browser's `MIDIAccess`, or a throw) and `MidiAccess.connect` (a connection, or in words why none: never throws), the permission query (`granted`), the ports plugged in (a disconnected one isn't listed), an input listened to (notes parsed, every message raw), `close`; `readEnvironment` for a diagnostic. `MidiAccess` is core's `PortAccess`, so `connectMidi` and `adoptPorts` take it.
 - `ports.ts` every port in full, unplugged ones too (`listPorts`), and `guessPort` by patterns a frontend gives (KO-Multitool keeps the EP-133's)
 - `transport.ts` `SysexTransport`, the shape a device's protocol needs (ep133-sysex's `Transport`, met structurally: `transport.test.ts` holds it to a copy), and `MidiTransport` over an input (by `addEventListener`, so `onmidimessage` stays `MidiAccess`'s) and an output, capturing each message and counting how the browser delivered it
-- `book-store.ts` `localBookStore`: the book in `localStorage`, nothing thrown when storage is refused
+- `book-store.ts` `localBookStore`: the book in `localStorage`, nothing thrown when storage is refused; `panel-store.ts` `localPanelStore`: the panels' library, likewise
 - `fixtures.ts` the fake `navigator.requestMIDIAccess` and a listened input, shipped through `@yggi/webmidi/testing`
 
 ## Map of src/ui/
@@ -59,6 +60,14 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `Keys.svelte` the on-screen keyboard over core's `keyboardLayout`: louder lower down, a slide playing each key it crosses, several fingers; it stands on its own too, and carries the palette
 - `Knob.svelte`, `Fader.svelte`, `XYPad.svelte`, `Toggle.svelte` (a button and a switch), `Pads.svelte`: the view's widgets, drawn from its palette; `drag.ts` a drag that keeps its pointer, so several fingers move several controls, and a slider's keys
 - `panels.svelte.test.ts` the view and the keyboard mounted in jsdom
+
+## site/
+
+The standalone patchbay page ([proposals/patchbay.md](proposals/patchbay.md), section 4), not in the package: `npm run site` serves it, `npm run site:build` builds it into `dist-site/`, and `.github/workflows/site.yml` publishes that on GitHub Pages when run by hand.
+
+- `bay.svelte.ts` `Bay`: what the page keeps and does: the connection, the book and the panels' library in `localStorage`, a `PanelRack`, a message from an input or a panel sent where its row is crossed (`forwardsOf`, `forwardsOfInput`, `panelForwardsOf`), a test note, all notes off, a panel's file in and out
+- `App.svelte` the page drawn: `MidiStatus`, `SetupPicker`, `PatchMatrix` (inputs and panels down, outputs and panels across, no clock), the panel being played (`PanelView` over the rack's runtime), the last messages through the patch
+- `bay.svelte.test.ts` the page end to end on the fake Web MIDI
 
 ## src/testing/
 

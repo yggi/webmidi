@@ -6,3 +6,4 @@ export * from './access';
 export * from './ports';
 export * from './transport';
 export * from './book-store';
+export * from './panel-store';

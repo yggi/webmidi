@@ -10,6 +10,11 @@
    * takes it out of the matrix and back among them (asking first only when it has routes to lose). An output is the
    * port plugged in under its name (`pluggedOf`), each port one output's.
    *
+   * The setup's active control panels (decision 007) are rows and columns too, where the frontend gives the library's
+   * panels (`panels`): a panel's row is what it sends, routed like an input's; its column is what it is sent, an input's
+   * or another panel's row crossed on or off. Panels not active are chips beside the devices, and a panel's head calls
+   * `onpanel`.
+   *
    * The matrix holds the patch and nothing of a device's settings: an output's head opens its details in a dialog
    * (`DeviceDialog`: its port, its profile, each drum's note where a kit is routed to it, its channels), unless the
    * frontend takes the head itself (`onselect`). A kit's members are therefore not rows here. It takes the book and
@@ -35,6 +40,10 @@
     removeOutput,
     AS_PLAYED,
     inputRow,
+    isPanelKey,
+    panelKey,
+    panelsOf,
+    withPanelActive,
     profileOf,
     withClock,
     withCrossing,
@@ -81,6 +90,10 @@
      * column itself added and removed). None (standalone): no such column, and none offered.
      */
     builtIn?: { readonly label: string; readonly rows?: boolean } | null;
+    /** The library's control panels, by id and name: those the setup has active are rows and columns, the others chips that add them. None: no panels here. */
+    panels?: readonly { readonly id: string; readonly name: string }[];
+    /** A panel's head pressed, by its id: the frontend shows it to play. */
+    onpanel?: (id: string) => void;
     onchange: (book: SetupBook) => void;
     /**
      * An output's head pressed, by key: the frontend shows its details itself (and may mark it with `selected`). Left
@@ -107,6 +120,8 @@
     locked = false,
     clock = true,
     builtIn = null,
+    panels = [],
+    onpanel,
     onchange,
     onselect,
     ontest,
@@ -119,7 +134,8 @@
   /** Whether anything is sent to an output here: the clock, or a row of this context. */
   const routedHere = (key: string) => setup.clock.includes(key) || Object.values(routes).some((c) => Object.hasOwn(c, key));
   /** Whether a removal would lose something: the clock, or a crossing in any context. */
-  const routedAnywhere = (key: string) => setup.clock.includes(key) || Object.values(setup.routes).some((r) => Object.values(r).some((c) => Object.hasOwn(c, key)));
+  const routedAnywhere = (key: string) =>
+    setup.clock.includes(key) || Object.values(setup.routes).some((r) => Object.hasOwn(r, key) || Object.values(r).some((c) => Object.hasOwn(c, key)));
   /**
    * The columns: the built-in first where the frontend has one, then the outputs that send MIDI. A slot with no device
    * is one only while routes wait on it for a device: an empty one is filled by the next device added.
@@ -132,10 +148,25 @@
   /** The rows the built-in can play: the frontend's voices and kits, but those that say it can't (`builtIn: false`). */
   const audible = (r: MatrixRow) => (r.kind === 'voice' || r.kind === 'kit') && r.builtIn !== false;
   let showEmpty = $state(false);
+  /** The setup's active panels, each with its name in the library (none: it is missing there, and said so). */
+  const active = $derived(panelsOf(setup).map((id) => ({ id, key: panelKey(id), name: panels.find((p) => p.id === id)?.name })));
+  /** The library's panels the setup hasn't active: chips that add them. */
+  const idle = $derived(panels.filter((p) => !panelsOf(setup).includes(p.id)));
+  const panelRows = $derived(
+    active.map((p, i): MatrixRow => ({
+      id: p.key,
+      label: p.name ?? p.id,
+      kind: 'panel',
+      ...(p.name === undefined ? { sub: 'not in the library' } : {}),
+      ...(i === 0 ? { group: true } : {}),
+    })),
+  );
+  /** A row routed by the setup whatever the frontend routes: an input's, a panel's. */
+  const free = (r: MatrixRow) => r.kind === 'input' || r.kind === 'panel';
   const empties = $derived(rows.filter((r) => r.kind === 'empty').length);
   /** The rows drawn, each id once: a keyed list with an id twice throws, and stops the page redrawing. */
   const shown = $derived(
-    [...rows.filter((r) => r.kind !== 'member' && (showEmpty || r.kind !== 'empty')), ...inputRows(inputs, routes, setup.plays)].filter(
+    [...rows.filter((r) => r.kind !== 'member' && (showEmpty || r.kind !== 'empty')), ...panelRows, ...inputRows(inputs, routes, setup.plays)].filter(
       (r, i, all) => all.findIndex((x) => x.id === r.id) === i,
     ),
   );
@@ -189,7 +220,7 @@
   function remove(key: string) {
     removing = null;
     if (detail === key) detail = null;
-    onchange(removeOutput(book, key));
+    onchange(isPanelKey(key) ? withPanelActive(book, key.slice('panel:'.length), false) : removeOutput(book, key));
   }
   /** An output's × pressed: out at once when nothing is routed to it (it is back among the devices to add), asked about first when routes would go with it. */
   const askRemove = (key: string) => (routedAnywhere(key) ? (removing = key) : remove(key));
@@ -278,18 +309,22 @@
 {/snippet}
 
 <div class="wm-matrix">
-  {#if !locked && (spare.length || (builtIn && !hasBuiltIn(setup)))}
-    <div class="tray" role="group" aria-label="Plugged in, not in this setup">
-      <span class="tray-label">Plugged in</span>
+  {#if !locked && (spare.length || (builtIn && !hasBuiltIn(setup)) || idle.length)}
+    <div class="tray" role="group" aria-label="Not in this setup: devices plugged in, and panels">
+      {#if spare.length || (builtIn && !hasBuiltIn(setup))}<span class="tray-label">Plugged in</span>{/if}
       {#each spare as p (p.id)}
         <button type="button" class="dev" title="Add {portLabel(p)} to the patch" onclick={() => add(p)}>+ {portLabel(p)}</button>
       {/each}
       {#if builtIn && !hasBuiltIn(setup)}
         <button type="button" class="dev here" title="Play on this device too" onclick={addBuiltIn}>+ {builtIn.label}</button>
       {/if}
+      {#if idle.length}<span class="tray-label">Panels</span>{/if}
+      {#each idle as p (p.id)}
+        <button type="button" class="dev panel" title="Add the panel {p.name} to the patch" onclick={() => onchange(withPanelActive(book, p.id, true))}>+ {p.name}</button>
+      {/each}
     </div>
   {/if}
-  {#if !columns.length}
+  {#if !columns.length && !active.length}
     <p class="nothing" role="status">{nothing}</p>
   {/if}
   <div class="scroll">
@@ -335,6 +370,37 @@
               {/if}
             </th>
           {/each}
+          {#each active as p (p.key)}
+            <th scope="col">
+              {#if removing === p.key}
+                <div class="col asking" role="group" aria-label="Remove the panel {p.name ?? p.id}?">
+                  <span class="slot">PANEL</span>
+                  <span class="name">Remove, with its routes?</span>
+                  <span class="ask">
+                    <button type="button" class="danger" onclick={() => remove(p.key)}>Remove</button>
+                    <button type="button" onclick={() => (removing = null)}>Keep</button>
+                  </span>
+                </div>
+              {:else}
+                <span class="pin">
+                  {#if onpanel}
+                    <button type="button" class="col ofpanel" class:absent={p.name === undefined} title="{p.name ?? p.id}: play it" onclick={() => onpanel(p.id)}>
+                      <span class="top"><span class="led square" class:on={p.name !== undefined} aria-hidden="true"></span><span class="slot">PANEL</span></span>
+                      <span class="name" title={p.name ?? p.id}>{p.name ?? p.id}</span>
+                      <span class="facts"><span class="tag" class:gone={p.name === undefined}>{p.name === undefined ? 'Not in the library' : 'What it is sent'}</span></span>
+                    </button>
+                  {:else}
+                    <span class="col ofpanel" class:absent={p.name === undefined}>
+                      <span class="top"><span class="led square" class:on={p.name !== undefined} aria-hidden="true"></span><span class="slot">PANEL</span></span>
+                      <span class="name" title={p.name ?? p.id}>{p.name ?? p.id}</span>
+                      <span class="facts"><span class="tag" class:gone={p.name === undefined}>{p.name === undefined ? 'Not in the library' : 'What it is sent'}</span></span>
+                    </span>
+                  {/if}
+                  <button type="button" class="x" aria-label="Remove the panel {p.name ?? p.id}" title="Take it out of the patch" onclick={() => askRemove(p.key)}>×</button>
+                </span>
+              {/if}
+            </th>
+          {/each}
         </tr>
       </thead>
       <tbody>
@@ -353,6 +419,7 @@
                 {/if}
               </td>
             {/each}
+            {#each active as p (p.key)}<td class="topanel"></td>{/each}
           </tr>
         {/if}
         {#each shown as row (row.id)}
@@ -360,7 +427,9 @@
             <th scope="row">
               <span class="rowname">
                 <span class="title"
-                  >{#if row.kind === 'input'}<span class="sub in">IN</span>{/if}<span class="label">{row.label}</span></span
+                  >{#if row.kind === 'input'}<span class="sub in">IN</span>{:else if row.kind === 'panel'}<span class="sub in pn">PANEL</span>{/if}<span class="label"
+                    >{row.label}</span
+                  ></span
                 >
                 {#if row.sub || (row.kind === 'input' && heardBy)}
                   <span class="tags">
@@ -407,12 +476,14 @@
                         {#if value !== undefined}<span class="chip on">ON</span>{:else}<span class="hole"></span>{/if}
                       </span>
                     {/if}
+                  {:else if row.kind === 'panel'}
+                    <span class="via" title="A panel sends MIDI: route it to an output">—</span>
                   {:else if row.kind !== 'empty'}
                     <span class="via" title="Heard here through the part it plays">—</span>
                   {/if}
                 {:else}
                   {@const chip = value === undefined ? null : value === AS_PLAYED ? '=' : String(value)}
-                  {#if locked && row.kind !== 'input'}
+                  {#if locked && !free(row)}
                     <span class="jack" aria-label="{row.label} to {outLabel(o)}: {chip ?? 'not sent'}">
                       {#if chip}<span class="chip" class:keep={value === AS_PLAYED} style:--h={channelHue(value ?? 1)}>{chip}</span>{:else}<span class="hole"></span>{/if}
                     </span>
@@ -428,6 +499,24 @@
                       {:else}<span class="hole"></span>{/if}
                     </button>
                   {/if}
+                {/if}
+              </td>
+            {/each}
+            {#each active as p (p.key)}
+              {@const value = crossing(row.id, p.key)}
+              <td class="topanel">
+                {#if row.id === p.key}
+                  <span class="via" title="A panel isn’t sent what it sends">—</span>
+                {:else if free(row)}
+                  <button
+                    type="button"
+                    class="jack"
+                    aria-pressed={value !== undefined}
+                    aria-label="{row.label} to the panel {p.name ?? p.id}: {value === undefined ? 'not sent' : 'sent'}"
+                    onclick={() => onchange(withCrossing(book, context, row.id, p.key, value === undefined ? AS_PLAYED : undefined))}
+                  >
+                    {#if value !== undefined}<span class="chip on">ON</span>{:else}<span class="hole"></span>{/if}
+                  </button>
                 {/if}
               </td>
             {/each}
@@ -457,7 +546,7 @@
     label="{picking.row.label} → {picking.name}"
     value={crossing(picking.row.id, picking.key)}
     busy={busy(picking.row.id, picking.key)}
-    asPlayed={picking.row.kind === 'input'}
+    asPlayed={free(picking.row)}
     anchor={picking.anchor}
     onpick={pick}
     onclose={() => (picking = null)}
@@ -564,6 +653,22 @@
   }
   .dev.here::before {
     background: var(--_accent);
+  }
+  /* a panel is no device: a square where a device has a light */
+  .dev.panel::before,
+  .led.square {
+    border-radius: 2px;
+    background: var(--_accent);
+  }
+  .col.ofpanel {
+    border-color: color-mix(in oklab, var(--_accent) 30%, var(--_line));
+  }
+  .sub.in.pn {
+    background: color-mix(in oklab, var(--_accent) 14%, transparent);
+    color: var(--_accent);
+  }
+  td.topanel {
+    background: linear-gradient(var(--_row, transparent), var(--_row, transparent)), color-mix(in oklab, var(--_accent) 3%, transparent);
   }
   .dev:hover {
     border-style: solid;

@@ -1,0 +1,198 @@
+/**
+ * The standalone patchbay (docs/proposals/patchbay.md, section 4): what the page keeps and does, apart from how it is
+ * drawn. The inputs are the rows, the outputs and the panels the columns; a message from an input goes where its row
+ * is crossed, as it came or on the crossing's channel, and a panel's messages where its row is. Nothing here is the
+ * package's: a frontend wires its own page the same way, from the same parts.
+ */
+import {
+  activeSetup,
+  forwardsOf,
+  forwardsOfInput,
+  hardwareOutputs,
+  loadBook,
+  namePorts,
+  panelForwardsOf,
+  panelKey,
+  panelsOf,
+  portsMessage,
+  portsOf,
+  type BookStore,
+  type Forward,
+  type MidiPort,
+  type PortOption,
+  type SetupBook,
+} from '../src/core/index';
+import {
+  EXAMPLE_MIXER,
+  EXAMPLE_PLAY,
+  exportPanel,
+  importPanel,
+  loadLibrary,
+  PanelRack,
+  panelOf,
+  type PanelLibrary,
+  type PanelRuntime,
+  type PanelStore,
+} from '../src/core/panels/index';
+import { MidiAccess } from '../src/web/index';
+
+/** The one context of the page's routes. */
+export const CONTEXT = 'bay';
+/** How many of the last messages the monitor keeps. */
+const KEPT = 8;
+
+/** A message as the monitor shows it: where from, where to, its bytes. */
+export interface Seen {
+  readonly from: string;
+  readonly to: string;
+  readonly bytes: string;
+}
+
+const hex = (data: ArrayLike<number>) =>
+  Array.from(data)
+    .map((b) => b.toString(16).toUpperCase().padStart(2, '0'))
+    .join(' ');
+
+export class Bay {
+  book: SetupBook = $state.raw(undefined as unknown as SetupBook);
+  library: PanelLibrary = $state.raw(undefined as unknown as PanelLibrary);
+  inputs: readonly PortOption[] = $state.raw([]);
+  outputs: readonly PortOption[] = $state.raw([]);
+  message = $state('MIDI isn’t connected.');
+  connected = $state(false);
+  connecting = $state(false);
+  /** The panel being played, by id. */
+  shown: string | null = $state(null);
+  seen: readonly Seen[] = $state.raw([]);
+  /** Bumped when the rack's runtimes change, for what reads one. */
+  private racked = $state(0);
+
+  private midi: MidiAccess | null = null;
+  private readonly rack = new PanelRack();
+  private ports = new Map<string, MidiPort | null>();
+
+  constructor(
+    private readonly books: BookStore,
+    private readonly panels: PanelStore,
+  ) {
+    this.book = loadBook(books);
+    const kept = loadLibrary(panels);
+    // (a first visit starts with two panels to play)
+    this.library = kept.panels.length ? kept : { version: 1, panels: [EXAMPLE_MIXER, EXAMPLE_PLAY] };
+    this.adopt();
+  }
+
+  /** Ask for Web MIDI and take the ports as they are; in words why not, when it can't. */
+  async connect(): Promise<void> {
+    this.connecting = true;
+    const result = await MidiAccess.connect({ onMessage: (data, source) => this.heard(data, source), onChange: () => this.refresh() });
+    this.connecting = false;
+    if (typeof result === 'string') return void (this.message = result);
+    this.midi = result;
+    this.connected = true;
+    this.refresh();
+  }
+
+  /** The ports as they are now: listed, named in the book where it kept ids alone, the setup's found again. */
+  refresh(): void {
+    if (!this.midi) return;
+    this.inputs = this.midi.inputs;
+    this.outputs = this.midi.outputs;
+    this.message = portsMessage(this.midi);
+    const named = namePorts(this.book, this.midi);
+    if (named !== this.book) this.keep(named);
+    else this.adopt();
+  }
+
+  /** A change to the book, kept. */
+  keep(book: SetupBook): void {
+    const before = this.book;
+    this.book = book;
+    this.books.save(book);
+    this.adopt(before);
+  }
+
+  /** The setup in use taken up: its outputs' ports, the inputs it listens to, its panels playing. */
+  private adopt(before: SetupBook = this.book): void {
+    const setup = activeSetup(this.book);
+    // (a panel taken out releases its notes where its row was crossed, before the change, and through the ports of before)
+    for (const released of this.rack.sync(panelsOf(setup), this.library)) this.route(panelKey(released.panel), released.data, released.panel, before);
+    this.racked++;
+    if (this.shown !== null && !panelsOf(setup).includes(this.shown)) this.shown = null;
+    this.shown ??= panelsOf(setup).find((id) => panelOf(this.library, id)) ?? null;
+    if (!this.midi) return;
+    const live = portsOf(setup, this.midi);
+    this.ports = new Map(live.outputs.map((o) => [o.key, o.port]));
+    this.midi.listen(live.listen);
+  }
+
+  /** How many of the setup's devices aren't plugged in. */
+  get missing(): number {
+    return this.connected ? hardwareOutputs(activeSetup(this.book)).filter((o) => o.id !== 'none' && !this.ports.get(o.key)).length : 0;
+  }
+
+  /** A panel's runtime, to draw and to play; undefined when it isn't active or isn't in the library. */
+  runtimeOf(id: string | null): PanelRuntime | undefined {
+    void this.racked;
+    return id === null ? undefined : this.rack.runtime(id);
+  }
+
+  private send(forwards: readonly Forward[], from: string, book: SetupBook): void {
+    const setup = activeSetup(book);
+    for (const f of forwards) {
+      this.ports.get(f.output)?.send(f.data);
+      this.note(from, setup.outputs.find((o) => o.key === f.output)?.name || f.output, f.data);
+    }
+  }
+
+  /** A message on a row, sent where the row is crossed: to outputs, and to panels. */
+  private route(row: string | PortOption, data: ArrayLike<number>, from: string, book: SetupBook = this.book): void {
+    this.send(typeof row === 'string' ? forwardsOf(book, CONTEXT, row, data) : forwardsOfInput(book, CONTEXT, row, data), from, book);
+    const toPanels = panelForwardsOf(book, CONTEXT, row, data);
+    this.rack.receive(toPanels);
+    for (const f of toPanels) this.note(from, panelOf(this.library, f.panel)?.name ?? f.panel, f.data);
+  }
+
+  /** A message a panel made, by a touch. */
+  played(id: string, data: number[]): void {
+    this.route(panelKey(id), data, panelOf(this.library, id)?.name ?? id);
+  }
+
+  /** A message from an input, by its port's name. */
+  private heard(data: ArrayLike<number>, source: string): void {
+    this.route({ id: source, name: source }, data, source);
+  }
+
+  private note(from: string, to: string, data: ArrayLike<number>): void {
+    this.seen = [{ from, to, bytes: hex(data) }, ...this.seen].slice(0, KEPT);
+  }
+
+  /** A test note to an output: middle C on channel 1, a third of a second. */
+  test(key: string): void {
+    const port = this.ports.get(key);
+    port?.send([0x90, 60, 100]);
+    setTimeout(() => port?.send([0x80, 60, 0]), 300);
+  }
+
+  /** All notes off, on every channel of one output, or of every output; the panels' notes released too. */
+  panic(key?: string): void {
+    for (const id of panelsOf(activeSetup(this.book))) for (const data of this.rack.runtime(id)?.silence() ?? []) this.played(id, data);
+    for (const [k, port] of this.ports) if (key === undefined || k === key) for (let ch = 0; ch < 16; ch++) port?.send([0xb0 | ch, 123, 0]);
+  }
+
+  /** A panel's file added to the library, or in words why not. */
+  importPanel(text: string): string | null {
+    const next = importPanel(this.library, text);
+    if (typeof next === 'string') return next;
+    this.library = next;
+    this.panels.save(next);
+    this.adopt();
+    return null;
+  }
+
+  /** A panel as its file's text and name, or null: not in the library. */
+  exportPanel(id: string): { text: string; filename: string } | null {
+    const panel = panelOf(this.library, id);
+    return panel ? { text: exportPanel(panel), filename: `${panel.name.replace(/[^\w-]+/g, '-').toLowerCase() || 'panel'}.midipanel.json` } : null;
+  }
+}

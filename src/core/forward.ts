@@ -4,7 +4,7 @@
 
 import type { PortOption } from './port';
 import { isHeard, playsOf, type PlayableRow } from './plays';
-import { activeSetup, ANY_INPUT, AS_PLAYED, BUILT_IN, inputRow, type SetupBook } from './setups';
+import { activeSetup, ANY_INPUT, AS_PLAYED, BUILT_IN, inputRow, isPanelKey, panelKey, panelsOf, type SetupBook } from './setups';
 
 /** A message to send to one output of the setup in use, by its key. */
 export interface Forward {
@@ -15,7 +15,7 @@ export interface Forward {
 /**
  * The messages a raw message on `row` sends, by the setup in use's crossings of that row in `context`: a channel voice
  * message (status 0x80–0xEF) once to each output crossed, its channel replaced by the crossing's (1–16), or kept as it
- * came (`AS_PLAYED`); the built-in, which takes no MIDI, none. Nothing else is forwarded: a system message (0xF0–0xFF: SysEx, the clock, Start and Stop, which are
+ * came (`AS_PLAYED`); the built-in, which takes no MIDI, none, and a panel's column none here (`panelForwardsOf`: a panel is no port). Nothing else is forwarded: a system message (0xF0–0xFF: SysEx, the clock, Start and Stop, which are
  * the clock row's and a device's own) and a message with no status byte (Web MIDI delivers whole messages).
  */
 export function forwardsOf(book: SetupBook, context: string, row: string, data: ArrayLike<number>): Forward[] {
@@ -26,7 +26,7 @@ export function forwardsOf(book: SetupBook, context: string, row: string, data: 
   const bytes = Array.from(data);
   // (the built-in plays a row, and takes no MIDI)
   return Object.entries(crossings).flatMap(([output, channel]) =>
-    output === BUILT_IN.key
+    output === BUILT_IN.key || isPanelKey(output)
       ? []
       : [
           {
@@ -35,6 +35,36 @@ export function forwardsOf(book: SetupBook, context: string, row: string, data: 
           },
         ],
   );
+}
+
+/** A message to hand to one panel active in the setup in use, by its id: its controls move by it (`PanelRuntime.receive`). */
+export interface PanelForward {
+  readonly panel: string;
+  readonly data: readonly number[];
+}
+
+/**
+ * The messages a raw message on `row` sends to panels (decision 007): once to each panel active in the setup in use
+ * whose column the row crosses in `context`, re-channelled as `forwardsOf` does; never to the row's own panel, and
+ * only channel voice messages. For an input, its own row and every input's (`ANY_INPUT`, where it is heard), a panel
+ * sent the same bytes once.
+ */
+export function panelForwardsOf(book: SetupBook, context: string, row: string | PortOption, data: ArrayLike<number>): PanelForward[] {
+  const status = data[0] ?? 0;
+  if (status < 0x80 || status >= 0xf0) return [];
+  const setup = activeSetup(book);
+  const routes = Object.hasOwn(setup.routes, context) ? setup.routes[context]! : {};
+  const rows = typeof row === 'string' ? [row] : [inputRow(row), ...(isHeard(setup, row) ? [ANY_INPUT] : [])];
+  const bytes = Array.from(data);
+  const out: PanelForward[] = [];
+  for (const r of rows)
+    for (const id of panelsOf(setup)) {
+      const channel = Object.hasOwn(routes, r) && Object.hasOwn(routes[r]!, panelKey(id)) ? routes[r]![panelKey(id)]! : undefined;
+      if (channel === undefined || r === panelKey(id)) continue;
+      const sent = channel === AS_PLAYED ? bytes : [(status & 0xf0) | (channel - 1), ...bytes.slice(1)];
+      if (!out.some((o) => o.panel === id && o.data.length === sent.length && o.data.every((b, i) => b === sent[i]))) out.push({ panel: id, data: sent });
+    }
+  return out;
 }
 
 /**

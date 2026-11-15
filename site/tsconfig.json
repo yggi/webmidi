@@ -1,0 +1,7 @@
+{
+  // The site's gate: the standalone page typechecks with the browser's types and nothing of Node's (svelte-check reads
+  // its .svelte files), reading core, web and ui as they are. Its test and its build's config are the full typecheck's.
+  "extends": "../tsconfig.web.json",
+  "include": ["./**/*.ts", "./**/*.svelte"],
+  "exclude": ["./**/*.test.ts", "./vite.config.ts"]
+}

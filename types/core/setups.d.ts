@@ -71,6 +71,12 @@ export interface Setup {
     readonly routes: Readonly<Record<string, Routes>>;
     /** The outputs sent MIDI clock (24 ticks a beat, Start, Stop, Continue), by key: the matrix's clock row, in every context. */
     readonly clock: readonly string[];
+    /**
+     * The control panels active in it, by id, in order (decision 007): each a row of the matrix for what it sends and a
+     * column for what it is sent, both under `panelKey`. The panels themselves are kept apart, in a library
+     * (`@yggi/webmidi/panels`); one this names that the library lacks is shown as missing, its crossings kept.
+     */
+    readonly panels?: readonly string[];
 }
 /** Everything kept: the device profiles, the setups (at least one) and which is in use. */
 export interface SetupBook {
@@ -176,6 +182,17 @@ export declare function withBuiltIn(book: SetupBook, on: boolean, heard?: Readon
 export declare const builtInHears: (book: SetupBook, context: string, row: string) => boolean;
 /** An output of the setup in use sent clock, or not (an output it doesn't have: the book as it is). */
 export declare function withClock(book: SetupBook, key: string, on: boolean): SetupBook;
+/** A panel's row and its column in the matrix, by its id: what it sends is routed from the one, what it is sent to the other. */
+export declare const panelKey: (id: string) => string;
+/** Whether a row or a column is a panel's. */
+export declare const isPanelKey: (key: string) => boolean;
+/** The panels active in a setup, by id. */
+export declare const panelsOf: (setup: Setup) => readonly string[];
+/**
+ * A panel made active in the setup in use, last, or taken out of it with its crossings in every context: its row's,
+ * and those of its column in every other row. The book as it is when it already is so.
+ */
+export declare function withPanelActive(book: SetupBook, id: string, on: boolean): SetupBook;
 /** Whether an output of the setup in use is sent clock. */
 export declare const sendsClock: (book: SetupBook, key: string) => boolean;
 /**
