@@ -24,3 +24,61 @@ export const EXAMPLE_MIXER: Panel = {
     { type: 'fader', id: 'main', label: 'Main', bind: [{ kind: 'cc', number: 40 }] },
   ],
 };
+
+/**
+ * A panel of every kind of control, to play a synth from: an XY pad on the filter (cutoff across, resonance up), the
+ * bend and the modulation as faders, two program buttons' worth of switches, a 14-bit volume, an NRPN, the drum pads
+ * on channel 10, and two octaves of keys.
+ */
+export const EXAMPLE_PLAY: Panel = {
+  id: 'play',
+  name: 'Keys and pads',
+  children: [
+    {
+      group: 'tone',
+      label: 'TONE',
+      columns: 2,
+      children: [
+        {
+          type: 'xy',
+          id: 'filter',
+          label: 'Filter',
+          value: 0.5,
+          cell: { columns: 2 },
+          bind: [
+            { kind: 'cc', number: 74 },
+            { kind: 'cc', number: 71, axis: 'y' },
+          ],
+        },
+        { type: 'knob', id: 'volume', label: 'Volume', value: 0.8, bind: [{ kind: 'cc14', number: 7 }] },
+        { type: 'knob', id: 'detune', label: 'Detune', value: 0.5, bind: [{ kind: 'nrpn', number: 300 }] },
+      ],
+    },
+    {
+      group: 'wheels',
+      label: 'WHEELS',
+      children: [
+        { type: 'fader', id: 'bend', label: 'Bend', value: 0.5, bind: [{ kind: 'bend' }] },
+        { type: 'fader', id: 'mod', label: 'Mod', bind: [{ kind: 'cc', number: 1 }] },
+      ],
+    },
+    {
+      group: 'play',
+      label: 'PLAY',
+      columns: 1,
+      children: [
+        {
+          group: 'row',
+          children: [
+            { type: 'switch', id: 'hold', label: 'Hold', bind: [{ kind: 'cc', number: 64, channel: 1 }] },
+            { type: 'button', id: 'accent', label: 'Accent', bind: [{ kind: 'note', number: 'ch + 35', channel: 'ch' }] },
+            { type: 'pads', id: 'pads', label: 'Drums', notes: [36, 38, 42, 46] },
+          ],
+          repeat: { name: 'ch', from: 10, to: 10 },
+          channel: 'ch',
+        },
+        { type: 'keyboard', id: 'keys', label: 'Keys', low: 48, high: 72 },
+      ],
+    },
+  ],
+};

@@ -22,6 +22,11 @@
       "svelte": "./src/ui/index.ts",
       "default": "./src/ui/index.ts"
     },
+    "./ui/panels": {
+      "types": "./types/ui/panels/index.d.ts",
+      "svelte": "./src/ui/panels/index.ts",
+      "default": "./src/ui/panels/index.ts"
+    },
     "./testing": {
       "types": "./types/testing/index.d.ts",
       "default": "./src/testing/index.ts"
