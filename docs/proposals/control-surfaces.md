@@ -37,7 +37,7 @@ The keyboard and the pads are `core/keyboard.ts` and the drum maps with a compon
 Most controls need one line: a message kind, its number, and a range.
 
 ```json
-{ "type": "fader", "label": "Level", "bind": { "cc": "ch", "range": [0, 127] } }
+{ "type": "fader", "label": "Level", "bind": [{ "kind": "cc", "number": "ch", "range": [0, 127] }] }
 ```
 
 A binding is two-way by construction: moving the control sends the message, and the same message arriving on the panel's column moves the control.
@@ -48,25 +48,29 @@ The channel is the panel's (1 by default), a group's, or the control's own, and 
 ### Groups, parameters, repeat: the mixer
 
 A group holds controls and other groups (nesting), and may declare **parameters**.
-`repeat` instantiates the group once per value of a parameter.
-The eight strips are eight instances of one definition, so an edit to the strip changes all eight: there are no copies to keep in step.
+`repeat` instantiates the group once per value of a parameter, and a group holds its children inline or takes them from a **template**, `with` its parameters given.
+The eight strips are eight instances of one template, so an edit to the strip changes all eight: there are no copies to keep in step.
 An instance that must differ carries an override (its label, its colour), keyed by the parameter's value.
 
 ```json
 {
-  "group": "strip",
-  "repeat": { "ch": [1, 8] },
-  "label": "ch",
-  "controls": [
-    { "type": "knob", "label": "High", "bind": { "cc": "10 + ch" } },
-    { "type": "knob", "label": "Mid", "bind": { "cc": "20 + ch" } },
-    { "type": "switch", "label": "Mute", "bind": { "cc": "30 + ch" } },
-    { "type": "fader", "label": "Level", "bind": { "cc": "ch" } }
-  ]
+  "templates": {
+    "strip": {
+      "params": ["ch"],
+      "children": [
+        { "type": "knob", "label": "High", "bind": [{ "kind": "cc", "number": "10 + ch" }] },
+        { "type": "knob", "label": "Mid", "bind": [{ "kind": "cc", "number": "20 + ch" }] },
+        { "type": "switch", "label": "Mute", "bind": [{ "kind": "cc", "number": "30 + ch" }] },
+        { "type": "fader", "label": "Level", "bind": [{ "kind": "cc", "number": "ch" }] }
+      ]
+    }
+  },
+  "children": [{ "group": "strips", "label": "{ch}", "repeat": { "name": "ch", "from": 1, "to": 8 }, "use": "strip", "with": { "ch": "ch" } }]
 }
 ```
 
-A named group can also be used as a template elsewhere on the panel with its parameters given (`{ "use": "strip", "with": { "ch": 9 } }`), which is the same mechanism without the range.
+A template sees its own parameters alone, so it can be checked on its own; the same template is used once elsewhere by a group without `repeat` (`{ "group": "aux", "use": "strip", "with": { "ch": 9 } }`).
+The file has one form of each thing, with no shorthand, as built in [#58](https://github.com/yggi/webmidi/pull/58).
 
 ### Expressions (scripting, tier 1)
 
