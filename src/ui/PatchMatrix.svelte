@@ -1,20 +1,31 @@
 <script lang="ts">
   /**
    * The patch (docs/proposals/patchbay.md, `PatchMatrix`): the frontend's rows and the inputs down, the setup's outputs
-   * across, each crossing a jack (empty, or a chip in its channel's hue). A jack opens the channel picker; a kit's members
-   * show the note each output's drum map sends them as; an input's row has its Plays choice (decision 003: not heard,
-   * the default, or one of the frontend's rows), and a preset fills in the inputs with no choice; empty rows (seats no part
-   * sits in) wait behind a button; the first row is the clock, the outputs the setup sends it to, the same in every context. An output's head selects it (for the `DeviceInspector`),
-   * and its × removes it after asking (the last output is left with no device: core's `removeOutput`). It takes the book
-   * and calls back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
+   * across, each crossing a jack (empty, or a chip in its channel's hue). A jack opens the channel picker; an input's
+   * row has its Plays choice (decision 003: not heard, the default, or one of the frontend's rows), and a preset fills
+   * in the inputs with no choice; empty rows (seats no part sits in) wait behind a button; the first row is the clock,
+   * the outputs the setup sends it to, the same in every context.
+   *
+   * Over the matrix, the devices plugged in that the setup has no output for, each a chip that adds it; an output's ×
+   * takes it out of the matrix and back among them (asking first only when it has routes to lose). An output is the
+   * port plugged in under its name (`pluggedOf`), each port one output's.
+   *
+   * The matrix holds the patch and nothing of a device's settings: an output's head opens its details in a dialog
+   * (`DeviceDialog`: its port, its profile, each drum's note where a kit is routed to it, its channels), unless the
+   * frontend takes the head itself (`onselect`). A kit's members are therefore not rows here. It takes the book and
+   * calls back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
    */
-  import { deviceNote, presetNameOf } from '../core/drum-presets';
+  import { presetNameOf } from '../core/drum-presets';
   import type { PortOption } from '../core/port';
   import { applyPreset, type InputPreset } from '../core/input-kinds';
   import { choiceOf, playsOf } from '../core/plays';
   import {
     activeSetup,
     addOutput,
+    chooseDevice,
+    forgetDevice,
+    pluggedOf,
+    spareOf,
     ANY_INPUT,
     hardwareOutputs,
     hasBuiltIn,
@@ -30,11 +41,13 @@
     withPlays,
     withProfile,
     type Crossing,
+    type DeviceProfile,
     type SetupBook,
     type SetupOutput,
   } from '../core/setups';
   import ChannelPicker from './ChannelPicker.svelte';
-  import { channelHue, clamp } from './channels';
+  import { channelHue } from './channels';
+  import DeviceDialog from './DeviceDialog.svelte';
   import { inputRows, type MatrixRow } from './rows';
 
   interface Props {
@@ -69,7 +82,16 @@
      */
     builtIn?: { readonly label: string; readonly rows?: boolean } | null;
     onchange: (book: SetupBook) => void;
+    /**
+     * An output's head pressed, by key: the frontend shows its details itself (and may mark it with `selected`). Left
+     * out, the matrix opens the output's details in a dialog of its own.
+     */
     onselect?: (key: string) => void;
+    /** In the matrix's own dialog: a test note to an output, and its notes off, by key; left out, not offered. */
+    ontest?: (key: string) => void;
+    onpanic?: (key: string) => void;
+    /** The built-in's head pressed, where the matrix opens the details itself: its settings are the frontend's (decision 004). */
+    onbuiltin?: () => void;
   }
 
   let {
@@ -87,26 +109,53 @@
     builtIn = null,
     onchange,
     onselect,
+    ontest,
+    onpanic,
+    onbuiltin,
   }: Props = $props();
 
   const setup = $derived(activeSetup(book));
-  /** The columns: the built-in first where the frontend has one, then the outputs that send MIDI. */
-  const columns = $derived(builtIn ? setup.outputs : hardwareOutputs(setup));
+  const routes = $derived(Object.hasOwn(setup.routes, context) ? setup.routes[context]! : {});
+  /** Whether anything is sent to an output here: the clock, or a row of this context. */
+  const routedHere = (key: string) => setup.clock.includes(key) || Object.values(routes).some((c) => Object.hasOwn(c, key));
+  /** Whether a removal would lose something: the clock, or a crossing in any context. */
+  const routedAnywhere = (key: string) => setup.clock.includes(key) || Object.values(setup.routes).some((r) => Object.values(r).some((c) => Object.hasOwn(c, key)));
+  /**
+   * The columns: the built-in first where the frontend has one, then the outputs that send MIDI. A slot with no device
+   * is one only while routes wait on it for a device: an empty one is filled by the next device added.
+   */
+  const columns = $derived((builtIn ? setup.outputs : hardwareOutputs(setup)).filter((o) => o.id !== 'none' || routedHere(o.key)));
+  /** Each output's port as it is plugged in now, by key: by its name, one port to one output (`pluggedOf`). */
+  const live = $derived(new Map(pluggedOf(setup.outputs, outputs).map((port, i) => [setup.outputs[i]!.key, port])));
   /** An output's number, counting the outputs that send MIDI (a piece's MIDI cards name them so); the built-in has none. */
   const slotOf = (o: SetupOutput) => hardwareOutputs(setup).findIndex((h) => h.key === o.key) + 1;
   /** The rows the built-in can play: the frontend's voices and kits, but those that say it can't (`builtIn: false`). */
   const audible = (r: MatrixRow) => (r.kind === 'voice' || r.kind === 'kit') && r.builtIn !== false;
-  const routes = $derived(Object.hasOwn(setup.routes, context) ? setup.routes[context]! : {});
   let showEmpty = $state(false);
   const empties = $derived(rows.filter((r) => r.kind === 'empty').length);
   /** The rows drawn, each id once: a keyed list with an id twice throws, and stops the page redrawing. */
   const shown = $derived(
-    [...rows.filter((r) => showEmpty || r.kind !== 'empty'), ...inputRows(inputs, routes, setup.plays)].filter((r, i, all) => all.findIndex((x) => x.id === r.id) === i),
+    [...rows.filter((r) => r.kind !== 'member' && (showEmpty || r.kind !== 'empty')), ...inputRows(inputs, routes, setup.plays)].filter(
+      (r, i, all) => all.findIndex((x) => x.id === r.id) === i,
+    ),
   );
   const crossing = (row: string, key: string): Crossing | undefined => (Object.hasOwn(routes, row) && Object.hasOwn(routes[row]!, key) ? routes[row]![key] : undefined);
   const kitHere = (key: string) => rows.some((r) => r.kind === 'kit' && crossing(r.id, key) !== undefined);
-  const isPlugged = (o: PortOption) => isBuiltIn(o) || (o.id !== 'none' && outputs.some((p) => p.id === o.id || (!!o.name && p.name === o.name)));
-  const spare = $derived(outputs.filter((p) => !setup.outputs.some((o) => o.id === p.id || (!!o.name && o.name === p.name))));
+  const isPlugged = (o: SetupOutput) => isBuiltIn(o) || !!live.get(o.key);
+  /** The devices plugged in that the setup has no output for: what the chips over the matrix add. */
+  const spare = $derived(spareOf(setup, outputs));
+  /** A port's name on its chip, its place after it when another port plugged in has the same ("USB MIDI (2)"). */
+  const portLabel = (p: PortOption) => {
+    const name = p.name || p.id;
+    const same = outputs.filter((q) => (q.name || q.id) === name);
+    return same.length > 1 ? `${name} (${same.indexOf(p) + 1})` : name;
+  };
+  /** A kit's members, by General MIDI note, each note once: what the details set a device's note for. */
+  const members = $derived(
+    rows
+      .flatMap((r) => (r.kind === 'member' && r.note !== undefined ? [{ label: r.label, note: r.note }] : []))
+      .filter((m, i, all) => all.findIndex((x) => x.note === m.note) === i),
+  );
   /** The rows an input can play: the frontend's voices and kits, but those it says can't be played (`playable: false`). */
   const playable = $derived(rows.filter((r) => r.playable ?? (r.kind === 'voice' || r.kind === 'kit')));
   /** Inputs plugged in with no choice of their own, which a preset would fill in. */
@@ -136,10 +185,41 @@
   /** The output whose removal is being asked about, by key. */
   let removing: string | null = $state(null);
   /** Whether an output's × is offered: not on a piece's outputs, nor on a lone output with no device, which is all a removal would leave. */
-  const removable = $derived(!locked && (setup.outputs.length > 1 || setup.outputs[0]?.id !== 'none'));
+  const removable = (o: SetupOutput) => !locked && (setup.outputs.length > 1 || o.id !== 'none');
   function remove(key: string) {
     removing = null;
+    if (detail === key) detail = null;
     onchange(removeOutput(book, key));
+  }
+  /** An output's × pressed: out at once when nothing is routed to it (it is back among the devices to add), asked about first when routes would go with it. */
+  const askRemove = (key: string) => (routedAnywhere(key) ? (removing = key) : remove(key));
+
+  /** The output whose details are open in the matrix's own dialog, by key. */
+  let detail: string | null = $state(null);
+  const detailed = $derived(setup.outputs.find((o) => o.key === detail && !isBuiltIn(o)) ?? null);
+  /** Whether a head is pressed for something: the frontend's `onselect`, the matrix's own dialog, or the built-in's `onbuiltin`. */
+  const opens = (o: SetupOutput) => !!onselect || !isBuiltIn(o) || !!onbuiltin;
+  function open(o: SetupOutput) {
+    if (onselect) onselect(o.key);
+    else if (isBuiltIn(o)) onbuiltin?.();
+    else detail = o.key;
+  }
+  /** The channels this context routes to an output, and those sounding on it now (`lit`). */
+  const usedOn = (key: string) => [...new Set(Object.values(routes).flatMap((c) => (Object.hasOwn(c, key) && c[key]! > 0 ? [c[key]!] : [])))].sort((a, b) => a - b);
+  const litOn = (key: string) =>
+    new Set([...(lit ?? [])].flatMap((id) => (id.endsWith(`|${key}`) ? [crossing(id.slice(0, -key.length - 1), key) ?? 0] : [])).filter((ch) => ch > 0));
+  /** A drum map on a head: a device's own by its name ("Novation Circuit"), General MIDI and one edited by hand as "GM drums", "Custom drums". */
+  const drumsText = (preset: string) => (preset === 'GM' || preset === 'Custom' ? `${preset} drums` : preset);
+  /** What a head says under its name: where it is, what is missing, how its device takes notes. */
+  function facts(o: SetupOutput): { text: string; gone?: boolean }[] {
+    if (isBuiltIn(o)) return [{ text: 'This device' }];
+    if (o.id === 'none') return [{ text: 'Routes kept' }];
+    const profile = profileOf(book, o.name);
+    return [
+      ...(isPlugged(o) ? [] : [{ text: 'Not plugged in', gone: true }]),
+      ...(profile.mpe ? [{ text: 'MPE' }] : []),
+      ...(kitHere(o.key) ? [{ text: drumsText(presetNameOf(profile.drums)) }] : []),
+    ];
   }
 
   /** The channels other rows send on to an output. */
@@ -169,45 +249,62 @@
     return `as ${playable.find((r) => r.id === value)?.label ?? value}`;
   }
 
-  function add() {
-    const port = spare[0];
-    if (!port) return;
-    const { book: next, key } = addOutput(book, port);
+  /** What stands over a matrix with no column yet. */
+  const nothing = $derived(
+    locked
+      ? 'This piece routes to no output.'
+      : spare.length
+        ? 'No output in this setup yet: add a device plugged in, above.'
+        : 'No output in this setup yet, and no MIDI device plugged in.',
+  );
+
+  /** A device plugged in added: into a slot with no device where the setup has one (its routes waiting), else as a new output. */
+  function add(port: PortOption) {
+    const slot = hardwareOutputs(setup).find((o) => o.id === 'none');
+    const { book: next, key } = slot ? { book: chooseDevice(book, slot.key, port), key: slot.key } : addOutput(book, port);
     onchange(next);
     onselect?.(key);
-  }
-
-  /**
-   * A kit member's note on an output typed: its device's drum map sends the General MIDI note `gm` as it (0–127), the
-   * entry dropped when it is `gm` again. A device's profile, so no custom variant (decision 002; yggi/webmidi#24).
-   */
-  function setNote(e: Event & { currentTarget: HTMLInputElement }, name: string, gm: number) {
-    const drums: Record<number, number> = { ...profileOf(book, name).drums };
-    const n = clamp(e.currentTarget.valueAsNumber, 0, 127, drums[gm] ?? gm);
-    e.currentTarget.value = String(n);
-    if (n === gm) delete drums[gm];
-    else drums[gm] = n;
-    onchange(withProfile(book, name, { drums }));
   }
 
   const outLabel = (o: { id: string; name: string }) => (isBuiltIn(o) ? (builtIn?.label ?? 'Built-in') : o.id === 'none' ? 'No device' : o.name || o.id);
 </script>
 
+{#snippet head(o: SetupOutput, slot: string)}
+  <span class="top"><span class="led" class:on={isPlugged(o)} aria-hidden="true"></span><span class="slot">{slot}</span></span>
+  <span class="name" title={outLabel(o)}>{outLabel(o)}</span>
+  <span class="facts"
+    >{#each facts(o) as f (f.text)}<span class="tag" class:gone={f.gone}>{f.text}</span>{/each}</span
+  >
+{/snippet}
+
 <div class="wm-matrix">
+  {#if !locked && (spare.length || (builtIn && !hasBuiltIn(setup)))}
+    <div class="tray" role="group" aria-label="Plugged in, not in this setup">
+      <span class="tray-label">Plugged in</span>
+      {#each spare as p (p.id)}
+        <button type="button" class="dev" title="Add {portLabel(p)} to the patch" onclick={() => add(p)}>+ {portLabel(p)}</button>
+      {/each}
+      {#if builtIn && !hasBuiltIn(setup)}
+        <button type="button" class="dev here" title="Play on this device too" onclick={addBuiltIn}>+ {builtIn.label}</button>
+      {/if}
+    </div>
+  {/if}
+  {#if !columns.length}
+    <p class="nothing" role="status">{nothing}</p>
+  {/if}
   <div class="scroll">
     <table>
       <thead>
         <tr>
           <th scope="col"><span class="sr">Source</span></th>
           {#each columns as o (o.key)}
-            {@const profile = profileOf(book, o.name)}
             {@const here = isPlugged(o)}
             {@const slot = isBuiltIn(o) ? 'BUILT-IN' : `OUT ${slotOf(o)}`}
             <th scope="col">
               {#if removing === o.key}
                 <div class="col asking" role="group" aria-label="Remove {slot}?">
                   <span class="slot">{slot}</span>
-                  <span class="name">Remove {outLabel(o)}?</span>
+                  <span class="name">Remove, with its routes?</span>
                   <span class="ask">
                     <button type="button" class="danger" onclick={() => remove(o.key)}>Remove</button>
                     <button type="button" onclick={() => (removing = null)}>Keep</button>
@@ -215,43 +312,29 @@
                 </div>
               {:else}
                 <span class="pin">
-                  <button
-                    type="button"
-                    class="col"
-                    class:builtin={isBuiltIn(o)}
-                    class:absent={o.id !== 'none' && !here}
-                    aria-pressed={selected === o.key}
-                    onclick={() => onselect?.(o.key)}
-                    title="{outLabel(o)}: its settings"
-                  >
-                    <span class="top"><span class="led" class:on={here} aria-hidden="true"></span><span class="slot">{slot}</span></span>
-                    <span class="name">{outLabel(o)}</span>
-                    <span class="facts">
-                      {#if isBuiltIn(o)}<span class="tag">This device</span>{/if}
-                      {#if o.id !== 'none' && !here}<span class="tag gone">Not plugged in</span>{/if}
-                      {#if o.id !== 'none' && !isBuiltIn(o) && profile.mpe}<span class="tag">MPE</span>{/if}
-                    </span>
-                  </button>
-                  {#if removable}
-                    <button type="button" class="x" aria-label="Remove {slot}, {outLabel(o)}" title="Remove this output" onclick={() => (removing = o.key)}>×</button>
+                  {#if opens(o)}
+                    <button
+                      type="button"
+                      class="col"
+                      class:builtin={isBuiltIn(o)}
+                      class:absent={o.id !== 'none' && !here}
+                      aria-pressed={onselect ? selected === o.key : undefined}
+                      aria-haspopup={onselect || isBuiltIn(o) ? undefined : 'dialog'}
+                      onclick={() => open(o)}
+                      title="{outLabel(o)}: its settings"
+                    >
+                      {@render head(o, slot)}
+                    </button>
+                  {:else}
+                    <span class="col builtin">{@render head(o, slot)}</span>
+                  {/if}
+                  {#if removable(o)}
+                    <button type="button" class="x" aria-label="Remove {slot}, {outLabel(o)}" title="Take it out of the patch" onclick={() => askRemove(o.key)}>×</button>
                   {/if}
                 </span>
               {/if}
             </th>
           {/each}
-          {#if !locked}
-            <th scope="col"
-              ><span class="adds"
-                ><button
-                  type="button"
-                  class="add"
-                  onclick={add}
-                  disabled={!spare.length}
-                  title={spare.length ? `Add ${outLabel(spare[0]!)}` : 'Every output plugged in is in this setup'}>+ Output</button
-                >{#if builtIn && !hasBuiltIn(setup)}<button type="button" class="add" onclick={addBuiltIn} title="Play on this device too">+ {builtIn.label}</button>{/if}</span
-              ></th
-            >
-          {/if}
         </tr>
       </thead>
       <tbody>
@@ -270,17 +353,17 @@
                 {/if}
               </td>
             {/each}
-            {#if !locked}<td></td>{/if}
           </tr>
         {/if}
         {#each shown as row (row.id)}
-          <tr class:member={row.kind === 'member'} class:empty={row.kind === 'empty'} class:group={row.group}>
+          <tr class:empty={row.kind === 'empty'} class:group={row.group}>
             <th scope="row">
               <span class="rowname">
-                <span class="label">{row.label}</span>
-                {#if row.kind === 'input' || row.sub}
+                <span class="title"
+                  >{#if row.kind === 'input'}<span class="sub in">IN</span>{/if}<span class="label">{row.label}</span></span
+                >
+                {#if row.sub || (row.kind === 'input' && heardBy)}
                   <span class="tags">
-                    {#if row.kind === 'input'}<span class="sub">IN</span>{/if}
                     {#if row.sub}<span class="sub">{row.sub}</span>{/if}
                     {#if row.kind === 'input' && heardBy}
                       {@const value = playsValue(row.id)}
@@ -324,24 +407,8 @@
                         {#if value !== undefined}<span class="chip on">ON</span>{:else}<span class="hole"></span>{/if}
                       </span>
                     {/if}
-                  {:else if row.kind !== 'member' && row.kind !== 'empty'}
+                  {:else if row.kind !== 'empty'}
                     <span class="via" title="Heard here through the part it plays">—</span>
-                  {/if}
-                {:else if row.kind === 'member'}
-                  {#if kitHere(o.key) && row.note !== undefined}
-                    {@const n = deviceNote(profileOf(book, o.name).drums, row.note)}
-                    {@const gm = row.note}
-                    <input
-                      type="number"
-                      class="note"
-                      class:mapped={n !== gm}
-                      min="0"
-                      max="127"
-                      value={n}
-                      aria-label="{row.label} on {outLabel(o)}: General MIDI {gm} goes out as"
-                      title="General MIDI {gm} goes out as {n}"
-                      onchange={(e) => setNote(e, o.name, gm)}
-                    />
                   {/if}
                 {:else}
                   {@const chip = value === undefined ? null : value === AS_PLAYED ? '=' : String(value)}
@@ -357,16 +424,13 @@
                       onclick={(e) => (picking = { row, key: o.key, name: outLabel(o), anchor: e.currentTarget.getBoundingClientRect() })}
                     >
                       {#if chip}
-                        <span class="chip" class:keep={value === AS_PLAYED} class:lit={lit?.has(`${row.id}|${o.key}`)} style:--h={channelHue(value ?? 1)}
-                          >{chip}{#if value === 10 && row.kind === 'kit' && presetNameOf(profileOf(book, o.name).drums) === 'GM'}<small>GM</small>{/if}</span
-                        >
+                        <span class="chip" class:keep={value === AS_PLAYED} class:lit={lit?.has(`${row.id}|${o.key}`)} style:--h={channelHue(value ?? 1)}>{chip}</span>
                       {:else}<span class="hole"></span>{/if}
                     </button>
                   {/if}
                 {/if}
               </td>
             {/each}
-            {#if !locked}<td></td>{/if}
           </tr>
         {/each}
       </tbody>
@@ -397,6 +461,29 @@
     anchor={picking.anchor}
     onpick={pick}
     onclose={() => (picking = null)}
+  />
+{/if}
+
+{#if detailed}
+  {@const o = detailed}
+  <DeviceDialog
+    output={o}
+    slot={slotOf(o)}
+    ports={outputs}
+    port={live.get(o.key) ?? null}
+    profile={profileOf(book, o.name)}
+    {members}
+    drums={kitHere(o.key)}
+    used={usedOn(o.key)}
+    lit={litOn(o.key)}
+    canRemove={removable(o)}
+    onport={(port: PortOption) => onchange(chooseDevice(book, o.key, port))}
+    onprofile={(change: Partial<DeviceProfile>) => onchange(withProfile(book, o.name, change))}
+    ontest={ontest && (() => ontest(o.key))}
+    onpanic={onpanic && (() => onpanic(o.key))}
+    onremove={locked ? undefined : () => remove(o.key)}
+    onforget={Object.hasOwn(book.devices, o.name) ? () => onchange(forgetDevice(book, o.name)) : undefined}
+    onclose={() => (detail = null)}
   />
 {/if}
 
@@ -433,18 +520,71 @@
     /* a container, so the names and the heads fit what the frontend gives it, not the window (yggi/webmidi#23) */
     container-type: inline-size;
     display: grid;
-    gap: 6px;
+    gap: 10px;
     min-width: 0;
     font: 14px/1.4 var(--wm-font, system-ui, sans-serif);
     color: var(--_text);
   }
+  /* the devices plugged in that the setup has no output for: a chip each, which adds it */
+  .tray {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .tray-label {
+    margin-right: 4px;
+    color: var(--_muted);
+    font: 600 11px/1 var(--wm-font-label, var(--wm-font, system-ui, sans-serif));
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+  .dev {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 32px;
+    padding: 0 12px 0 10px;
+    border: 1px dashed var(--_line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--_text);
+    font: 600 13px/1 var(--wm-font, system-ui, sans-serif);
+    cursor: pointer;
+    transition:
+      border-color 0.12s,
+      background 0.12s;
+  }
+  .dev::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--_live);
+  }
+  .dev.here::before {
+    background: var(--_accent);
+  }
+  .dev:hover {
+    border-style: solid;
+    border-color: var(--_accent);
+    background: color-mix(in oklab, var(--_accent) 9%, transparent);
+  }
+  .nothing {
+    margin: 0;
+    padding: 14px;
+    border: 1px dashed var(--_line);
+    border-radius: 10px;
+    color: var(--_muted);
+    text-align: center;
+  }
   .scroll {
     overflow-x: auto;
   }
+  /* as wide as its columns, not as the room it is given: a crossing stays under its head and beside its row's name */
   table {
     border-collapse: separate;
     border-spacing: 0;
-    min-width: 100%;
   }
   th,
   td {
@@ -452,20 +592,32 @@
   }
   thead th {
     vertical-align: bottom;
-    padding: 0 4px 8px;
+    padding: 0 3px 10px;
   }
+  /* an output's head: where it is, its name, what its device is; pressed for its details */
   .col {
+    box-sizing: border-box;
     display: grid;
-    gap: 4px;
-    width: 118px;
+    gap: 3px;
+    width: 128px;
     min-width: 104px;
-    padding: 8px 9px;
+    padding: 8px 10px 9px;
     border: 1px solid var(--_line);
-    border-radius: 8px;
-    background: var(--_panel-2);
+    border-radius: 10px;
+    background: color-mix(in oklab, var(--_panel-2) 55%, var(--_panel));
     color: inherit;
+    font: inherit;
     text-align: left;
+    transition:
+      border-color 0.12s,
+      background 0.12s;
+  }
+  button.col {
     cursor: pointer;
+  }
+  button.col:hover {
+    border-color: var(--_faint);
+    background: var(--_panel);
   }
   /* the head and its ×, one box as wide as the head: a matrix wider than its columns stretches the column, not the head */
   .pin {
@@ -476,29 +628,30 @@
   /* the head's ×: in its top right corner, over the head's own button */
   .x {
     position: absolute;
-    top: 2px;
-    right: 6px;
+    top: 3px;
+    right: 3px;
     display: grid;
     place-items: center;
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     padding: 0;
     border: 0;
     border-radius: 50%;
     background: transparent;
-    color: var(--_muted);
-    font: 600 18px/1 var(--wm-font, system-ui, sans-serif);
+    color: var(--_faint);
+    font: 500 17px/1 var(--wm-font, system-ui, sans-serif);
     cursor: pointer;
   }
   .x:hover {
-    background: var(--_panel);
+    background: color-mix(in oklab, var(--_text) 9%, transparent);
     color: var(--_text);
   }
   .asking {
-    cursor: default;
     border-color: var(--_warn);
+    background: var(--_panel);
   }
   .asking .name {
+    font-size: 13px;
     white-space: normal;
   }
   .ask {
@@ -507,7 +660,7 @@
   }
   .ask button {
     flex: 1;
-    min-height: 32px;
+    min-height: 30px;
     padding: 0 4px;
     border: 1px solid var(--_line);
     border-radius: 6px;
@@ -521,103 +674,87 @@
     color: var(--_warn);
   }
   .col.builtin {
-    border-color: var(--_accent);
-    background: color-mix(in oklab, var(--_accent) 12%, var(--_panel));
+    border-color: color-mix(in oklab, var(--_accent) 45%, var(--_line));
+    background: color-mix(in oklab, var(--_accent) 9%, var(--_panel));
   }
   .col.builtin .slot {
     color: var(--_accent);
-  }
-  td.here {
-    background: color-mix(in oklab, var(--_accent) 6%, transparent);
-  }
-  .chip.on {
-    background: var(--_accent);
-    color: var(--wm-chip-on-ink, #ffffff);
-    font-size: 12px;
-  }
-  .via {
-    color: var(--_muted);
-    font-size: 12px;
-    font-style: italic;
-  }
-  .adds {
-    display: flex;
-    gap: 6px;
   }
   .col[aria-pressed='true'] {
     border-color: var(--_accent);
     box-shadow: 0 0 0 1px var(--_accent) inset;
     background: var(--_panel);
   }
+  /* not plugged in: kept, and drawn as waiting */
+  .col.absent {
+    border-style: dashed;
+    background: transparent;
+  }
+  .absent .name {
+    color: var(--_muted);
+  }
   .top {
     display: flex;
     align-items: center;
     gap: 6px;
+    /* (clear of the ×) */
+    padding-right: 18px;
   }
   .slot {
-    font: 700 12px var(--wm-font-num, ui-monospace, monospace);
     color: var(--_muted);
+    font: 700 10.5px/1 var(--wm-font-num, ui-monospace, monospace);
+    letter-spacing: 0.06em;
   }
   .name {
     overflow: hidden;
     font-weight: 600;
+    line-height: 1.25;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .absent .name {
-    color: var(--_faint);
-    text-decoration: line-through;
-  }
   .facts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    min-height: 18px;
-  }
-  .tag {
-    padding: 3px 5px;
-    border-radius: 4px;
-    background: var(--_panel);
+    overflow: hidden;
+    min-height: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--_muted);
-    font: 600 11px/1 var(--wm-font, system-ui, sans-serif);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    font-size: 11.5px;
+    line-height: 15px;
+  }
+  .tag + .tag::before {
+    content: '·';
+    margin: 0 4px;
+    color: var(--_faint);
   }
   .tag.gone {
     color: var(--_warn);
-    background: color-mix(in oklab, var(--_warn) 18%, transparent);
   }
   .led {
-    width: 9px;
-    height: 9px;
+    flex: none;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: var(--_off);
   }
   .led.on {
     background: var(--_live);
   }
-  .add {
-    width: 96px;
-    min-height: 84px;
-    border: 1px dashed var(--_line);
-    border-radius: 8px;
+  .absent .led {
     background: transparent;
-    color: var(--_muted);
-    font-weight: 600;
-    cursor: pointer;
+    box-shadow: 0 0 0 1.5px var(--_warn) inset;
   }
-  .add:disabled {
-    opacity: 0.5;
-    cursor: default;
+  /* a row under the pointer is tinted across, its name too, which stays opaque over what scrolls under it */
+  tbody tr:hover > * {
+    --_row: color-mix(in oklab, var(--_text) 4%, transparent);
   }
   tbody th {
     position: sticky;
     left: 0;
     z-index: 1;
     min-width: 0;
-    padding: 3px 10px 3px 8px;
+    padding: 5px 12px 5px 6px;
     /* the names stay as the matrix scrolls sideways, over the ground the frontend draws it on */
-    background: var(--wm-surface, var(--_panel));
+    background: linear-gradient(var(--_row, transparent), var(--_row, transparent)), var(--wm-surface, var(--_panel));
     text-align: left;
   }
   /* a name wraps within at most 36 % of the matrix (96 px at least), its tags (IN, Plays, a seat's part) on a line under it */
@@ -625,13 +762,18 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: 3px;
     width: max-content;
     max-width: max(96px, 36cqi);
     overflow-wrap: anywhere;
   }
   .rowname > * {
     max-width: 100%;
+  }
+  .title {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
   }
   .tags {
     display: flex;
@@ -641,36 +783,39 @@
   }
   @container (max-width: 480px) {
     .col {
-      width: 96px;
+      width: 94px;
       min-width: 88px;
-    }
-    .add {
-      width: 72px;
+      padding: 7px 8px 8px;
     }
     .jack {
-      min-width: 56px;
+      min-width: 52px;
     }
   }
   .label {
-    font: 600 15px var(--wm-font-num, ui-monospace, monospace);
+    font: 600 14.5px var(--wm-font-num, ui-monospace, monospace);
   }
   .sub {
     font-size: 12px;
     color: var(--_muted);
   }
-  tr.member th {
-    padding-left: 26px;
-  }
-  tr.member .label {
-    font-size: 14px;
-    color: var(--_muted);
+  .sub.in {
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--_live) 15%, transparent);
+    color: var(--_live);
+    font: 700 10px/1 var(--wm-font-num, ui-monospace, monospace);
+    letter-spacing: 0.06em;
+    flex: none;
+    white-space: nowrap;
+    /* (on the label's line, a little above its baseline) */
+    transform: translateY(-1px);
   }
   tr.empty .label {
     font-weight: 500;
     color: var(--_faint);
   }
   tbody tr + tr > * {
-    border-top: 1px solid color-mix(in oklab, var(--_line) 55%, transparent);
+    border-top: 1px solid color-mix(in oklab, var(--_line) 45%, transparent);
   }
   tbody tr.group > * {
     border-top: 1px solid var(--_line);
@@ -680,16 +825,21 @@
     border-top: 1px solid var(--_line);
   }
   td {
-    padding: 4px;
+    padding: 3px 4px;
+    background: var(--_row, transparent);
     text-align: center;
+  }
+  td.here {
+    background: linear-gradient(var(--_row, transparent), var(--_row, transparent)), color-mix(in oklab, var(--_accent) 5%, transparent);
   }
   .jack {
     display: grid;
     place-items: center;
     width: 100%;
     min-width: 64px;
-    height: 36px;
-    border: 1px dashed transparent;
+    height: 38px;
+    padding: 0;
+    border: 0;
     border-radius: 8px;
     background: transparent;
     color: inherit;
@@ -698,59 +848,60 @@
   span.jack {
     cursor: default;
   }
-  button.jack:hover {
-    border-color: var(--_line);
-  }
+  /* an empty crossing: a dot, which opens into a ring under the pointer */
   .hole {
-    width: 12px;
-    height: 12px;
-    border: 2px solid var(--_line);
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
+    background: var(--_off);
+    transition:
+      transform 0.12s,
+      background 0.12s,
+      box-shadow 0.12s;
+  }
+  button.jack:hover .hole,
+  button.jack:focus-visible .hole {
+    background: transparent;
+    box-shadow: 0 0 0 1px var(--_accent);
+    transform: scale(2.6);
   }
   .chip {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    min-width: 46px;
-    height: 28px;
+    min-width: 44px;
+    height: 26px;
     padding: 0 8px;
     border-radius: 999px;
     background: oklch(var(--wm-chip-l, 0.72) var(--wm-chip-c, 0.13) var(--h));
     color: var(--wm-chip-ink, #10131a);
-    font: 700 14px var(--wm-font-num, ui-monospace, monospace);
+    font: 700 13.5px var(--wm-font-num, ui-monospace, monospace);
+    transition: transform 0.12s;
   }
-  .chip small {
-    font-size: 10px;
-    opacity: 0.75;
+  button.jack:hover .chip {
+    transform: scale(1.06);
   }
   .chip.keep {
-    border: 1px solid var(--_line);
+    box-shadow: 0 0 0 1px var(--_line) inset;
     background: var(--_panel-2);
     color: var(--_text);
+    font-size: 12px;
+  }
+  /* heard on this device: the accent, quieter than a channel */
+  .chip.on {
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--_accent) 45%, transparent) inset;
+    background: color-mix(in oklab, var(--_accent) 16%, transparent);
+    color: var(--_accent);
+    font-size: 12px;
   }
   .chip.lit {
-    filter: brightness(1.25) saturate(1.3);
+    filter: brightness(1.2) saturate(1.3);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--_live) 45%, transparent);
   }
-  .note {
-    display: inline-block;
-    width: 56px;
-    min-height: 28px;
-    padding: 2px 6px;
-    color: var(--_text);
-    text-align: center;
-    border: 1px solid var(--_line);
-    border-radius: 6px;
-    background: var(--_panel-2);
-    font: 600 14px var(--wm-font-num, ui-monospace, monospace);
-  }
-  .note.mapped {
-    border-color: var(--_accent);
-    color: var(--_accent);
-  }
-  .note:focus-visible {
-    outline: 2px solid var(--_accent);
-    outline-offset: 2px;
+  .via {
+    color: var(--_muted);
+    font-size: 12px;
+    font-style: italic;
   }
   /* on a line of its own under the name and IN, the name's whole width, so a short label is shown whole (#48) */
   .plays {
@@ -759,17 +910,17 @@
     max-width: 100%;
     min-height: 26px;
     padding: 0 4px;
-    border: 1px solid var(--_live);
-    border-radius: 999px;
-    background: transparent;
+    border: 1px solid color-mix(in oklab, var(--_live) 55%, var(--_line));
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--_live) 8%, transparent);
     color: var(--_live);
-    font: 600 11px/1 var(--wm-font, system-ui, sans-serif);
-    letter-spacing: 0.03em;
+    font: 600 11.5px/1 var(--wm-font, system-ui, sans-serif);
     cursor: pointer;
   }
   .plays.off {
     border-color: var(--_line);
-    color: var(--_faint);
+    background: transparent;
+    color: var(--_muted);
   }
   .below {
     display: flex;
@@ -781,10 +932,15 @@
     min-height: 32px;
     padding: 0 10px;
     border: 0;
+    border-radius: 6px;
     background: transparent;
     color: var(--_muted);
-    font: 600 14px var(--wm-font, system-ui, sans-serif);
+    font: 600 13px var(--wm-font, system-ui, sans-serif);
     cursor: pointer;
+  }
+  .more:hover {
+    background: color-mix(in oklab, var(--_text) 6%, transparent);
+    color: var(--_text);
   }
   .sr {
     position: absolute;
@@ -793,8 +949,16 @@
     overflow: hidden;
     clip-path: inset(50%);
   }
-  button:focus-visible {
+  :is(button, select):focus-visible {
     outline: 2px solid var(--_accent);
     outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dev,
+    .col,
+    .hole,
+    .chip {
+      transition: none;
+    }
   }
 </style>

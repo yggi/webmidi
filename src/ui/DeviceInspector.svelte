@@ -3,11 +3,13 @@
    * One output of the setup in use, in full (docs/proposals/patchbay.md, `DeviceInspector`): the port it sends to (one
    * not plugged in kept and said so), then its device's profile, kept with the device in every setup (decision 002): drum
    * map, bend range, a channel per note (MPE), latency, and forgetting them. Under them the channels routed here, a test
-   * note, notes off here, and removing the output. Ports plugged in under one name are told apart by their place. Presentational: a change is a call back (`onport`, `onprofile`), which the frontend
+   * note, notes off here, and removing the output. Where a kit is routed here and the frontend names its members, each
+   * member's note on this device is set under the drum map (`members`): the matrix shows none of it. Ports plugged in
+   * under one name are told apart by their place. Presentational: a change is a call back (`onport`, `onprofile`), which the frontend
    * makes with core's `chooseDevice` and `withProfile`.
    */
-  import { DRUM_PRESETS, presetNameOf } from '../core/drum-presets';
-  import type { PortOption } from '../core/port';
+  import { deviceNote, DRUM_PRESETS, presetNameOf } from '../core/drum-presets';
+  import { matchPorts, type PortOption } from '../core/port';
   import type { DeviceProfile, SetupOutput } from '../core/setups';
   import ChannelMeter from './ChannelMeter.svelte';
   import { clamp } from './channels';
@@ -18,7 +20,14 @@
     slot: number;
     /** The outputs plugged in now. */
     ports: readonly PortOption[];
+    /**
+     * The port plugged in that this output is now, or null (`pluggedOf`: with two devices of one name, each output its
+     * own); left out, the inspector finds it among `ports` on its own.
+     */
+    port?: PortOption | null;
     profile: DeviceProfile;
+    /** A kit's members, by General MIDI note: each one's note on this device is set here, where `drums`. */
+    members?: readonly { readonly label: string; readonly note: number }[];
     /** The channels routed to it. */
     used?: readonly number[];
     /** The channels sounding on it now. */
@@ -35,10 +44,29 @@
     onforget?: () => void;
   }
 
-  let { output, slot, ports, profile, used = [], lit, drums = true, canRemove = false, onport, onprofile, ontest, onpanic, onremove, onforget }: Props = $props();
+  let {
+    output,
+    slot,
+    ports,
+    port,
+    profile,
+    members = [],
+    used = [],
+    lit,
+    drums = true,
+    canRemove = false,
+    onport,
+    onprofile,
+    ontest,
+    onpanic,
+    onremove,
+    onforget,
+  }: Props = $props();
 
   const none = $derived(output.id === 'none');
-  const plugged = $derived(!none && ports.some((p) => p.id === output.id || (!!output.name && p.name === output.name)));
+  /** The port it is now: an id changes on a replug, and the name finds it again (`matchPorts`). */
+  const now = $derived(none ? null : port !== undefined ? port : (matchPorts([output], ports)[0] ?? null));
+  const plugged = $derived(now !== null);
   const title = $derived(none ? 'No device' : output.name || output.id);
   const preset = $derived(presetNameOf(profile.drums));
   const uid = $props.id();
@@ -56,8 +84,18 @@
     set(n);
   }
 
+  /** A member's note on this device typed: the map sends the General MIDI note `gm` as it, the entry dropped when it is `gm` again (yggi/webmidi#24). */
+  function setNote(e: Event & { currentTarget: HTMLInputElement }, gm: number) {
+    const drums: Record<number, number> = { ...profile.drums };
+    const n = clamp(e.currentTarget.valueAsNumber, 0, 127, drums[gm] ?? gm);
+    e.currentTarget.value = String(n);
+    if (n === gm) delete drums[gm];
+    else drums[gm] = n;
+    onprofile({ drums });
+  }
+
   function choosePort(id: string) {
-    if (id === output.id) return;
+    if (id === (now?.id ?? output.id)) return;
     onport(id === 'none' ? { id: 'none', name: '' } : (ports.find((p) => p.id === id) ?? { id, name: '' }));
   }
 </script>
@@ -68,7 +106,7 @@
     <h3 id="{uid}-title">{title}</h3>
     <label class="field">
       <span>Port</span>
-      <select value={output.id} onchange={(e) => choosePort(e.currentTarget.value)}>
+      <select value={now?.id ?? output.id} onchange={(e) => choosePort(e.currentTarget.value)}>
         <option value="none">No device</option>
         {#each ports as p, i (p.id)}<option value={p.id}>{portLabel(p, i)}</option>{/each}
         {#if !none && !plugged}<option value={output.id}>{output.name || output.id} (not plugged in)</option>{/if}
@@ -94,6 +132,19 @@
             {#if preset === 'Custom'}<option value="Custom" disabled>Custom</option>{/if}
           </select>
         </label>
+        {#if members.length}
+          <div class="notes" role="group" aria-label="Each drum’s note on {title}">
+            {#each members as m (m.note)}
+              {@const n = deviceNote(profile.drums, m.note)}
+              <label class="drum" class:mapped={n !== m.note}>
+                <span class="drum-name">{m.label}</span>
+                <span class="gm" title="Its General MIDI note">{m.note}</span>
+                <span class="arrow" aria-hidden="true">→</span>
+                <input type="number" class="note" min="0" max="127" value={n} aria-label="{m.label}: General MIDI {m.note} goes out as" onchange={(e) => setNote(e, m.note)} />
+              </label>
+            {/each}
+          </div>
+        {/if}
       {/if}
       <label class="field">
         <span>Bend range<small>Semitones each way</small></span>
@@ -232,6 +283,41 @@
     font-size: 12px;
     color: var(--_muted);
   }
+  /* each drum's note on this device: its name, its General MIDI note, what goes out */
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--_panel-2);
+  }
+  .drum {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 6px;
+  }
+  .drum-name {
+    overflow: hidden;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .gm,
+  .arrow {
+    color: var(--_muted);
+    font: 500 12px var(--wm-font-num, ui-monospace, monospace);
+  }
+  .drum .note {
+    width: 58px;
+    min-height: 30px;
+    text-align: center;
+  }
+  .drum.mapped .note {
+    border-color: var(--_accent);
+    color: var(--_accent);
+  }
   .range {
     display: flex;
     align-items: center;
@@ -316,6 +402,14 @@
     border-color: transparent;
     background: transparent;
     color: var(--_muted);
+  }
+  button.ghost:hover:not(:disabled) {
+    background: var(--_panel-2);
+    color: var(--_text);
+  }
+  /* a quiet action alone on its line starts at the block's edge, as its fields do */
+  .actions > .ghost:only-child {
+    margin-left: -12px;
   }
   button:disabled {
     opacity: 0.5;

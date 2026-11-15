@@ -3,9 +3,8 @@
 // custom variant (decision 002): a replug is not a change to the setup.
 
 import type { MidiPort, PortAccess, PortOption } from './port';
-import { outputNow } from './routing';
 import { listenOf } from './plays';
-import { inputRow, type Setup, type SetupBook } from './setups';
+import { inputRow, pluggedOf, type Setup, type SetupBook } from './setups';
 
 /** An output of a setup as it resolves now: its key, and its live port, or null (no device, or not plugged in). */
 export interface LiveOutput {
@@ -14,14 +13,15 @@ export interface LiveOutput {
 }
 
 /**
- * The live ports of a setup: each output by its id, else by its name (an id changes on replug on some systems, as
- * `outputNow` finds it), in the setup's order; and the inputs to listen to, heard or routed (`listenOf`), as
+ * The live ports of a setup: each output's port as it is plugged in now (`pluggedOf`: by its name where it has one, two
+ * devices of one name two ports), in the setup's order; and the inputs to listen to, heard or routed (`listenOf`), as
  * `MidiAccess.listen` takes them.
  * The book keeps the ids it has: the name finds the port, so a replug changes nothing kept.
  */
 export function portsOf(setup: Setup, access: Pick<PortAccess, 'outputs' | 'outputPort'>): { outputs: LiveOutput[]; listen: 'all' | readonly PortOption[] } {
+  const now = pluggedOf(setup.outputs, access.outputs);
   return {
-    outputs: setup.outputs.map((o) => ({ key: o.key, port: outputNow(access, o) })),
+    outputs: setup.outputs.map((o, i) => ({ key: o.key, port: now[i] ? access.outputPort(now[i].id) : null })),
     listen: listenOf(setup),
   };
 }

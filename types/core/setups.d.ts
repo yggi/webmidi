@@ -1,5 +1,5 @@
 import type { DrumMap } from './drum-presets';
-import type { PortOption } from './port';
+import { type PortOption } from './port';
 /** The channels notes rotate over on a device (MPE-style, for microtonal pieces), first to last, 1–16. */
 export interface MpeRange {
     readonly from: number;
@@ -128,6 +128,13 @@ export declare const activeSetup: (book: SetupBook) => Setup;
 export declare const profileOf: (book: SetupBook, name: string) => DeviceProfile;
 /** What a crossing of the setup in use sends, or undefined: nothing. */
 export declare const crossingOf: (book: SetupBook, context: string, row: string, output: string) => Crossing | undefined;
+/**
+ * The port plugged in now for each of a setup's outputs, in their order, or null: not plugged in, a slot with no
+ * device, the built-in. One port serves one output (`matchPorts`).
+ */
+export declare const pluggedOf: (outputs: readonly PortOption[], plugged: readonly PortOption[]) => (PortOption | null)[];
+/** The ports plugged in that no output of a setup is: what could be added to it. */
+export declare function spareOf(setup: Setup, plugged: readonly PortOption[]): PortOption[];
 /** How many of a setup's devices are plugged in, of how many it has (slots with no device not counted). */
 export declare function fit(setup: Setup, plugged: readonly PortOption[]): {
     plugged: number;

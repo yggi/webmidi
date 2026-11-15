@@ -1,7 +1,7 @@
 // Lifted from yggi/cell-studio src/midi/routing.ts @ 3813fbb, which lifted it from yggi/jambot apps/web/src/midi/routing.ts
 // @ 8cdb6b8 (adoptPorts, connectMidi, portsMessage). The connection is structural (`PortAccess`), not Web MIDI's class.
 
-import type { MidiPort, PortAccess, PortOption } from './port';
+import { matchPorts, type MidiPort, type PortAccess, type PortOption } from './port';
 import { isBuiltIn } from './setups';
 
 /** The ports chosen, as the settings keep them (by id and name; `'none'`, or for the input `'all'`), and the live output they resolve to. */
@@ -13,17 +13,15 @@ export interface ChosenPorts {
   outPort: MidiPort | null;
 }
 
-/** The id a chosen port has now: its own if it is there, else that of a port with the same name (ids change on replug on some systems), else its own. */
-const idNow = (ports: readonly PortOption[], id: string, name: string): string =>
-  id === 'none' || id === 'all' || ports.some((p) => p.id === id) ? id : (ports.find((p) => name && p.name === name)?.id ?? id);
-
 /**
- * The live output a port chosen resolves to now (by id, else by name: see `idNow`), or null: none chosen, the built-in
- * (no port: `BUILT_IN`), or not plugged in.
+ * The live output a port chosen resolves to now (`matchPorts`), or null: none chosen, the built-in (no port:
+ * `BUILT_IN`), or not plugged in. A port plugged in under the chosen one's id and another name is not it. For several
+ * outputs at once, `portsOf`: two of one name are then two ports.
  */
 export function outputNow(access: Pick<PortAccess, 'outputs' | 'outputPort'>, chosen: PortOption): MidiPort | null {
   if (chosen.id === 'none' || isBuiltIn(chosen)) return null;
-  return access.outputPort(idNow(access.outputs, chosen.id, chosen.name));
+  const port = matchPorts([chosen], access.outputs)[0];
+  return port ? access.outputPort(port.id) : null;
 }
 
 /**
@@ -32,12 +30,15 @@ export function outputNow(access: Pick<PortAccess, 'outputs' | 'outputPort'>, ch
  * runs whenever the ports may have changed.
  */
 export function adoptPorts(access: PortAccess, chosen: ChosenPorts): void {
-  const out = idNow(access.outputs, chosen.outPortId, chosen.outPortName);
-  if (out !== chosen.outPortId) chosen.outPortId = out;
-  chosen.outPort = out === 'none' ? null : access.outputPort(out);
-  const inp = idNow(access.inputs, chosen.inPortId, chosen.inPortName);
-  if (inp !== chosen.inPortId) chosen.inPortId = inp;
-  access.listen(inp);
+  const out = matchPorts([{ id: chosen.outPortId, name: chosen.outPortName }], access.outputs)[0];
+  if (out && out.id !== chosen.outPortId) chosen.outPortId = out.id;
+  chosen.outPort = out ? access.outputPort(out.id) : null;
+  const special = chosen.inPortId === 'all' || chosen.inPortId === 'none';
+  const inp = special ? null : matchPorts([{ id: chosen.inPortId, name: chosen.inPortName }], access.inputs)[0];
+  if (inp && inp.id !== chosen.inPortId) chosen.inPortId = inp.id;
+  // (an input not plugged in whose id is another device's now: nothing is listened to; one whose id is nowhere is kept, for when it comes)
+  const others = !special && !inp && access.inputs.some((p) => p.id === chosen.inPortId);
+  access.listen(others ? 'none' : (inp?.id ?? chosen.inPortId));
 }
 
 /** What was found, in a line: "MIDI connected: 1 input, 2 outputs." */

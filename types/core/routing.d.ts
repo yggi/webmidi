@@ -1,4 +1,4 @@
-import type { MidiPort, PortAccess, PortOption } from './port';
+import { type MidiPort, type PortAccess, type PortOption } from './port';
 /** The ports chosen, as the settings keep them (by id and name; `'none'`, or for the input `'all'`), and the live output they resolve to. */
 export interface ChosenPorts {
     outPortId: string;
@@ -8,8 +8,9 @@ export interface ChosenPorts {
     outPort: MidiPort | null;
 }
 /**
- * The live output a port chosen resolves to now (by id, else by name: see `idNow`), or null: none chosen, the built-in
- * (no port: `BUILT_IN`), or not plugged in.
+ * The live output a port chosen resolves to now (`matchPorts`), or null: none chosen, the built-in (no port:
+ * `BUILT_IN`), or not plugged in. A port plugged in under the chosen one's id and another name is not it. For several
+ * outputs at once, `portsOf`: two of one name are then two ports.
  */
 export declare function outputNow(access: Pick<PortAccess, 'outputs' | 'outputPort'>, chosen: PortOption): MidiPort | null;
 /**
