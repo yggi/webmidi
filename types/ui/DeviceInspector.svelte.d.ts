@@ -1,4 +1,4 @@
-import type { PortOption } from '../core/port';
+import { type PortOption } from '../core/port';
 import type { DeviceProfile, SetupOutput } from '../core/setups';
 interface Props {
     output: SetupOutput;
@@ -6,7 +6,17 @@ interface Props {
     slot: number;
     /** The outputs plugged in now. */
     ports: readonly PortOption[];
+    /**
+     * The port plugged in that this output is now, or null (`pluggedOf`: with two devices of one name, each output its
+     * own); left out, the inspector finds it among `ports` on its own.
+     */
+    port?: PortOption | null;
     profile: DeviceProfile;
+    /** A kit's members, by General MIDI note: each one's note on this device is set here, where `drums`. */
+    members?: readonly {
+        readonly label: string;
+        readonly note: number;
+    }[];
     /** The channels routed to it. */
     used?: readonly number[];
     /** The channels sounding on it now. */

@@ -4,7 +4,7 @@
 // `nested`, `rangeOf`, `outputsOf`), generalized from one setup to many.
 
 import type { DrumMap } from './drum-presets';
-import type { PortOption } from './port';
+import { matchPorts, type PortOption } from './port';
 
 /** The channels notes rotate over on a device (MPE-style, for microtonal pieces), first to last, 1–16. */
 export interface MpeRange {
@@ -296,13 +296,26 @@ export const crossingOf = (book: SetupBook, context: string, row: string, output
   return c && own(c, output);
 };
 
-/** Whether an output's device is among the ports plugged in now: by id, or by name (an id changes on replug on some systems). */
-const isPlugged = (o: PortOption, plugged: readonly PortOption[]) => plugged.some((p) => p.id === o.id || (!!o.name && p.name === o.name));
+/**
+ * The port plugged in now for each of a setup's outputs, in their order, or null: not plugged in, a slot with no
+ * device, the built-in. One port serves one output (`matchPorts`).
+ */
+export const pluggedOf = (outputs: readonly PortOption[], plugged: readonly PortOption[]): (PortOption | null)[] =>
+  matchPorts(
+    outputs.map((o) => (isBuiltIn(o) ? { id: 'none', name: '' } : o)),
+    plugged,
+  );
+
+/** The ports plugged in that no output of a setup is: what could be added to it. */
+export function spareOf(setup: Setup, plugged: readonly PortOption[]): PortOption[] {
+  const used = new Set(pluggedOf(setup.outputs, plugged));
+  return plugged.filter((p) => !used.has(p));
+}
 
 /** How many of a setup's devices are plugged in, of how many it has (slots with no device not counted). */
 export function fit(setup: Setup, plugged: readonly PortOption[]): { plugged: number; of: number } {
   const devices = setup.outputs.filter((o) => o.id !== 'none' && !isBuiltIn(o));
-  return { plugged: devices.filter((o) => isPlugged(o, plugged)).length, of: devices.length };
+  return { plugged: pluggedOf(devices, plugged).filter(Boolean).length, of: devices.length };
 }
 
 /**

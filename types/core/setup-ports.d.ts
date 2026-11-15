@@ -6,8 +6,8 @@ export interface LiveOutput {
     readonly port: MidiPort | null;
 }
 /**
- * The live ports of a setup: each output by its id, else by its name (an id changes on replug on some systems, as
- * `outputNow` finds it), in the setup's order; and the inputs to listen to, heard or routed (`listenOf`), as
+ * The live ports of a setup: each output's port as it is plugged in now (`pluggedOf`: by its name where it has one, two
+ * devices of one name two ports), in the setup's order; and the inputs to listen to, heard or routed (`listenOf`), as
  * `MidiAccess.listen` takes them.
  * The book keeps the ids it has: the name finds the port, so a replug changes nothing kept.
  */

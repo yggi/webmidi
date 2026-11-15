@@ -4,9 +4,10 @@
 // the adapter's part over the same fake ports: the adapter is `web`'s, a later pull request.
 import { describe, expect, it } from 'vitest';
 import { fakeAccess, fakeConnection, fakeInput, fakePort } from './fixtures';
-import type { PortAccess } from './port';
+import { isListened, matchPorts, type PortAccess } from './port';
 import { adoptPorts, connectMidi, outputNow, portsMessage, type ChosenPorts } from './routing';
-import { BUILT_IN } from './setups';
+import { portsOf } from './setup-ports';
+import { activeSetup, addOutput, BUILT_IN, chooseDevice, fit, newBook, spareOf } from './setups';
 
 const chosen = (out = 'none', outName = '', inp = 'none', inName = ''): ChosenPorts => ({ outPortId: out, outPortName: outName, inPortId: inp, inPortName: inName, outPort: null });
 
@@ -135,5 +136,55 @@ describe('PortAccess.listen takes several inputs (yggi/webmidi#27)', () => {
     const fake: PortAccess = { inputs: [], outputs: [], outputPort: () => null, listen: (id: string) => void heard.push(id) };
     adoptPorts(fake, chosen('none', '', 'in-1', 'Keys'));
     expect(heard).toEqual(['in-1']);
+  });
+});
+
+describe('matchPorts: a port kept is its name’s, one port to one kept', () => {
+  const kept = (id: string, name: string) => ({ id, name });
+
+  it('finds a port by its id and name, else by its name: a replug under another id changes nothing', () => {
+    const plugged = [kept('b', 'Circuit'), kept('a', 'Minilogue')];
+    expect(matchPorts([kept('a', 'Minilogue'), kept('x', 'Circuit'), kept('y', 'TD-3')], plugged)).toEqual([plugged[1], plugged[0], null]);
+  });
+
+  it('does not take an id for a device once its name is known: ports numbered by place swap on a replug', () => {
+    // before the replug: output-0 the Circuit, output-1 the Minilogue; after: the other way round
+    const plugged = [kept('output-0', 'Minilogue'), kept('output-1', 'Circuit')];
+    expect(matchPorts([kept('output-0', 'Circuit'), kept('output-1', 'Minilogue')], plugged)).toEqual([plugged[1], plugged[0]]);
+    // and with the Circuit unplugged, its id is the Minilogue's: not the Circuit
+    expect(matchPorts([kept('output-0', 'Circuit')], [kept('output-0', 'Minilogue')])).toEqual([null]);
+  });
+
+  it('gives two devices of one name two ports, each its own id first, then in order; a third gets none', () => {
+    const plugged = [kept('1', 'TD-3'), kept('2', 'TD-3')];
+    expect(matchPorts([kept('2', 'TD-3'), kept('9', 'TD-3'), kept('8', 'TD-3')], plugged)).toEqual([plugged[1], plugged[0], null]);
+  });
+
+  it('finds a port kept by id alone by its id; `none` and `all` are no port', () => {
+    const plugged = [kept('a', 'Keys'), kept('none', 'odd')];
+    expect(matchPorts([kept('a', ''), kept('none', ''), kept('all', '')], plugged)).toEqual([plugged[0], null, null]);
+  });
+
+  it('is what outputNow, portsOf, fit and spareOf read: two TD-3s kept, one plugged in, is one of two, on one port', () => {
+    const book = addOutput(addOutput(chooseDevice(newBook(), 'o1', kept('1', 'TD-3')), kept('2', 'TD-3')).book, kept('3', 'Circuit')).book;
+    const setup = activeSetup(book);
+    const access = fakeConnection(fakeAccess([], [fakePort('2', 'TD-3'), fakePort('7', 'Minilogue')]));
+    expect(fit(setup, access.outputs)).toEqual({ plugged: 1, of: 3 });
+    expect(portsOf(setup, access).outputs.map((o) => o.port && (o.port as unknown as { id: string }).id)).toEqual([null, '2', null]);
+    expect(spareOf(setup, access.outputs).map((p) => p.name)).toEqual(['Minilogue']);
+    expect(outputNow(access, kept('2', 'Circuit'))).toBeNull();
+    expect(isListened([kept('in-0', 'Keys')], 'in-0', 'Pads')).toBe(false);
+    expect(isListened([kept('in-0', 'Keys')], 'in-5', 'Keys')).toBe(true);
+    expect(isListened([kept('in-0', '')], 'in-0', 'Pads')).toBe(true);
+  });
+
+  it('adoptPorts sends to no output, and listens to no input, plugged in under the kept id by another name', () => {
+    const heard: unknown[] = [];
+    const live = fakeConnection(fakeAccess([fakeInput('in-0', 'Pads')], [fakePort('out-0', 'Minilogue')]));
+    const access: PortAccess = { inputs: live.inputs, outputs: live.outputs, outputPort: live.outputPort, listen: (l) => void heard.push(l) };
+    const ports = chosen('out-0', 'Circuit', 'in-0', 'Keys');
+    adoptPorts(access, ports);
+    expect(ports.outPort).toBeNull();
+    expect(heard).toEqual(['none']);
   });
 });

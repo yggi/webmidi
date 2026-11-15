@@ -37,7 +37,16 @@ interface Props {
         readonly rows?: boolean;
     } | null;
     onchange: (book: SetupBook) => void;
+    /**
+     * An output's head pressed, by key: the frontend shows its details itself (and may mark it with `selected`). Left
+     * out, the matrix opens the output's details in a dialog of its own.
+     */
     onselect?: (key: string) => void;
+    /** In the matrix's own dialog: a test note to an output, and its notes off, by key; left out, not offered. */
+    ontest?: (key: string) => void;
+    onpanic?: (key: string) => void;
+    /** The built-in's head pressed, where the matrix opens the details itself: its settings are the frontend's (decision 004). */
+    onbuiltin?: () => void;
 }
 declare const PatchMatrix: import("svelte").Component<Props, {}, "">;
 type PatchMatrix = ReturnType<typeof PatchMatrix>;

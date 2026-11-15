@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // The patchbay's components mounted in a DOM (jsdom): what each shows for the props it is given, and what it calls back.
 import { readFileSync } from 'node:fs';
+import { DRUM_PRESETS } from '../core/drum-presets';
 import { DEFAULT_PRESET } from '../core/input-kinds';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -28,6 +29,7 @@ import {
   type SetupBook,
 } from '../core/setups';
 import ChannelMeter from './ChannelMeter.svelte';
+import DeviceDialog from './DeviceDialog.svelte';
 import DeviceInspector from './DeviceInspector.svelte';
 import MidiStatus from './MidiStatus.svelte';
 import PatchMatrix from './PatchMatrix.svelte';
@@ -197,6 +199,77 @@ describe('DeviceInspector', () => {
   });
 });
 
+describe('DeviceInspector, the port and the drums', () => {
+  const base = { slot: 1, profile: { ...DEFAULT_PROFILE, drums: { 36: 60 } } as DeviceProfile, onport: () => {} };
+
+  it('shows the port an output is now by its name, where its id changed on a replug; and the one the matrix gives it', () => {
+    const ports = [
+      { id: 'new-1', name: 'TD-3' },
+      { id: 'new-2', name: 'TD-3' },
+    ];
+    const props = show(DeviceInspector, { ...base, output: { key: 'o1', id: 'old', name: 'TD-3' }, ports, onprofile: () => {} }) as Record<string, unknown>;
+    expect(one<HTMLSelectElement>('select').value).toBe('new-1');
+    expect(one('.warn')).toBeNull();
+    props.port = ports[1];
+    flushSync();
+    expect(one<HTMLSelectElement>('select').value).toBe('new-2');
+    props.port = null;
+    flushSync();
+    expect(one('.warn').textContent).toContain('Not plugged in');
+  });
+
+  it('sets each drum’s note on the device under its drum map, where it is given a kit’s members', () => {
+    const onprofile = vi.fn();
+    const members = [
+      { label: 'kick', note: 36 },
+      { label: 'snare', note: 38 },
+    ];
+    const props = show(DeviceInspector, { ...base, output: { key: 'o1', id: 'a', name: 'Circuit' }, ports: [{ id: 'a', name: 'Circuit' }], members, onprofile }) as Record<
+      string,
+      unknown
+    >;
+    const notes = () => all('input.note') as HTMLInputElement[];
+    expect(notes().map((n) => n.value)).toEqual(['60', '38']);
+    change(notes()[1]!, '62');
+    expect(onprofile).toHaveBeenLastCalledWith({ drums: { 36: 60, 38: 62 } });
+    change(notes()[0]!, '36');
+    expect(onprofile).toHaveBeenLastCalledWith({ drums: {} });
+    props.drums = false;
+    flushSync();
+    expect(notes()).toEqual([]);
+  });
+});
+
+describe('DeviceDialog', () => {
+  it('is the inspector as a dialog: Escape, its × and a press outside close it, and the focus returns to where it was', () => {
+    const opener = document.body.appendChild(document.createElement('button'));
+    opener.focus();
+    const onclose = vi.fn();
+    show(DeviceDialog, {
+      output: { key: 'o1', id: 'a', name: 'Circuit' },
+      slot: 1,
+      ports: [{ id: 'a', name: 'Circuit' }],
+      profile: DEFAULT_PROFILE,
+      onport: () => {},
+      onprofile: () => {},
+      onclose,
+    });
+    const box = one('[role=dialog]');
+    expect([box.getAttribute('aria-modal'), box.getAttribute('aria-label'), document.activeElement === box]).toEqual(['true', 'Details of Circuit', true]);
+    expect(one('[role=dialog] h3').textContent).toBe('Circuit');
+    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    one<HTMLButtonElement>('.close').click();
+    box.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(onclose).toHaveBeenCalledTimes(2);
+    one('.wm-dialog').dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(onclose).toHaveBeenCalledTimes(3);
+    for (const m of mounted) unmount(m);
+    mounted = [];
+    flushSync();
+    expect(document.activeElement).toBe(opener);
+  });
+});
+
 describe('DeviceInspector, more', () => {
   it('tells apart ports plugged in under one name by their place, and forgets a device’s settings when asked', () => {
     const onforget = vi.fn();
@@ -221,7 +294,9 @@ describe('DeviceInspector, more', () => {
 });
 
 describe('the palette', () => {
-  const sources = ['MidiStatus', 'DeviceInspector', 'ChannelMeter', 'ChannelPicker', 'PatchMatrix', 'SetupPicker'].map((name) => readFileSync(`src/ui/${name}.svelte`, 'utf8'));
+  const sources = ['MidiStatus', 'DeviceInspector', 'DeviceDialog', 'ChannelMeter', 'ChannelPicker', 'PatchMatrix', 'SetupPicker'].map((name) =>
+    readFileSync(`src/ui/${name}.svelte`, 'utf8'),
+  );
   /** A component's palette, its root's selector left out. */
   const palette = (text: string) => /\/\* palette:[\s\S]*?\/\* end palette \*\//.exec(text)?.[0].replace(/\.wm-[a-z]+/g, '.root');
 
@@ -279,50 +354,117 @@ const rowCells = (label: string) => {
   const row = all('tbody tr').find((r) => r.querySelector('th')?.textContent?.includes(label))!;
   return [...row.querySelectorAll('td')].map((td) => td.querySelector('input')?.value ?? (td.textContent!.trim() || '·'));
 };
+const head = (name: string) => all('thead button.col').find((b) => b.querySelector('.name')?.textContent === name) as HTMLButtonElement;
+const dialogField = (label: string) =>
+  all('[role=dialog] label')
+    .find((l) => l.textContent?.includes(label))!
+    .querySelector('input, select') as HTMLInputElement;
+const keydown = (key: string) => {
+  one('[role=dialog]').dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  flushSync();
+};
 const jack = (label: string, out: string) => all('.jack').find((j) => j.getAttribute('aria-label')?.startsWith(`${label} to ${out}`)) as HTMLButtonElement;
 
 describe('PatchMatrix', () => {
   it('draws the clock first, then the rows and the inputs down, the outputs across, each crossing its channel', () => {
     matrix(home());
     expect(all('thead .name').map((n) => n.textContent)).toEqual(['Circuit Tracks', 'Minilogue xd']);
-    expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['Clock', '&lead', '&pad', 'Kit', '&bd', '&sd', 'KeyStep 37']);
-    expect(rowCells('&lead')).toEqual(['·', '1', '·']);
-    expect(rowCells('Kit')).toEqual(['10', '·', '·']);
+    // (a kit's members are no rows: each one's note on a device is in the device's details)
+    expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['Clock', '&lead', '&pad', 'Kit', 'KeyStep 37']);
+    expect(rowCells('&lead')).toEqual(['·', '1']);
+    expect(rowCells('Kit')).toEqual(['10', '·']);
   });
 
   it('draws two inputs plugged in under one name (Android names a device’s every port so) as one row, since the book keeps an input by its name', () => {
     const twin = { id: 'in-2', name: keystep.name };
     matrix(home(), { inputs: [keystep, twin] });
-    expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['Clock', '&lead', '&pad', 'Kit', '&bd', '&sd', 'KeyStep 37']);
-    expect(rowCells('KeyStep 37')).toEqual(['·', '·', '·']);
+    expect(all('tbody th .label').map((n) => n.textContent)).toEqual(['Clock', '&lead', '&pad', 'Kit', 'KeyStep 37']);
+    expect(rowCells('KeyStep 37')).toEqual(['·', '·']);
     expect(one('tbody tr:last-child .sub').textContent).toBe('IN');
     expect(all('tbody tr:last-child .sub').map((s) => s.textContent)).toEqual(['IN', '2 ports']);
   });
 
-  it('marks a kit on channel 10 "GM" only where the output’s drum map is General MIDI (yggi/webmidi#30)', () => {
-    const book = withCrossing(home(), 'piece:a', '*', 'o2', 10);
-    matrix(book);
-    expect(rowCells('Kit')).toEqual(['10', '10GM', '·']);
-  });
-
-  it('shows a kit member’s note as each output’s drum map sends it, where the kit is routed', () => {
-    matrix(home());
-    expect([rowCells('&bd'), rowCells('&sd')]).toEqual([
-      ['60', '·', '·'],
-      ['38', '·', '·'],
-    ]);
-    expect((one('.note.mapped') as HTMLInputElement).value).toBe('60');
-  });
-
-  it('a member’s note typed changes the device’s drum map, clamped, and back to its own note drops the entry (yggi/webmidi#24)', () => {
+  it('says on an output’s head how its device takes a kit routed to it: its drum map, and nothing where no kit is (yggi/webmidi#30)', () => {
     const { props } = matrix(home());
-    change(all('input.note')[1] as HTMLInputElement, '62');
+    const heads = () => all('thead .facts').map((f) => f.textContent);
+    expect(heads()).toEqual(['Custom drums', '']);
+    props.book = withCrossing(withProfile(props.book, circuit.name, { drums: { ...DRUM_PRESETS['Novation Circuit'] } }), 'piece:a', '*', 'o2', 10);
+    flushSync();
+    expect(heads()).toEqual(['Novation Circuit', 'GM drums']);
+    expect(rowCells('Kit')).toEqual(['10', '10']);
+  });
+
+  it('opens an output’s details in a dialog from its head, where the frontend doesn’t take the head itself: its port, its profile, its channels', () => {
+    const test = vi.fn();
+    const { props } = matrix(home(), { onselect: undefined, ontest: test });
+    expect(one('[role=dialog]')).toBeNull();
+    head('Minilogue xd').click();
+    flushSync();
+    expect(one('[role=dialog]').getAttribute('aria-label')).toBe('Details of Minilogue xd');
+    expect([one('[role=dialog] h3').textContent, one<HTMLSelectElement>('[role=dialog] select').value]).toEqual(['Minilogue xd', 'out-2']);
+    expect(all('[role=dialog] .cell.on').length).toBe(1);
+    click('Test note');
+    expect(test).toHaveBeenCalledWith('o2');
+    expect(buttons()).not.toContain('Notes off here');
+    change(dialogField('Bend range'), '12');
+    expect([profileOf(props.book, 'Minilogue xd').bend, activeSetup(props.book).name]).toEqual([12, 'Home']);
+    click('Forget Minilogue xd’s settings');
+    expect(profileOf(props.book, 'Minilogue xd').bend).toBe(2);
+    one<HTMLButtonElement>('[role=dialog] .close').click();
+    flushSync();
+    expect(one('[role=dialog]')).toBeNull();
+  });
+
+  it('sets each drum’s note on a device in its details, where a kit is routed to it, and nowhere in the matrix (yggi/webmidi#24)', () => {
+    const { props } = matrix(home(), { onselect: undefined });
+    expect(all('.wm-matrix input')).toEqual([]);
+    head('Circuit Tracks').click();
+    flushSync();
+    const notes = () => all('[role=dialog] input.note') as HTMLInputElement[];
+    expect(all('[role=dialog] .drum-name').map((n) => n.textContent)).toEqual(['&bd', '&sd']);
+    expect(notes().map((n) => n.value)).toEqual(['60', '38']);
+    expect(all('[role=dialog] .drum.mapped').length).toBe(1);
+    change(notes()[1]!, '62');
     expect(profileOf(props.book, 'Circuit Tracks').drums).toEqual({ 36: 60, 38: 62 });
     expect(activeSetup(props.book).name).toBe('Home');
-    change(all('input.note')[1] as HTMLInputElement, '300');
+    change(notes()[1]!, '300');
     expect(profileOf(props.book, 'Circuit Tracks').drums[38]).toBe(127);
-    change(all('input.note')[0] as HTMLInputElement, '36');
+    change(notes()[0]!, '36');
     expect(profileOf(props.book, 'Circuit Tracks').drums).toEqual({ 38: 127 });
+    // (no kit routed to the Minilogue: no drum map there)
+    keydown('Escape');
+    head('Minilogue xd').click();
+    flushSync();
+    expect(all('[role=dialog] input.note')).toEqual([]);
+    expect(all('[role=dialog] label').some((l) => l.textContent?.includes('Drum map'))).toBe(false);
+  });
+
+  it('gives an output another port in its details, removes it there, and closes on Escape', () => {
+    const mf = { id: 'out-3', name: 'MicroFreak' };
+    const { props } = matrix(home(), { onselect: undefined, outputs: [circuit, minilogue, mf] });
+    head('Minilogue xd').click();
+    flushSync();
+    change(one<HTMLSelectElement>('[role=dialog] select'), 'out-3');
+    expect(activeSetup(props.book).outputs.map((o) => o.name)).toEqual(['Circuit Tracks', 'MicroFreak']);
+    expect(crossingOf(props.book, 'piece:a', 'lead', 'o2')).toBe(1);
+    keydown('Escape');
+    expect(one('[role=dialog]')).toBeNull();
+    head('MicroFreak').click();
+    flushSync();
+    click('Remove output');
+    expect(one('[role=dialog]')).toBeNull();
+    expect(activeSetup(props.book).outputs.map((o) => o.name)).toEqual(['Circuit Tracks']);
+  });
+
+  it('finds an output’s port by its name: a replug under another id is plugged in, and an id that is another device’s now is not', () => {
+    // ports numbered by place: the Minilogue is now where the Circuit was, and the Circuit is unplugged
+    matrix(home(), { onselect: undefined, outputs: [{ id: 'out-1', name: 'Minilogue xd' }] });
+    expect(all('thead .col.absent .name').map((n) => n.textContent)).toEqual(['Circuit Tracks']);
+    expect(all('.tray .dev')).toEqual([]);
+    head('Minilogue xd').click();
+    flushSync();
+    expect(one<HTMLSelectElement>('[role=dialog] select').value).toBe('out-1');
+    expect(one('[role=dialog] .warn')).toBeNull();
   });
 
   it('a channel picked changes the book, as the named setup’s custom variant', () => {
@@ -390,7 +532,7 @@ describe('PatchMatrix', () => {
     const { props } = matrix(withBuiltIn(home(), true, { 'piece:a': ['lead'] }), { builtIn: { label: 'Synth' } });
     expect(all('thead .slot').map((n) => n.textContent)).toEqual(['BUILT-IN', 'OUT 1', 'OUT 2']);
     expect(all('thead .name').map((n) => n.textContent)).toEqual(['Synth', 'Circuit Tracks', 'Minilogue xd']);
-    expect([rowCells('&lead')[0], rowCells('&pad')[0], rowCells('Clock')[0], rowCells('&bd')[0], rowCells('KeyStep 37')[0]]).toEqual(['ON', '·', '—', '·', 'not heard']);
+    expect([rowCells('&lead')[0], rowCells('&pad')[0], rowCells('Clock')[0], rowCells('KeyStep 37')[0]]).toEqual(['ON', '·', '—', 'not heard']);
     jack('&pad', 'Synth').click();
     flushSync();
     expect([builtInHears(props.book, 'piece:a', 'pad'), activeSetup(props.book).name]).toEqual([true, 'Home - custom']);
@@ -439,7 +581,7 @@ describe('PatchMatrix', () => {
     flushSync();
     click('= As played');
     expect(crossingOf(props.book, 'piece:a', inputRow(keystep), 'o2')).toBe(AS_PLAYED);
-    expect(rowCells('KeyStep 37')).toEqual(['·', '=', '·']);
+    expect(rowCells('KeyStep 37')).toEqual(['·', '=']);
     const plays = () => one('select.plays') as HTMLSelectElement;
     expect([plays().value, [...plays().options].map((o) => o.textContent)]).toEqual(['none', ['Not heard', 'Default', '&lead', '&pad', 'Kit']]);
     change(plays(), 'lead');
@@ -451,7 +593,7 @@ describe('PatchMatrix', () => {
     flushSync();
     expect(plays().value).toBe('');
     expect(plays().options[0]!.textContent).toBe('All: default');
-    expect(rowCells('All inputs')).toEqual(['·', '·', '·']);
+    expect(rowCells('All inputs')).toEqual(['·', '·']);
     change(plays(), 'none');
     expect(activeSetup(props.book).plays).toEqual({ 'in:*': 'default', 'in:KeyStep 37': 'none' });
   });
@@ -483,7 +625,7 @@ describe('PatchMatrix', () => {
     const { props } = matrix(home());
     jack('Clock', 'Minilogue xd').click();
     flushSync();
-    expect([activeSetup(props.book).clock, rowCells('Clock')]).toEqual([['o2'], ['·', 'CLK', '·']]);
+    expect([activeSetup(props.book).clock, rowCells('Clock')]).toEqual([['o2'], ['·', 'CLK']]);
     jack('Clock', 'Minilogue xd').click();
     flushSync();
     expect(activeSetup(props.book).clock).toEqual([]);
@@ -496,22 +638,58 @@ describe('PatchMatrix', () => {
     expect(all('tbody th .label').some((l) => l.textContent === 'Seat 5')).toBe(true);
   });
 
-  it('adds an output plugged in that the setup lacks, selects it, and an output’s head selects it', () => {
+  it('lists the devices plugged in that the setup has no output for, each a chip that adds it; an output’s head selects it for a frontend that takes it', () => {
     const mf = { id: 'out-3', name: 'MicroFreak' };
     const { props, calls } = matrix(home(), { outputs: [circuit, minilogue, mf] });
-    click('+ Output');
+    expect(all('.tray .dev').map((b) => b.textContent)).toEqual(['+ MicroFreak']);
+    click('+ MicroFreak');
     expect(activeSetup(props.book).outputs.map((o) => o.name)).toEqual(['Circuit Tracks', 'Minilogue xd', 'MicroFreak']);
     expect(calls.select).toHaveBeenLastCalledWith('o3');
-    expect((all('button').find((b) => b.textContent === '+ Output') as HTMLButtonElement).disabled).toBe(true);
-    (one('thead .col') as HTMLButtonElement).click();
+    expect(one('.tray')).toBeNull();
+    head('Circuit Tracks').click();
     expect(calls.select).toHaveBeenLastCalledWith('o1');
+    expect(one('[role=dialog]')).toBeNull();
+  });
+
+  it('takes an output with nothing routed to it out at once, back among the devices to add; one with routes is asked about', () => {
+    const mf = { id: 'out-3', name: 'MicroFreak' };
+    const { props } = matrix(addOutput(home(), mf).book, { outputs: [circuit, minilogue, mf] });
+    one<HTMLButtonElement>('[aria-label^="Remove OUT 3,"]').click();
+    flushSync();
+    expect(one('[role=group][aria-label^="Remove"]')).toBeNull();
+    expect(activeSetup(props.book).outputs.map((o) => o.name)).toEqual(['Circuit Tracks', 'Minilogue xd']);
+    expect(all('.tray .dev').map((b) => b.textContent)).toEqual(['+ MicroFreak']);
+    one<HTMLButtonElement>('[aria-label^="Remove OUT 2,"]').click();
+    flushSync();
+    expect(one('[role=group][aria-label^="Remove"]').getAttribute('aria-label')).toBe('Remove OUT 2?');
+  });
+
+  it('draws no column for a slot with no device and no routes, says so, and fills it with the first device added; two ports of one name are told apart', () => {
+    const twins = [
+      { id: 'a', name: 'USB MIDI' },
+      { id: 'b', name: 'USB MIDI' },
+    ];
+    const { props } = matrix(newBook(), { outputs: twins });
+    expect(all('thead .col')).toEqual([]);
+    expect(one('.nothing').textContent).toContain('No output in this setup yet: add a device plugged in, above.');
+    expect(all('.tray .dev').map((b) => b.textContent)).toEqual(['+ USB MIDI (1)', '+ USB MIDI (2)']);
+    click('+ USB MIDI (2)');
+    expect(activeSetup(props.book).outputs).toEqual([{ key: 'o1', id: 'b', name: 'USB MIDI' }]);
+    expect(all('thead .slot').map((n) => n.textContent)).toEqual(['OUT 1']);
+    // (the other port of that name is still to add: one port serves one output)
+    expect(all('.tray .dev').map((b) => b.textContent)).toEqual(['+ USB MIDI (1)']);
+    expect(one('.nothing')).toBeNull();
+    props.outputs = [];
+    props.book = newBook();
+    flushSync();
+    expect(one('.nothing').textContent).toContain('no MIDI device plugged in');
   });
 
   it('locked (a piece routed by its cards): its rows shown, not pressed, no output to add; the inputs and the clock still the setup’s (yggi/webmidi#22)', () => {
     const { props } = matrix(home(), { locked: true });
     expect(rowCells('&lead')).toEqual(['·', '1']);
     expect([jack('&lead', 'Minilogue xd').tagName, jack('Kit', 'Circuit Tracks').tagName]).toEqual(['SPAN', 'SPAN']);
-    expect(all('button').some((b) => b.textContent === '+ Output')).toBe(false);
+    expect(one('.tray')).toBeNull();
     jack('KeyStep 37', 'Minilogue xd').click();
     flushSync();
     click('= As played');
