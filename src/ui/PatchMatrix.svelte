@@ -3,7 +3,7 @@
    * The patch (docs/proposals/patchbay.md, `PatchMatrix`): the frontend's rows and the inputs down, the setup's outputs
    * across, each crossing a jack (empty, or a chip in its channel's hue). A jack opens the channel picker; an input's
    * row has its Plays choice (decision 003: not heard, the default, or one of the frontend's rows), and a preset fills
-   * in the inputs with no choice; empty rows (seats no part sits in) wait behind a button; the first row is the clock,
+   * in the inputs with no choice; a panel's row has the same choice, not heard by default (decision 007, #71); empty rows (seats no part sits in) wait behind a button; the first row is the clock,
    * the outputs the setup sends it to, the same in every context.
    *
    * Over the matrix, the devices plugged in that the setup has no output for, each a chip that adds it; an output's ×
@@ -163,6 +163,8 @@
       ...(i === 0 ? { group: true } : {}),
     })),
   );
+  /** A row with a Plays choice of its own: an input's, and a panel's. */
+  const hasPlays = (r: MatrixRow) => r.kind === 'input' || r.kind === 'panel';
   /** A row routed by the setup whatever the frontend routes: an input's, a panel's. */
   const free = (r: MatrixRow) => r.kind === 'input' || r.kind === 'panel';
   const empties = $derived(rows.filter((r) => r.kind === 'empty').length);
@@ -193,8 +195,9 @@
   const playable = $derived(rows.filter((r) => r.playable ?? (r.kind === 'voice' || r.kind === 'kit')));
   /** Inputs plugged in with no choice of their own, which a preset would fill in. */
   const unassigned = $derived(inputs.filter((p) => !Object.hasOwn(setup.plays, inputRow(p))));
-  /** An input row's Plays value: its own choice (a row as the row it finds here), else '' (as every input's), else none. */
+  /** An input row's Plays value: its own choice (a row as the row it finds here), else '' (as every input's), else none; a panel's, its own, else none. */
   function playsValue(row: string): string {
+    if (isPanelKey(row) && !Object.hasOwn(setup.plays, row)) return 'none';
     if (row !== ANY_INPUT && !Object.hasOwn(setup.plays, row)) return Object.hasOwn(setup.plays, ANY_INPUT) ? '' : 'none';
     const played = playsOf(book, row, playable);
     return played === null ? 'none' : played;
@@ -433,10 +436,10 @@
                     >{row.label}</span
                   ></span
                 >
-                {#if row.sub || (row.kind === 'input' && heardBy)}
+                {#if row.sub || (hasPlays(row) && heardBy)}
                   <span class="tags">
                     {#if row.sub}<span class="sub">{row.sub}</span>{/if}
-                    {#if row.kind === 'input' && heardBy}
+                    {#if hasPlays(row) && heardBy}
                       {@const value = playsValue(row.id)}
                       <select
                         class="plays"
@@ -446,7 +449,9 @@
                         onchange={(e) => choosePlays(row.id, e.currentTarget.value)}
                       >
                         <!-- (short, as a closed select shows them in a narrow drawer, #48: what it is says its label) -->
-                        {#if row.id !== ANY_INPUT && Object.hasOwn(setup.plays, ANY_INPUT)}<option value="" title="As every input: {everyInput}">All: {everyInput}</option>{/if}
+                        {#if row.kind === 'input' && row.id !== ANY_INPUT && Object.hasOwn(setup.plays, ANY_INPUT)}<option value="" title="As every input: {everyInput}"
+                            >All: {everyInput}</option
+                          >{/if}
                         <option value="none">Not heard</option>
                         <option value="default" title="Plays the default">Default</option>
                         {#each playable as r (r.id)}<option value={r.id} title="Plays {r.label}">{r.label}</option>{/each}
@@ -460,7 +465,7 @@
               {@const value = crossing(row.id, o.key)}
               <td class:here={isBuiltIn(o)}>
                 {#if isBuiltIn(o)}
-                  {#if row.kind === 'input' && !builtIn?.direct}
+                  {#if (row.kind === 'input' || (row.kind === 'panel' && heardBy)) && !builtIn?.direct}
                     <span class="via" title="An input plays here through the row it plays">{viaText(row.id)}</span>
                   {:else if audible(row) || (builtIn?.direct && free(row))}
                     {#if builtIn?.rows !== false}

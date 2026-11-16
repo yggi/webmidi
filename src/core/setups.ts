@@ -47,7 +47,7 @@ export const AS_PLAYED = 0;
 export type Routes = Readonly<Record<string, Readonly<Record<string, Crossing>>>>;
 
 /**
- * What an input plays (yggi/webmidi#43, decision 003): `'none'`, not heard at all; `'default'`, heard, playing what the
+ * What an input or a panel plays (yggi/webmidi#43, decision 003; #71): `'none'`, not heard at all; `'default'`, heard, playing what the
  * frontend plays by default (the open sheet, the Muse's lead); or one of the frontend's rows, kept by its id and by its
  * role (`'lead'`, `'drums'`), so a row a frontend doesn't have falls to its row of that role, else to the default.
  */
@@ -71,7 +71,9 @@ export interface Setup {
   /**
    * What each input plays, by its row (`in:<name>`): one mechanism for whether it is heard and what it drives, the same
    * in every context, as the clock is. `ANY_INPUT`'s is every input's without one of its own; an input with neither is
-   * not heard. Where an input's messages are sent is its row's crossings, apart from this.
+   * not heard. Where an input's messages are sent is its row's crossings, apart from this. A panel's row
+   * (`panel:<id>`, #71) takes a choice too, by default `'none'` and never `ANY_INPUT`'s: a panel is heard by no
+   * frontend row unless it says so.
    */
   readonly plays: Readonly<Record<string, PlaysChoice>>;
   /**
@@ -230,11 +232,15 @@ function playsChoice(v: unknown): PlaysChoice | null {
   return typeof v.role === 'string' && v.role ? { row: v.row, role: v.role } : { row: v.row };
 }
 
-/** What each input plays, kept by input row (`in:…`), junk dropped; built by fromEntries, so `__proto__` is a key. */
+/**
+ * What each input plays, kept by input row (`in:…`), and what each panel plays, by its row (`panel:…`, decision 007's
+ * amendment), junk dropped; built by fromEntries, so `__proto__` is a key. A reader from before panels played drops the
+ * panel rows and keeps the rest, which is why the file's version stays 2.
+ */
 const playsRead = (v: Record<string, unknown>): Record<string, PlaysChoice> =>
   Object.fromEntries(
     Object.entries(v).flatMap(([row, c]) => {
-      const choice = row.startsWith('in:') ? playsChoice(c) : null;
+      const choice = row.startsWith('in:') || isPanelKey(row) ? playsChoice(c) : null;
       return choice ? [[row, choice] as const] : [];
     }),
   );
@@ -501,7 +507,8 @@ export function withPanelActive(book: SetupBook, id: string, on: boolean): Setup
     const routes = Object.fromEntries(Object.entries(stripped(s.routes, key)).map(([c, r]) => [c, Object.fromEntries(Object.entries(r).filter(([row]) => row !== key))]));
     const { panels: _panels, ...rest } = s;
     const left = panelsOf(s).filter((p) => p !== id);
-    return { ...rest, ...(left.length ? { panels: left } : {}), routes };
+    const { [key]: _plays, ...plays } = s.plays;
+    return { ...rest, ...(left.length ? { panels: left } : {}), plays, routes };
   });
 }
 
@@ -509,8 +516,9 @@ export function withPanelActive(book: SetupBook, id: string, on: boolean): Setup
 export const sendsClock = (book: SetupBook, key: string): boolean => activeSetup(book).clock.includes(key);
 
 /**
- * What an input plays, by its row (`inputRow(port)`, or `ANY_INPUT` for every input's), in the setup in use: a choice,
- * or undefined to drop its own and follow `ANY_INPUT`'s. A change to a named setup, as any.
+ * What an input plays, by its row (`inputRow(port)`, or `ANY_INPUT` for every input's), or a panel, by its row
+ * (`panelKey(id)`), in the setup in use: a choice, or undefined to drop its own and follow `ANY_INPUT`'s (a panel with
+ * none is not heard). A change to a named setup, as any.
  */
 export function withPlays(book: SetupBook, input: string, choice: PlaysChoice | undefined): SetupBook {
   return withActive(book, (s) => {
