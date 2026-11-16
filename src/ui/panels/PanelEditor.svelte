@@ -22,6 +22,7 @@
     newControl,
     newGroup,
     nodeAt,
+    numberProblem,
     ofKind,
     readPanel,
     removeNode,
@@ -34,6 +35,7 @@
     type Group,
     type NodePath,
     type Num,
+    type NumberField,
     type Panel,
     type PanelNode,
   } from '../../core/panels/index';
@@ -111,6 +113,15 @@
       return false;
     }
     return field === 'id' ? control('id', t) !== false : group('group', t) !== false;
+  };
+  /** A number typed into a plain field, read strictly (`numberProblem`): refused in words beside the field, or given to `take` as written. */
+  const strict = (field: NumberField, wanted: string, take: (t: string) => boolean): boolean => {
+    const problem = selected ? numberProblem(field, wanted) : undefined;
+    if (selected && problem) {
+      note = { at: selected, message: problem };
+      return false;
+    }
+    return take(wanted.trim());
   };
   function undo() {
     const back = past.at(-1);
@@ -286,12 +297,12 @@
       {@render field('Label', c.label, (t) => control('label', t), 'Text; {…} holds an expression')}
       {@render field('Name', c.id, (t) => named('id', t), 'In its key, among its siblings', true)}
       {#if c.type !== 'label' && c.type !== 'keyboard' && c.type !== 'pads'}
-        {@render field('Starts at', c.value, (t) => control('value', t === '' ? undefined : Math.max(0, Math.min(1, Number(t) || 0))), '0 to 1', true)}
+        {@render field('Starts at', c.value, (t) => strict('start', t, (v) => control('value', v === '' ? undefined : Number(v))), '0 to 1', true)}
       {/if}
       {#if c.type === 'keyboard'}
         <div class="pair">
-          {@render field('Lowest note', c.low, (t) => control('low', t === '' ? undefined : Math.round(Number(t))), '', true)}
-          {@render field('Highest note', c.high, (t) => control('high', t === '' ? undefined : Math.round(Number(t))), '', true)}
+          {@render field('Lowest note', c.low, (t) => strict('note', t, (v) => control('low', v === '' ? undefined : Number(v))), '', true)}
+          {@render field('Highest note', c.high, (t) => strict('note', t, (v) => control('high', v === '' ? undefined : Number(v))), '', true)}
         </div>
       {/if}
       {#if c.type === 'pads'}
@@ -299,20 +310,28 @@
           'Notes',
           c.notes?.join(', '),
           (t) =>
-            control(
-              'notes',
-              t
-                .split(/[\s,]+/)
-                .filter(Boolean)
-                .map(Number),
+            strict('notes', t, (v) =>
+              control(
+                'notes',
+                v
+                  .split(/[\s,]+/)
+                  .filter(Boolean)
+                  .map(Number),
+              ),
             ),
           'One for each pad',
           true,
         )}
       {/if}
       <div class="pair">
-        {@render field('Spans columns', c.cell?.columns, (t) => control('cell', set(c.cell ?? {}, 'columns', t === '' ? undefined : Math.round(Number(t)))), '', true)}
-        {@render field('Spans rows', c.cell?.rows, (t) => control('cell', set(c.cell ?? {}, 'rows', t === '' ? undefined : Math.round(Number(t)))), '', true)}
+        {@render field(
+          'Spans columns',
+          c.cell?.columns,
+          (t) => strict('span', t, (v) => control('cell', set(c.cell ?? {}, 'columns', v === '' ? undefined : Number(v)))),
+          '',
+          true,
+        )}
+        {@render field('Spans rows', c.cell?.rows, (t) => strict('span', t, (v) => control('cell', set(c.cell ?? {}, 'rows', v === '' ? undefined : Number(v)))), '', true)}
       </div>
 
       {#if c.type !== 'label' && c.type !== 'keyboard' && c.type !== 'pads'}

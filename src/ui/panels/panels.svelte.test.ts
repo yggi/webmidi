@@ -419,4 +419,54 @@ describe('PanelEditor', () => {
     press(one('[aria-label="Edit Bend"]'));
     expect(all('.note').length).toBe(0);
   });
+
+  describe('a plain number field', () => {
+    const input = (label: string) =>
+      all('.inspector label.field')
+        .find((l) => l.querySelector('span')?.firstChild?.textContent === label)!
+        .querySelector('input')!;
+    const find = (panel: Panel, id: string) => {
+      const walk = (children: readonly { id?: string; children?: unknown }[]): Record<string, unknown> | undefined => {
+        for (const n of children) {
+          if (n.id === id) return n as Record<string, unknown>;
+          const hit = n.children ? walk(n.children as never) : undefined;
+          if (hit) return hit;
+        }
+      };
+      return walk(panel.children as never)!;
+    };
+    /** A text refused: the panel is the one it was, the field is back, and the note says the range; a text taken follows. */
+    function refuses(id: string, label: string, bad: string[], note: RegExp, held: string, good: string, kept: (c: Record<string, unknown>) => unknown, wanted: unknown) {
+      const props = edit(EXAMPLE_PLAY);
+      press(one(`[aria-label="Edit ${id === 'keys' ? 'Keys' : id === 'pads' ? 'Drums' : 'Mod'}"]`));
+      const before = props.panel;
+      for (const t of bad) {
+        type(input(label), t);
+        expect(props.panel, `${label} ${t}`).toBe(before);
+        expect(input(label).value, `${label} ${t}`).toBe(held);
+        expect(one('.note').textContent).toMatch(note);
+      }
+      expect((button('Undo') as HTMLButtonElement).disabled).toBe(true);
+      type(input(label), good);
+      expect(all('.note').length).toBe(0);
+      expect(kept(find(props.panel, id))).toEqual(wanted);
+    }
+    it('Starts at: a word or a number over 1 is not taken (it was 0, or held to 1)', () => {
+      refuses('mod', 'Starts at', ['abc', '7'], /0 to 1/, '', '0.25', (c) => c.value, 0.25);
+    });
+    it('Pad notes: a word among the notes is not taken (four pads stay four)', () => {
+      refuses('pads', 'Notes', ['36, abc, 40', '36, 200'], /0 to 127/, '36, 38, 42, 46', '40 41', (c) => c.notes, [40, 41]);
+    });
+    it('Lowest and highest note: a word or a number over 127 is not taken', () => {
+      refuses('keys', 'Lowest note', ['abc', '128'], /0 to 127/, '48', '40', (c) => c.low, 40);
+      document.body.innerHTML = '';
+      refuses('keys', 'Highest note', ['abc', '128'], /0 to 127/, '72', '80', (c) => c.high, 80);
+    });
+    it('Spans columns: a word or 0 or over the grid’s most is not taken', () => {
+      refuses('mod', 'Spans columns', ['abc', '0', '65'], /1 to 64/, '', '2', (c) => (c.cell as { columns?: number } | undefined)?.columns, 2);
+    });
+    it('Spans rows: a word or 0 or over the grid’s most is not taken', () => {
+      refuses('mod', 'Spans rows', ['abc', '0', '65'], /1 to 64/, '', '3', (c) => (c.cell as { rows?: number } | undefined)?.rows, 3);
+    });
+  });
 });

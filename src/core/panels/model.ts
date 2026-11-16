@@ -134,7 +134,7 @@ export const MAX_DEPTH = 16;
 /** The longest name, id or label, in characters. */
 const MAX_TEXT = 64;
 /** The most columns a grid has, and the furthest cell. */
-const MAX_GRID = 64;
+export const MAX_GRID = 64;
 
 // ---- reading ----
 
