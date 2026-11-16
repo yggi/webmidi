@@ -32,8 +32,8 @@ export declare function panelForwardsOf(book: SetupBook, context: string, row: s
 export declare function forwardsOfInput(book: SetupBook, context: string, input: PortOption, data: ArrayLike<number>): Forward[];
 /**
  * The messages a raw message from an input sends where the row it plays is sent (yggi/webmidi#29, decision 003): Cell
- * studio's keys thru, the keys heard on the voice they play. The row is what `playsOf` says among the frontend's `rows`;
+ * studio's keys thru, the keys heard on the voice they play; `input` may be a panel's row (`panelKey(id)`, #71). The row is what `playsOf` says among the frontend's `rows`;
  * playing the default, it is `defaultRow`, the frontend's (the open sheet's voice), or nothing without one; not heard,
  * nothing. Each message is re-channelled by that row's crossings, as `forwardsOf` does.
  */
-export declare function forwardsAsPlayed(book: SetupBook, context: string, input: PortOption, rows: readonly PlayableRow[], data: ArrayLike<number>, defaultRow?: string): Forward[];
+export declare function forwardsAsPlayed(book: SetupBook, context: string, input: PortOption | string, rows: readonly PlayableRow[], data: ArrayLike<number>, defaultRow?: string): Forward[];

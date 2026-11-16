@@ -728,6 +728,43 @@ describe('PatchMatrix', () => {
     expect([panelsOf(activeSetup(props.book)), crossingOf(props.book, 'piece:a', inputRow(keystep), panelKey('mixer'))]).toEqual([[], undefined]);
   });
 
+  it('a panel’s row has the Plays choice an input’s has, calling back the same, and none of "as every input" (yggi/webmidi#71)', () => {
+    const book = withPanelActive(withBuiltIn(home(), true), 'mixer', true);
+    const { props } = matrix(book, {
+      rows: ROWS.map((r) => (r.id === 'lead' ? { ...r, role: 'lead' } : r)),
+      builtIn: { label: 'Synth' },
+      panels: [{ id: 'mixer', name: 'Mixer' }],
+    });
+    const selects = (label: string) =>
+      all('tbody tr')
+        .find((r) => r.querySelector('th')?.textContent?.includes(label))!
+        .querySelector('select.plays') as HTMLSelectElement;
+    const panel = () => selects('Mixer');
+    const input = () => selects('KeyStep 37');
+    const options = (s: HTMLSelectElement) => [...s.options].map((o) => o.textContent);
+    expect([panel().value, options(panel())]).toEqual([input().value, options(input())]);
+    expect(panel().value).toBe('none');
+    for (const [value, expected] of [
+      ['lead', { row: 'lead', role: 'lead' }],
+      ['default', 'default'],
+      ['none', 'none'],
+    ] as const) {
+      change(panel(), value);
+      change(input(), value);
+      expect([value, activeSetup(props.book).plays['panel:mixer']]).toEqual([value, expected]);
+      expect(activeSetup(props.book).plays['panel:mixer']).toEqual(activeSetup(props.book).plays['in:KeyStep 37']);
+    }
+    // what every input plays is not a panel's: no option for it, and it stays not heard
+    props.book = withPlays(props.book, 'in:*', 'default');
+    flushSync();
+    expect(options(panel())).toEqual(['Not heard', 'Default', '&lead', '&pad', 'Kit']);
+    expect(panel().value).toBe('none');
+    // the built-in's column says through which row the panel plays, as an input's does
+    change(panel(), 'lead');
+    flushSync();
+    expect(rowCells('Mixer')[0]).toBe('as &lead');
+  });
+
   it('crosses an input’s and a panel’s row with a built-in that plays MIDI itself, on or off (`direct`: the standalone page’s synth)', () => {
     const book = withPanelActive(withBuiltIn(home(), true), 'mixer', true);
     const { props } = matrix(book, { builtIn: { label: 'Synth', direct: true }, panels: [{ id: 'mixer', name: 'Mixer' }] });

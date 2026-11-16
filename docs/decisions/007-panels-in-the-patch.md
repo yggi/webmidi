@@ -18,5 +18,16 @@ Decision 005 made a panel a virtual device and left open how the book says so. T
 ## Consequences
 
 - The standalone page (`site/`) is the first to wire it: inputs and panels down, outputs and panels across.
-- A built-in that plays MIDI itself (the standalone page's synth) is crossed directly by an input's and a panel's row, on or off (`PatchMatrix`'s `builtIn.direct`, added 2026-11-15): the page plays such a row's messages on its own sound. Not yet: what a panel plays among a frontend's rows (decision 003's Plays), so in a frontend whose built-in plays its voices a panel is not heard on it.
+- A built-in that plays MIDI itself (the standalone page's synth) is crossed directly by an input's and a panel's row, on or off (`PatchMatrix`'s `builtIn.direct`, added 2026-11-15): the page plays such a row's messages on its own sound. What a panel plays among a frontend's rows is the amendment below.
 - Two panels may send to each other; neither echoes what it receives, so nothing loops.
+
+## Amendment, 2026-11-16: a panel's row takes a Plays choice ([#71](https://github.com/yggi/webmidi/issues/71))
+
+Cell studio (yggi/cell-studio#665) and Jambot (yggi/jambot#699) shipped panels without it: a knob or a key on a panel could not play their voices, since only an input's row had decision 003's Plays.
+
+- **`Setup.plays` takes a panel's row key** (`panel:<id>`) beside an input's name, with the same three forms (`'none'`, `'default'`, a row kept by id and role). `choiceOf`, `playsOf`, `withPlays` and the matrix's Plays choice read it as they read an input's.
+- **A panel is by default `'none'`**, and it does not follow `ANY_INPUT`'s choice: what every input plays is the inputs', and a setup that doesn't ask changes nothing. No preset fills a panel in (a preset assigns by an input's kind). Taking a panel out of the setup takes its choice with its routes.
+- **The rule and its limit: what a panel's messages play is what the same bytes from an input play, nothing more.** One function, `playedBy`, answers for both; `panelPlays(book, id, rows, data)` is the frontend's one call per message a `PanelRuntime` sends. Only channel voice messages play (a `note` or a `cc` binding, and the other six kinds' messages, as an input's), and a message a panel is *sent* (feedback, `panelForwardsOf`) is played by no one: it only moves controls.
+- **Where it goes after playing is the row's crossings**, as for an input (`forwardsAsPlayed` takes a panel's row too).
+- **No version bump.** The book stays version 1 and a setup's file version 2: a reader from before keeps only `in:` rows of `plays` and drops a panel's, keeping every other field, which is the forward reading decision 003 asks for. The loss is silent in a reader that cannot know it; a reader of now keeps it.
+- **The standalone page is as it was**: its synth plays panel rows directly (`builtIn.direct`), so it shows no Plays.

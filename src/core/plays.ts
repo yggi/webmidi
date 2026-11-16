@@ -3,7 +3,7 @@
 // know: a choice keeps its row and its role, so a setup moves between pieces and frontends.
 
 import type { PortOption } from './port';
-import { activeSetup, ANY_INPUT, inputRow, type PlaysChoice, type Setup, type SetupBook } from './setups';
+import { activeSetup, ANY_INPUT, inputRow, isPanelKey, panelKey, type PlaysChoice, type Setup, type SetupBook } from './setups';
 
 /** A row an input can play, as the frontend has it: its id and, where it has one, its role (`'lead'`, `'drums'`). */
 export interface PlayableRow {
@@ -14,10 +14,15 @@ export interface PlayableRow {
 /** An input's row: as given, or a port's (`in:<name>`). */
 const rowOf = (input: PortOption | string): string => (typeof input === 'string' ? input : inputRow(input));
 
-/** The choice that holds for an input in a setup: its own, else every input's (`ANY_INPUT`), else not heard. */
+/**
+ * The choice that holds for an input in a setup: its own, else every input's (`ANY_INPUT`), else not heard. A panel's
+ * row (`panelKey(id)`, yggi/webmidi#71) is the same but for the middle: its own, else not heard, since what every
+ * input plays is not a panel's to follow.
+ */
 export function choiceOf(setup: Setup, input: PortOption | string): PlaysChoice {
   const row = rowOf(input);
   if (Object.hasOwn(setup.plays, row)) return setup.plays[row]!;
+  if (isPanelKey(row)) return 'none';
   return Object.hasOwn(setup.plays, ANY_INPUT) ? setup.plays[ANY_INPUT]! : 'none';
 }
 
@@ -36,6 +41,32 @@ export function playsOf(book: SetupBook, input: PortOption | string, rows: reado
   return (choice.role !== undefined && rows.find((r) => r.role === choice.role)?.id) || 'default';
 }
 
+/** A message a source's row plays: the frontend's row it plays (or `'default'`), and the bytes, as they came. */
+export interface PlayedMessage {
+  readonly plays: string | 'default';
+  readonly data: readonly number[];
+}
+
+/**
+ * What a raw message from an input, or from a panel's row (`panelKey(id)`), plays among the frontend's `rows`, or null:
+ * not heard, or not a channel voice message (status 0x80–0xEF: the clock, SysEx and the rest are not notes, as
+ * `forwardsOf` forwards none). One rule for both, so a panel plays what an input with the same choice plays.
+ */
+export function playedBy(book: SetupBook, source: PortOption | string, rows: readonly PlayableRow[], data: ArrayLike<number>): PlayedMessage | null {
+  const status = data[0] ?? 0;
+  if (status < 0x80 || status >= 0xf0) return null;
+  const plays = playsOf(book, source, rows);
+  return plays === null ? null : { plays, data: Array.from(data) };
+}
+
+/**
+ * What a message a panel sends plays among the frontend's `rows` (yggi/webmidi#71, decision 007): for a frontend's
+ * adapter, one call per message the panel's runtime hands out (`PanelForward.panel` is the id). A panel's `note` and
+ * `cc` bindings play what an input's do; a message a panel is sent (feedback) is not here, nothing plays it.
+ */
+export const panelPlays = (book: SetupBook, panel: string, rows: readonly PlayableRow[], data: ArrayLike<number>): PlayedMessage | null =>
+  playedBy(book, panelKey(panel), rows, data);
+
 /** A port to listen to from an input's row, matched by name, or by id where the row kept the id (no name then). */
 const portOfRow = (row: string): PortOption => ({ id: row.slice(3), name: row.slice(3) });
 
@@ -43,7 +74,7 @@ const portOfRow = (row: string): PortOption => ({ id: row.slice(3), name: row.sl
 export function heardOf(setup: Setup): 'all' | readonly PortOption[] {
   if (isHeard(setup, ANY_INPUT)) return 'all';
   return Object.keys(setup.plays)
-    .filter((row) => row !== ANY_INPUT && isHeard(setup, row))
+    .filter((row) => row.startsWith('in:') && row !== ANY_INPUT && isHeard(setup, row))
     .map(portOfRow);
 }
 
