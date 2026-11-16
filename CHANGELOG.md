@@ -10,6 +10,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
+## v0.6.1 — 2026-11-16
+
+The panel editor made honest (found driving it in a browser): it says why a binding isn't read, refuses a change it would keep only in part or a name it would lose, and a field never says what the panel doesn't hold. A fix, with `nameProblem` added beside it in a surface outside what 1.0 promises. Nothing on the wire changes and nothing breaks a frontend's code, so it is a patch.
+
+### Added
+- **`nameProblem(panel, path, wanted)`** (`@yggi/webmidi/panels`): why a name asked for can't be taken, in words, or undefined. Additive.
+
+### Fixed
+- **`PanelEditor` says why a binding isn't read, refuses what it would lose, and never shows a field the panel doesn't hold.** A binding that couldn't be resolved said only "see what couldn't be read, under the panel's name", where the panel gave a count; the reasons (an unknown name, a channel out of 1 to 16, a number out of range) are now listed under the control, once each. A change the reader would keep only in part (an expression over 200 characters, say) is refused with a note, where it was taken and dropped what it couldn't keep; and a field whose change isn't taken is put back to what the panel holds, where it kept the text typed. A Name that isn't one the reader keeps (`a/b c`) or that a sibling, a control or a group, already has is refused in words, where it was taken and the control lost its key (a duplicate left the second out, said only in the panel's list). Nothing on the wire changes.
+
 ## v0.6.0 — 2026-11-16
 
 Silencing in two parts (decision 008), for Jambot's move onto `MidiOut` (yggi/jambot#680): `panic` takes a `tail`, and `sweep` is a panic button that needs no record of what was sent. Additive, and a call without the new option sends what it sent; nothing on the wire changes and nothing breaks a frontend's code, so it is a minor version for the new API.
