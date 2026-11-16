@@ -2,7 +2,7 @@
    * The patch (docs/proposals/patchbay.md, `PatchMatrix`): the frontend's rows and the inputs down, the setup's outputs
    * across, each crossing a jack (empty, or a chip in its channel's hue). A jack opens the channel picker; an input's
    * row has its Plays choice (decision 003: not heard, the default, or one of the frontend's rows), and a preset fills
-   * in the inputs with no choice; empty rows (seats no part sits in) wait behind a button; the first row is the clock,
+   * in the inputs with no choice; a panel's row has the same choice, not heard by default (decision 007, #71); empty rows (seats no part sits in) wait behind a button; the first row is the clock,
    * the outputs the setup sends it to, the same in every context.
    *
    * Over the matrix, the devices plugged in that the setup has no output for, each a chip that adds it; an output's ×
