@@ -42,6 +42,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `ports.ts` every port in full, unplugged ones too (`listPorts`), and `guessPort` by patterns a frontend gives (KO-Multitool keeps the EP-133's)
 - `transport.ts` `SysexTransport`, the shape a device's protocol needs (ep133-sysex's `Transport`, met structurally: `transport.test.ts` holds it to a copy), and `MidiTransport` over an input (by `addEventListener`, so `onmidimessage` stays `MidiAccess`'s) and an output, capturing each message and counting how the browser delivered it
 - `book-store.ts` `localBookStore`: the book in `localStorage`, nothing thrown when storage is refused; `panel-store.ts` `localPanelStore`: the panels' library, likewise
+- `link-probe.ts` `runLinkProbe`: the link measured on an output and an input of a loop with timers (decision 009): 100 probes 20 ms apart or 600 100 ms apart, scheduled and at once in turn, one out at a time, abortable, with progress, a `LinkReport` at the end; it sends only when called, so only when a person presses the button
 - `fixtures.ts` the fake `navigator.requestMIDIAccess` and a listened input, shipped through `@yggi/webmidi/testing`
 
 ## Map of src/ui/

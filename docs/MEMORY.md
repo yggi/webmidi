@@ -18,7 +18,7 @@ Module by module: [architecture.md](architecture.md).
 
 - `src/core/` (`@yggi/webmidi/core`, pure): a message read (`surfaces.ts` for a player, `messages.ts` the wire both ways), the keyboard's layout, drum maps, ports and adopting them (`port.ts`, `routing.ts`), the clock offset (`clock.ts`), bends and MPE, notes out (`out.ts`, `MidiOut`), the clock out (`clock-out.ts`), the link measured and rated (`link.ts`, decision 009), the patchbay's book (`setups.ts` and its neighbours, decisions 002 and 003), SysEx assembled (`sysex.ts`)
 - `src/core/panels/` (`@yggi/webmidi/panels`, pure, decision 005): a control panel kept, its expressions, instantiated, played (`PanelRuntime`), the library
-- `src/web/` (`@yggi/webmidi/web`): Web MIDI asked for and connected (`access.ts`), the ports in full (`ports.ts`), a SysEx transport (`transport.ts`), the book in `localStorage` (`book-store.ts`)
+- `src/web/` (`@yggi/webmidi/web`): Web MIDI asked for and connected (`access.ts`), the ports in full (`ports.ts`), a SysEx transport (`transport.ts`), the book in `localStorage` (`book-store.ts`), the link probed (`link-probe.ts`)
 - `src/ui/` (`@yggi/webmidi/ui`): the patchbay's Svelte components, presentational, coloured by `--wm-*` custom properties
 - `src/ui/panels/` (`@yggi/webmidi/ui/panels`): a panel to play (`PanelView`), its widgets, the on-screen keyboard (`Keys`)
 - `site/`: the standalone patchbay page (Vite; `npm run site`), published by hand (`.github/workflows/site.yml`); not in the package
