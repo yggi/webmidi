@@ -1,3 +1,0 @@
-### Added
-
-- **Every channel message, read and written** (`core/messages.ts`; rung 2 of the control surfaces' proposal, yggi/webmidi#57): `readChannelMessage` and `writeChannelMessage` over a `ChannelMessage` (note off and on, poly and channel aftertouch, control change, program change, pitch bend), named as the hub's `midi-rx` contract names them, a channel 0–15; `controlChange14` for a 14-bit controller; `parameterMessages` for an NRPN or an RPN, and `ParameterReader` to read them out of a stream of control changes. `parseMidiMessage` and `parseSustain` are as they were. Core now meets 12 of `midi-rx`'s 17 vectors (6 before), 5 being the browser's framing and the clock in. Additive: nothing existing changes on the wire, and nothing breaks a frontend's code.
