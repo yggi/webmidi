@@ -10,6 +10,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
+## v0.8.0 — 2026-11-16
+
+The MIDI link measured (decision 009; yggi/webmidi#75, the MIDI side of yggi/jambot#27): a loop through a port timed in the parts one browser clock can tell apart, how stable it is, and a two-part tier (scheduled and played). Additive: nothing existing changes on the wire, and the probes go out only when a person presses *Measure link*. The thresholds of the tiers are a proposal and are marked speculative until hardware numbers replace them. A minor version for the new API.
+
+### Added
+- Core: `LinkMeter`, `linkTier` and `linkReport` (`link.ts`, yggi/webmidi#75, decision 009): the MIDI link measured from the times a frontend gives it, as a loop and the page lag (one way is the loop's half, an assumption), its jitter, drift, loss, order, duplicates and outliers, whether timestamps are honoured, two tiers (scheduled, played; the limits are speculative) and a JSON report. `nearestRank` is `thru.ts`'s percentile, shared.
+- Testing: `fakeLoop`, an output wired to an input with a latency, jitter, drift, loss, reordering, duplicates, a page lag and timestamps honoured or not made, seeded, for testing a link's measurement without hardware.
+- Web: `runLinkProbe`, which sends probes on an output and times them back on an input of a loop (a quick run of 100 probes in about 2 s, a long run of 600 in about 60 s), one out at a time, abortable, with progress, and resolves with a `LinkReport`. It sends only when called.
+- UI: `LinkMeasure`, "Measure link" in an output's `DeviceInspector` and `DeviceDialog` (`onmeasure`, `inputs`, `onlinkreport`) and in `PatchMatrix`'s dialog (`onmeasure(key, run)`): the loop's input and the run chosen, progress and Stop, then the report in words, saying which numbers are measured (loop, page lag, jitter, drift, loss) and which assumed (one way), with the tiers marked speculative. It sends only when its button is pressed, and says so. `site/` wires it.
+
 ## v0.7.0 — 2026-11-16
 
 Panels play a frontend's own voices (decision 007, amended; #71): a panel's row takes the Plays choice an input's does, for Cell studio's and Jambot's panels (yggi/cell-studio#671, yggi/jambot#703). Additive, `'none'` by default: nothing on the wire changes and nothing breaks a frontend's code, so it is a minor version for the new API. A book stays version 1 and a setup's file version 2; a reader from before this keeps the file's other fields and drops a panel's choice.
