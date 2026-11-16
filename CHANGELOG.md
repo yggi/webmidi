@@ -10,6 +10,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
+## v0.7.0 — 2026-11-16
+
+Panels play a frontend's own voices (decision 007, amended; #71): a panel's row takes the Plays choice an input's does, for Cell studio's and Jambot's panels (yggi/cell-studio#671, yggi/jambot#703). Additive, `'none'` by default: nothing on the wire changes and nothing breaks a frontend's code, so it is a minor version for the new API. A book stays version 1 and a setup's file version 2; a reader from before this keeps the file's other fields and drops a panel's choice.
+
+### Added
+- **A panel's row takes a Plays choice, as an input's does** (decision 007, amended; #71): `Setup.plays` keys a panel by `panelKey(id)` beside an input's name, `'none'` by default and never what every input plays, so a setup that doesn't ask changes nothing. `choiceOf`, `playsOf` and `withPlays` read it as they read an input's; `heardOf` and `listenOf` still name inputs only, and no preset fills a panel in. `PatchMatrix` shows the same Plays choice on a panel's row where a frontend gives `heardBy`, and the built-in's column says through which row a panel plays. Taking a panel out of a setup takes its choice with it.
+- **`panelPlays(book, panelId, rows, data)` and `playedBy(book, source, rows, data)`**: what a message plays among the frontend's rows (`{ plays, data }`: a row's id or `'default'`), or null when it is not heard or is no channel voice message; one rule for an input and a panel, so a frontend's adapter is one call per message `PanelRuntime` sends. `forwardsAsPlayed` takes a panel's row too. A message a panel is sent is played by no one.
+
 ## v0.6.1 — 2026-11-16
 
 The panel editor made honest (found driving it in a browser): it says why a binding isn't read, refuses a change it would keep only in part or a name it would lose, and a field never says what the panel doesn't hold. A fix, with `nameProblem` added beside it in a surface outside what 1.0 promises. Nothing on the wire changes and nothing breaks a frontend's code, so it is a patch.
