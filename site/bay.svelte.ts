@@ -17,6 +17,7 @@ import {
   forwardsOfInput,
   inputRow,
   hardwareOutputs,
+  probeMarker,
   loadBook,
   namePorts,
   panelForwardsOf,
@@ -28,6 +29,8 @@ import {
   withPanelActive,
   type BookStore,
   type Forward,
+  type LinkLength,
+  type LinkReport,
   type MidiPort,
   type PortOption,
   type SetupBook,
@@ -48,7 +51,7 @@ import {
   type PanelRuntime,
   type PanelStore,
 } from '../src/core/panels/index';
-import { MidiAccess } from '../src/web/index';
+import { MidiAccess, runLinkProbe } from '../src/web/index';
 
 /** The one context of the page's routes. */
 export const CONTEXT = 'bay';
@@ -87,6 +90,8 @@ export class Bay {
   private midi: MidiAccess | null = null;
   private readonly rack = new PanelRack();
   private ports = new Map<string, MidiPort | null>();
+  /** A link measurement is out: its probes, heard back on an input, are the measurement's and go nowhere. */
+  private probing = false;
 
   constructor(
     private readonly books: BookStore,
@@ -191,10 +196,32 @@ export class Bay {
 
   /** A message from an input, by its port's name. */
   private heard(data: ArrayLike<number>, source: string, seen: number): void {
+    if (this.probing && probeMarker(data) !== null) return;
     if (!this.route({ id: source, name: source }, data, source)) return;
     // (passed on to an output: the time from the port seeing it to the page having sent it)
     this.meter.add(seen, this.now());
     this.thru = this.meter.stats;
+  }
+
+  /**
+   * The link to an output measured (yggi/webmidi#75), by the output's key, over the input of its loop: probes go out only
+   * as this is called, which the page does when the person presses the button. While it runs the probes heard back on
+   * an input aren't passed on.
+   */
+  async measureLink(
+    key: string,
+    run: { readonly input: PortOption; readonly length: LinkLength; readonly signal: AbortSignal; readonly onprogress: (progress: { sent: number; of: number }) => void },
+  ): Promise<LinkReport> {
+    const output = this.ports.get(key);
+    const input = this.midi?.access.inputs.get(run.input.id);
+    if (!output || !input) throw new Error('That port is not plugged in.');
+    const name = activeSetup(this.book).outputs.find((o) => o.key === key)?.name || key;
+    this.probing = true;
+    try {
+      return await runLinkProbe({ output, input, outputName: name, inputName: run.input.name, length: run.length, signal: run.signal, onprogress: run.onprogress });
+    } finally {
+      this.probing = false;
+    }
   }
 
   /** The measurement begun again. */

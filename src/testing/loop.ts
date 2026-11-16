@@ -56,10 +56,10 @@ export function fakeLoop(options: LoopOptions = {}) {
     output: {
       id: 'loop-out',
       name: 'Loop out',
-      sent: [] as number[][],
+      sent: [] as { data: number[]; timestamp?: number }[],
       send(data: readonly number[], timestamp?: number): void {
         const now = performance.now();
-        loop.output.sent.push([...data]);
+        loop.output.sent.push({ data: [...data], timestamp });
         if (data[0] === 0xf0 && !passesSysex) return;
         const left = honoursTimestamps && timestamp !== undefined ? Math.max(timestamp, now) : now;
         // the same draws for each message, whatever it does, so one option doesn't shift another's
@@ -72,6 +72,7 @@ export function fakeLoop(options: LoopOptions = {}) {
               loop.arrivals++;
               const event = { data: new Uint8Array(data), timeStamp: at };
               listeners.forEach((l) => l(event));
+              loop.input.onmidimessage?.(event);
             },
             Math.max(0, at + pageLag - now),
           );
@@ -83,6 +84,8 @@ export function fakeLoop(options: LoopOptions = {}) {
     input: {
       id: 'loop-in',
       name: 'Loop in',
+      /** As a `MIDIInput`'s: set by whoever listens that way, and called with each message beside the listeners added. */
+      onmidimessage: null as Listener | null,
       addEventListener: (_type: 'midimessage', listener: Listener) => void listeners.add(listener),
       removeEventListener: (_type: 'midimessage', listener: Listener) => void listeners.delete(listener),
     },

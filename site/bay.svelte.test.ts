@@ -2,9 +2,10 @@
 // The standalone page end to end on the fake Web MIDI (`@yggi/webmidi/testing`): connect, patch, play a panel, hear an
 // input, and the page drawn over it.
 import { flushSync, mount, unmount } from 'svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   activeSetup,
+  addOutput,
   AS_PLAYED,
   BUILT_IN,
   builtInHears,
@@ -20,7 +21,7 @@ import {
   withPanelActive,
 } from '../src/core/index';
 import { exportPanel, memoryPanelStore, readLibrary } from '../src/core/panels/index';
-import { fakeAccess, fakeInput, fakePort, installMidi, uninstallMidi } from '../src/testing/index';
+import { fakeAccess, fakeInput, fakeLoop, fakePort, installMidi, uninstallMidi } from '../src/testing/index';
 import App from './App.svelte';
 import { Bay, CONTEXT } from './bay.svelte';
 
@@ -46,6 +47,44 @@ async function rig(clock: number[] = []) {
   await bay.connect();
   return { bay, stores, mixerIn, keys, mixerOut, synth, played };
 }
+
+describe('the standalone patchbay, the link (yggi/webmidi#75)', () => {
+  it('measures an output over the input of its loop, and passes none of the probes on from an input crossed to another output', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance', 'Date'] });
+    try {
+      const loop = fakeLoop({ latency: 2, pageLag: 1 });
+      const loopIn = loop.input;
+      const synth = fakePort('out-2', 'Minilogue xd');
+      installMidi(fakeAccess([loopIn], [loop.output, synth]));
+      const bay = new Bay(memoryStore(JSON.parse(JSON.stringify(newBook()))), memoryPanelStore(), null, () => performance.now());
+      await bay.connect();
+      // the loop's input is crossed to the synth: a message heard there is passed on, but not a probe
+      const book = chooseDevice(bay.book, 'o1', { id: loop.output.id, name: loop.output.name });
+      const added = addOutput(book, { id: 'out-2', name: 'Minilogue xd' });
+      bay.keep(withCrossing(added.book, CONTEXT, inputRow({ id: loop.input.id, name: loop.input.name }), added.key, AS_PLAYED));
+      const progress: number[] = [];
+      const run = bay.measureLink('o1', {
+        input: { id: loop.input.id, name: loop.input.name },
+        length: 'quick',
+        signal: new AbortController().signal,
+        onprogress: (p) => progress.push(p.sent),
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      const report = await run;
+      expect(report).toMatchObject({ method: 'loop', n: 100, output: 'Loop out', input: 'Loop in', timestampsHonoured: true });
+      expect(progress.length).toBe(100);
+      expect(synth.sent).toEqual([]);
+      // and after it a message is passed on again
+      loopIn.onmidimessage?.({ data: new Uint8Array([0x90, 60, 100]), timeStamp: 1 });
+      expect(synth.sent.map((m) => m.data)).toEqual([[0x90, 60, 100]]);
+      await expect(bay.measureLink('o1', { input: { id: 'gone', name: 'Gone' }, length: 'quick', signal: new AbortController().signal, onprogress: () => {} })).rejects.toThrow(
+        'not plugged in',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('the standalone patchbay', () => {
   it('says why it isn’t connected where there is no Web MIDI, and starts with two panels to play', async () => {

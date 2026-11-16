@@ -113,6 +113,18 @@ describe('runLinkProbe, a quick run', () => {
   });
 });
 
+describe('runLinkProbe, the input', () => {
+  it('is opened before the first probe, since listening alone does not open a port', async () => {
+    const { log, output, input } = setup();
+    const open = vi.fn(() => {
+      expect(log.sent.length).toBe(0);
+      return Promise.resolve();
+    });
+    await finish(runLinkProbe({ output, input: Object.assign(input, { open }), outputName: 'a', inputName: 'b' }), 5000);
+    expect(open).toHaveBeenCalledOnce();
+  });
+});
+
 describe('runLinkProbe, a long run', () => {
   it('sends 600 probes 100 ms apart, counts the wraps, and measures a made drift', async () => {
     const { log, output, input } = setup({ latency: 2, pageLag: 1, drift: 6 });

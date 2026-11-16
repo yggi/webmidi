@@ -23,3 +23,4 @@
 - A frontend's timing export can carry a `LinkReport`, and a budget can read the MIDI path from it. A shape for the family is a contract in yggi/music-commons, for the owner to ask for.
 - The device's latency is not set from the link.
 - The limits will move when measured; a moved limit is a change to `LINK_LIMITS` and its tests.
+- Left for later, each its own issue: a live tier chip from the passive page lag (yggi/webmidi#77: the page lag is measured on an input, so where the chip sits is open), and the wire time per byte (yggi/webmidi#78, speculative, needs SysEx).

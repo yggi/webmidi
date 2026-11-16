@@ -13,6 +13,8 @@ import type { MidiPort } from '../core/port';
 
 /** An input listened to beside anyone else (a `MIDIInput`), with the time the port saw each message. */
 export interface ProbeInput {
+  /** A `MIDIInput` opens when it is asked to: listening by `addEventListener` doesn't open it by itself. */
+  open?(): Promise<unknown>;
   addEventListener(type: 'midimessage', listener: (event: { readonly data: Uint8Array | null; readonly timeStamp: number }) => void): void;
   removeEventListener(type: 'midimessage', listener: (event: { readonly data: Uint8Array | null; readonly timeStamp: number }) => void): void;
 }
@@ -64,6 +66,7 @@ export async function runLinkProbe(options: LinkProbeOptions): Promise<LinkRepor
 
   input.addEventListener('midimessage', listener);
   try {
+    await input.open?.();
     const start = performance.now();
     for (let i = 0; i < probes; i++) {
       if (signal?.aborted) throw aborted();

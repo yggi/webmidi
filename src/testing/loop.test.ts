@@ -22,7 +22,7 @@ describe('fakeLoop', () => {
     expect(heard).toEqual([]);
     vi.advanceTimersByTime(1);
     expect(heard).toEqual([{ data: [0xb0, 1, 2], timeStamp: 3, handled: 3 }]);
-    expect(loop.output.sent).toEqual([[0xb0, 1, 2]]);
+    expect(loop.output.sent).toEqual([{ data: [0xb0, 1, 2], timestamp: undefined }]);
   });
 
   it('honours a timestamp by leaving at it, or leaves at once when the platform does not', () => {
@@ -94,6 +94,15 @@ describe('fakeLoop', () => {
     vi.advanceTimersByTime(10);
     expect(passes.heard.length).toBe(1);
     expect(stops.heard.map((h) => h.data[0])).toEqual([0xb0]);
+  });
+
+  it('delivers to onmidimessage too, as an input does beside its listeners', () => {
+    const { loop, heard } = listen({ latency: 1 });
+    const direct: number[][] = [];
+    loop.input.onmidimessage = (e) => direct.push([...e.data!]);
+    loop.output.send([7]);
+    vi.advanceTimersByTime(5);
+    expect([direct, heard.length]).toEqual([[[7]], 1]);
   });
 
   it('stops delivering to a listener removed', () => {

@@ -8,10 +8,13 @@
    * under one name are told apart by their place. Presentational: a change is a call back (`onport`, `onprofile`), which the frontend
    * makes with core's `chooseDevice` and `withProfile`.
    */
+  import type { ComponentProps } from 'svelte';
   import { deviceNote, DRUM_PRESETS, presetNameOf } from '../core/drum-presets';
   import { matchPorts, type PortOption } from '../core/port';
   import type { DeviceProfile, SetupOutput } from '../core/setups';
+  import type { LinkReport } from '../core/link';
   import ChannelMeter from './ChannelMeter.svelte';
+  import LinkMeasure from './LinkMeasure.svelte';
   import { clamp } from './channels';
 
   interface Props {
@@ -40,6 +43,15 @@
     ontest?: () => void;
     onpanic?: () => void;
     onremove?: () => void;
+    /**
+     * Measure the link to this output (yggi/webmidi#75): given with `inputs`, the inspector offers "Measure link" (`LinkMeasure`),
+     * which runs it with the input of the loop the person picks; web's `runLinkProbe` does it. Left out, no such block.
+     */
+    onmeasure?: ComponentProps<typeof LinkMeasure>['onmeasure'];
+    /** The inputs plugged in, for the loop. */
+    inputs?: readonly PortOption[];
+    /** A link report made: the frontend may keep it for its timing export. */
+    onlinkreport?: (report: LinkReport) => void;
     /** Forget the device's profile, back to the defaults: offered when the frontend passes it (the book keeps one). */
     onforget?: () => void;
   }
@@ -61,6 +73,9 @@
     onpanic,
     onremove,
     onforget,
+    onmeasure,
+    inputs = [],
+    onlinkreport,
   }: Props = $props();
 
   const none = $derived(output.id === 'none');
@@ -204,6 +219,9 @@
       {#if onremove}<button type="button" class="ghost" onclick={onremove} disabled={!canRemove}>Remove output</button>{/if}
     </div>
   </div>
+  {#if onmeasure && !none}
+    <div class="block"><LinkMeasure outputName={title} {inputs} {onmeasure} onreport={onlinkreport} disabled={!plugged} /></div>
+  {/if}
 </section>
 
 <style>

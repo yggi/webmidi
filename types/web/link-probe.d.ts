@@ -12,6 +12,8 @@ import { type LinkLength, type LinkReport } from '../core/link';
 import type { MidiPort } from '../core/port';
 /** An input listened to beside anyone else (a `MIDIInput`), with the time the port saw each message. */
 export interface ProbeInput {
+    /** A `MIDIInput` opens when it is asked to: listening by `addEventListener` doesn't open it by itself. */
+    open?(): Promise<unknown>;
     addEventListener(type: 'midimessage', listener: (event: {
         readonly data: Uint8Array | null;
         readonly timeStamp: number;

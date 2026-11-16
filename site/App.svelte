@@ -75,6 +75,7 @@
       onpanel={(id) => (bay.shown = id)}
       ontest={(key) => bay.test(key)}
       onpanic={(key) => bay.panic(key)}
+      onmeasure={(key, run) => bay.measureLink(key, run)}
     />
   </section>
 

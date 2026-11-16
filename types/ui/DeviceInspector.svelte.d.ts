@@ -1,5 +1,17 @@
+/**
+   * One output of the setup in use, in full (docs/proposals/patchbay.md, `DeviceInspector`): the port it sends to (one
+   * not plugged in kept and said so), then its device's profile, kept with the device in every setup (decision 002): drum
+   * map, bend range, a channel per note (MPE), latency, and forgetting them. Under them the channels routed here, a test
+   * note, notes off here, and removing the output. Where a kit is routed here and the frontend names its members, each
+   * member's note on this device is set under the drum map (`members`): the matrix shows none of it. Ports plugged in
+   * under one name are told apart by their place. Presentational: a change is a call back (`onport`, `onprofile`), which the frontend
+   * makes with core's `chooseDevice` and `withProfile`.
+   */
+import type { ComponentProps } from 'svelte';
 import { type PortOption } from '../core/port';
 import type { DeviceProfile, SetupOutput } from '../core/setups';
+import type { LinkReport } from '../core/link';
+import LinkMeasure from './LinkMeasure.svelte';
 interface Props {
     output: SetupOutput;
     /** Its place in the setup, from 1. */
@@ -29,6 +41,15 @@ interface Props {
     ontest?: () => void;
     onpanic?: () => void;
     onremove?: () => void;
+    /**
+     * Measure the link to this output (yggi/webmidi#75): given with `inputs`, the inspector offers "Measure link" (`LinkMeasure`),
+     * which runs it with the input of the loop the person picks; web's `runLinkProbe` does it. Left out, no such block.
+     */
+    onmeasure?: ComponentProps<typeof LinkMeasure>['onmeasure'];
+    /** The inputs plugged in, for the loop. */
+    inputs?: readonly PortOption[];
+    /** A link report made: the frontend may keep it for its timing export. */
+    onlinkreport?: (report: LinkReport) => void;
     /** Forget the device's profile, back to the defaults: offered when the frontend passes it (the book keeps one). */
     onforget?: () => void;
 }

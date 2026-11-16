@@ -32,12 +32,17 @@ export declare function fakeLoop(options?: LoopOptions): {
     output: {
         id: string;
         name: string;
-        sent: number[][];
+        sent: {
+            data: number[];
+            timestamp?: number;
+        }[];
         send(data: readonly number[], timestamp?: number): void;
     };
     input: {
         id: string;
         name: string;
+        /** As a `MIDIInput`'s: set by whoever listens that way, and called with each message beside the listeners added. */
+        onmidimessage: Listener | null;
         addEventListener: (_type: "midimessage", listener: Listener) => undefined;
         removeEventListener: (_type: "midimessage", listener: Listener) => undefined;
     };
