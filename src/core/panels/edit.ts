@@ -162,3 +162,23 @@ export function ofKind(binding: Binding, kind: Binding['kind']): Binding {
   const { range: _range, number, ...rest } = binding;
   return { ...rest, kind, ...(numbered ? { number: number ?? 1 } : {}) };
 }
+
+/** A name the reader keeps: a letter or `_`, then letters, digits and `_`, at most 32. Any other is dropped, and with it the key. */
+const NAME = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/;
+
+/**
+ * Why a name asked for, for the control or group at `path`, can't be taken, in words; undefined when it can. It must be
+ * a name the reader keeps, and no sibling's: a control and a group beside each other share one key space, and
+ * instantiating leaves the second of two under one name out. A control may have none (it is then kept by its place), a
+ * group may not.
+ */
+export function nameProblem(panel: Panel, path: NodePath, wanted: string): string | undefined {
+  const node = nodeAt(panel, path);
+  if (!node) return undefined;
+  if (wanted === '') return isGroup(node) ? 'A group needs a name.' : undefined;
+  if (!NAME.test(wanted)) return 'A name starts with a letter or _, then letters, digits and _, up to 32 characters.';
+  const own = path.at.at(-1);
+  const siblings = childrenAt(panel, { ...path, at: path.at.slice(0, -1) }) ?? [];
+  const taken = siblings.find((n, i) => i !== own && (isGroup(n) ? n.group : n.id) === wanted);
+  return taken ? `“${wanted}” is already the name of a ${isGroup(taken) ? 'group' : 'control'} beside it.` : undefined;
+}

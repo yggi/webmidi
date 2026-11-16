@@ -18,6 +18,7 @@
     isGroup,
     MAX_VALUE,
     moveNode,
+    nameProblem,
     newControl,
     newGroup,
     nodeAt,
@@ -52,7 +53,12 @@
   /** How many steps back are kept. */
   const STEPS = 100;
 
+  /** Why the last change asked for wasn't taken, and for which place: said at the top of the inspector until something is taken or another place is chosen. */
+  let note = $state<{ at: NodePath; message: string } | null>(null);
+
   const node = $derived(selected ? nodeAt(panel, selected) : undefined);
+  /** A name refused is said only at the place it was asked for. */
+  const here = $derived(!!note && samePath(note.at, selected));
   const made = $derived(instantiate(panel));
   /** The instances of the control chosen, in the order drawn. */
   const instances = $derived(made.controls.filter((c) => samePath(c.source, selected)));
@@ -68,15 +74,44 @@
     future = [];
   });
 
-  /** A change made: kept as the reader keeps it, the panel of before kept to undo. */
-  function commit(next: Panel, select: NodePath | null = selected) {
+  /** Whether two panels, as plain data, are the same: a field left undefined is no field, and an object's keys have no order. */
+  function same(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (typeof a !== 'object' || typeof b !== 'object' || !a || !b || Array.isArray(a) !== Array.isArray(b)) return false;
+    const [x, y] = [a, b].map((o) => Object.entries(o).filter(([, v]) => v !== undefined));
+    return x.length === y.length && x.every(([k, v]) => same(v, (b as Record<string, unknown>)[k]));
+  }
+
+  /** A change made: kept as the reader keeps it, the panel of before kept to undo. False when nothing was taken (the reader refused it, or it changed nothing). */
+  function commit(next: Panel, select: NodePath | null = selected): boolean {
     const read = readPanel(next);
-    if (!read || read === panel) return;
+    if (!read || read === panel) return false;
+    // (a change the reader would keep only in part, a number too long or a value out of range: refused, not made to look taken)
+    if (!same(read, next)) {
+      if (selected) note = { at: selected, message: 'That can’t be kept as typed (a text or an expression too long, or a number the panel can’t hold), so nothing changed.' };
+      return false;
+    }
     past = [...past, panel].slice(-STEPS);
     future = [];
     selected = select;
+    note = null;
     onchange(read);
+    return true;
   }
+  /** A field whose change wasn't taken is put back to what the panel holds, so a field never says what the panel doesn't. */
+  const settle = (e: Event, taken: unknown, held: string | number | undefined) => {
+    if (taken === false) (e.currentTarget as HTMLInputElement).value = String(held ?? '');
+  };
+  /** A name asked for, the control's or the group's: refused in words beside the field, or set. */
+  const named = (field: 'id' | 'group', wanted: string): boolean => {
+    const t = wanted.trim();
+    const problem = selected ? nameProblem(panel, selected, t) : undefined;
+    if (selected && problem) {
+      note = { at: selected, message: problem };
+      return false;
+    }
+    return field === 'id' ? control('id', t) !== false : group('group', t) !== false;
+  };
   function undo() {
     const back = past.at(-1);
     if (!back) return;
@@ -106,7 +141,7 @@
     return (value === undefined || value === '' ? rest : { ...rest, [field]: value }) as T;
   };
 
-  const change = (to: (n: PanelNode) => PanelNode) => selected && commit(updateNode(panel, selected, to));
+  const change = (to: (n: PanelNode) => PanelNode): boolean => (selected ? commit(updateNode(panel, selected, to)) : false);
   const control = (field: string, value: unknown) => change((n) => (isGroup(n) ? n : set(n, field, value)));
   const group = (field: string, value: unknown) => change((n) => (isGroup(n) ? set(n, field, value) : n));
   const binding = (i: number, to: (b: Binding) => Binding) => change((n) => (isGroup(n) ? n : { ...n, bind: (n.bind ?? []).map((b, j) => (j === i ? to(b) : b)) }));
@@ -133,11 +168,21 @@
   };
   const remove = () => selected && commit(removeNode(panel, selected), null);
 
+  /** Why this control's instances aren't read as written, each reason once (the same one in every instance of a definition), without the instance it came from. */
+  const why = $derived.by(() => {
+    const out = new Set<string>();
+    for (const e of made.errors) {
+      const at = instances.find((c) => e.startsWith(`${c.key}: `));
+      if (at) out.add(e.slice(at.key.length + 2));
+    }
+    return [...out];
+  });
+
   /** What a binding comes to across the instances of the control chosen: "CC 11 … 18, channel 1", or why it isn't there. */
   function resolved(i: number, b: Binding): string {
     const bound = instances.flatMap((c) => c.bindings.filter((x) => x.kind === b.kind && x.axis === (b.axis ?? 'x')).slice(0, 1));
     void i;
-    if (!bound.length) return 'Not resolved: see what couldn’t be read, under the panel’s name.';
+    if (!bound.length) return 'Not resolved: see why, below.';
     const span = (values: number[]) => (values.every((v) => v === values[0]) ? String(values[0]) : `${values[0]} … ${values.at(-1)}`);
     const numbered = b.kind !== 'program' && b.kind !== 'bend' && b.kind !== 'pressure';
     const first = bound[0]!;
@@ -173,12 +218,12 @@
   const numbered = (k: BindingKind) => k !== 'program' && k !== 'bend' && k !== 'pressure';
 </script>
 
-{#snippet field(label: string, value: string | number | undefined, onset: (text: string) => void, hint = '', mono = false)}
+{#snippet field(label: string, value: string | number | undefined, onset: (text: string) => unknown, hint = '', mono = false)}
   <label class="field">
     <span
       >{label}{#if hint}<small>{hint}</small>{/if}</span
     >
-    <input class:mono value={value ?? ''} autocomplete="off" spellcheck="false" onchange={(e) => onset(text(e))} />
+    <input class:mono value={value ?? ''} autocomplete="off" spellcheck="false" onchange={(e) => settle(e, onset(text(e)), value)} />
   </label>
 {/snippet}
 
@@ -192,7 +237,15 @@
         <option value="grid">A grid</option>
       </select>
       {#if columns && columns > 1}
-        <input class="mono short" type="number" min="2" max="64" aria-label="Columns" value={columns} onchange={(e) => onset(Math.max(2, Math.round(Number(text(e))) || 2))} />
+        <input
+          class="mono short"
+          type="number"
+          min="2"
+          max="64"
+          aria-label="Columns"
+          value={columns}
+          onchange={(e) => settle(e, onset(Math.max(2, Math.round(Number(text(e))) || 2)), columns)}
+        />
       {/if}
     </span>
   </label>
@@ -215,10 +268,11 @@
           : 'New things go beside the control chosen.'
         : 'New things go into the panel. Press a control or a group to choose it.'}
     </p>
-    <PanelView {panel} onsend={() => {}} bar={false} {selected} onselect={(source) => (selected = source)} />
+    <PanelView {panel} onsend={() => {}} bar={false} {selected} onselect={(source) => ((selected = source), (note = null))} />
   </div>
 
   <aside class="inspector" aria-label="What is chosen">
+    {#if here && note}<p class="note" role="alert">{note.message}</p>{/if}
     {#if selected && node && !isGroup(node)}
       {@const c = node as Control}
       <p class="eyebrow">Control</p>
@@ -230,7 +284,7 @@
         </select>
       </label>
       {@render field('Label', c.label, (t) => control('label', t), 'Text; {…} holds an expression')}
-      {@render field('Name', c.id, (t) => control('id', t), 'In its key, among its siblings', true)}
+      {@render field('Name', c.id, (t) => named('id', t), 'In its key, among its siblings', true)}
       {#if c.type !== 'label' && c.type !== 'keyboard' && c.type !== 'pads'}
         {@render field('Starts at', c.value, (t) => control('value', t === '' ? undefined : Math.max(0, Math.min(1, Number(t) || 0))), '0 to 1', true)}
       {/if}
@@ -276,7 +330,12 @@
                   placeholder="number"
                   value={b.number ?? ''}
                   spellcheck="false"
-                  onchange={(e) => binding(i, (x) => set(x, 'number', toNum(text(e))))}
+                  onchange={(e) =>
+                    settle(
+                      e,
+                      binding(i, (x) => set(x, 'number', toNum(text(e)))),
+                      b.number,
+                    )}
                 />
               {/if}
               <button
@@ -298,7 +357,12 @@
                 placeholder="0"
                 value={b.range?.[0] ?? ''}
                 spellcheck="false"
-                onchange={(e) => binding(i, (x) => set(x, 'range', range(x, toNum(text(e)), x.range?.[1])))}
+                onchange={(e) =>
+                  settle(
+                    e,
+                    binding(i, (x) => set(x, 'range', range(x, toNum(text(e)), x.range?.[1]))),
+                    b.range?.[0],
+                  )}
               />
               <span class="small">to</span>
               <input
@@ -307,7 +371,12 @@
                 placeholder="max"
                 value={b.range?.[1] ?? ''}
                 spellcheck="false"
-                onchange={(e) => binding(i, (x) => set(x, 'range', range(x, x.range?.[0], toNum(text(e)))))}
+                onchange={(e) =>
+                  settle(
+                    e,
+                    binding(i, (x) => set(x, 'range', range(x, x.range?.[0], toNum(text(e))))),
+                    b.range?.[1],
+                  )}
               />
               <span class="small">ch</span>
               <input
@@ -316,7 +385,12 @@
                 placeholder="—"
                 value={b.channel ?? ''}
                 spellcheck="false"
-                onchange={(e) => binding(i, (x) => set(x, 'channel', toNum(text(e))))}
+                onchange={(e) =>
+                  settle(
+                    e,
+                    binding(i, (x) => set(x, 'channel', toNum(text(e)))),
+                    b.channel,
+                  )}
               />
               {#if c.type === 'xy'}
                 <select aria-label="Which value" value={b.axis ?? 'x'} onchange={(e) => binding(i, (x) => set(x, 'axis', text(e) === 'y' ? 'y' : undefined))}>
@@ -328,12 +402,17 @@
             <p class="comes">{resolved(i, b)}</p>
           </div>
         {/each}
+        {#if why.length}
+          <ul class="why" aria-label="Why it isn’t read">
+            {#each why as reason (reason)}<li>{reason}</li>{/each}
+          </ul>
+        {/if}
         <div class="actions"><button type="button" onclick={() => control('bind', [...(c.bind ?? []), { kind: 'cc', number: 1 }])}>Add a binding</button></div>
       {/if}
     {:else if selected && node && isGroup(node)}
       {@const g = node as Group}
       <p class="eyebrow">Group</p>
-      {@render field('Name', g.group, (t) => t && group('group', t), 'In its children’s keys', true)}
+      {@render field('Name', g.group, (t) => named('group', t), 'In its children’s keys', true)}
       {@render field('Label', g.label, (t) => group('label', t), 'Text; {…} holds an expression')}
       {@render layout(g.columns, (columns) => group('columns', columns))}
       {@render field('Channel', g.channel, (t) => group('channel', toNum(t)), '1 to 16, for everything in it', true)}
@@ -366,7 +445,7 @@
       {/if}
     {:else}
       <p class="eyebrow">Panel</p>
-      {@render field('Name', panel.name, (t) => t.trim() && commit({ ...panel, name: t }))}
+      {@render field('Name', panel.name, (t) => (t.trim() ? commit({ ...panel, name: t }) : false))}
       {@render layout(panel.columns, (columns) => commit(set(panel, 'columns', columns)))}
       {@render field('Channel', panel.channel, (t) => commit(set(panel, 'channel', toNum(t))), '1 to 16, for everything in it', true)}
       <p class="scope">{made.controls.length} {made.controls.length === 1 ? 'control' : 'controls'}{made.errors.length ? `, ${made.errors.length} not read` : ''}.</p>
@@ -457,6 +536,15 @@
     margin: 0;
     color: var(--_muted);
     font-size: 12.5px;
+  }
+  .why,
+  .note {
+    margin: 0;
+    color: var(--_warn);
+    font-size: 12.5px;
+  }
+  .why {
+    padding-left: 18px;
   }
   .scope {
     padding: 7px 9px;

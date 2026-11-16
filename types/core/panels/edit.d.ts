@@ -42,3 +42,10 @@ export declare function newControl(panel: Panel, type: ControlType, siblings: re
 export declare const newGroup: (siblings: readonly PanelNode[]) => Group;
 /** A binding of another kind: its number kept where the new kind has one, its range dropped (each kind has its own). */
 export declare function ofKind(binding: Binding, kind: Binding['kind']): Binding;
+/**
+ * Why a name asked for, for the control or group at `path`, can't be taken, in words; undefined when it can. It must be
+ * a name the reader keeps, and no sibling's: a control and a group beside each other share one key space, and
+ * instantiating leaves the second of two under one name out. A control may have none (it is then kept by its place), a
+ * group may not.
+ */
+export declare function nameProblem(panel: Panel, path: NodePath, wanted: string): string | undefined;

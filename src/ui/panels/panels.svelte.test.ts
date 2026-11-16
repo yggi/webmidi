@@ -368,4 +368,55 @@ describe('PanelEditor', () => {
     flushSync();
     expect((button('Undo') as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('says why a binding isn’t read, under the control, and not only that it isn’t', () => {
+    edit(EXAMPLE_MIXER);
+    press(all('[aria-label="Edit Level"]')[0]);
+    type(one('[aria-label="Number, or an expression"]'), 'chan');
+    expect(one('.comes').textContent).toContain('Not resolved');
+    const why = all('.why li').map((li) => li.textContent);
+    expect(why.length).toBe(1);
+    expect(why[0]).toContain('chan');
+    // a channel out of 1 to 16 is read, held to the one it inherits, and said
+    type(one('[aria-label="Number, or an expression"]'), '1');
+    type(one('[aria-label="Channel"]'), '99');
+    expect(all('.why li').map((li) => li.textContent)).toEqual(['99 is no channel (1 to 16).']);
+    type(one('[aria-label="Channel"]'), '5');
+    expect(all('.why').length).toBe(0);
+  });
+
+  it('puts a field back to what the panel holds when its change isn’t taken', () => {
+    const props = edit(EXAMPLE_MIXER);
+    press(all('[aria-label="Edit Level"]')[0]);
+    const field = one('[aria-label="Number, or an expression"]') as HTMLInputElement;
+    const before = props.panel;
+    type(field, '1+'.repeat(200));
+    expect(props.panel).toBe(before);
+    expect(field.value).toBe('ch');
+    expect(one('.note').textContent).toContain('can’t be kept');
+    expect((button('Undo') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('refuses a name the reader would drop or a sibling has, says why beside the field, and puts the field back', () => {
+    const props = edit(EXAMPLE_PLAY);
+    press(one('[aria-label="Edit Mod"]'));
+    const name = () => all('.inspector label.field input').find((i) => (i as HTMLInputElement).value === 'mod' || (i as HTMLInputElement).value === 'a/b c') as HTMLInputElement;
+    const field = name();
+    const before = props.panel;
+    type(field, 'a/b c');
+    expect(props.panel).toBe(before);
+    expect(field.value).toBe('mod');
+    expect(one('.note').textContent).toMatch(/letter|_/);
+    type(field, 'bend');
+    expect(props.panel).toBe(before);
+    expect(one('.note').textContent).toBe('“bend” is already the name of a control beside it.');
+    expect((button('Undo') as HTMLButtonElement).disabled).toBe(true);
+    // a name taken clears the note, and so does choosing another control
+    type(field, 'wheel_mod');
+    expect(all('.note').length).toBe(0);
+    expect(instantiate(props.panel).controls.some((c) => c.key === 'wheels/wheel_mod')).toBe(true);
+    type(field, 'bend');
+    press(one('[aria-label="Edit Bend"]'));
+    expect(all('.note').length).toBe(0);
+  });
 });
