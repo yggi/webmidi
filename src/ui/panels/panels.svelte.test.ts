@@ -469,4 +469,100 @@ describe('PanelEditor', () => {
       refuses('mod', 'Spans rows', ['abc', '0', '65'], /1 to 64/, '', '3', (c) => (c.cell as { rows?: number } | undefined)?.rows, 3);
     });
   });
+
+  describe('undo, redo and the keyboard', () => {
+    /** A key pressed on an element, with the modifiers; says whether the page's own default was left alone. */
+    const shortcut = (el: Element, k: string, mods: { ctrl?: boolean; meta?: boolean; shift?: boolean } = {}) => {
+      const e = new KeyboardEvent('keydown', { key: k, ctrlKey: !!mods.ctrl, metaKey: !!mods.meta, shiftKey: !!mods.shift, bubbles: true, cancelable: true });
+      el.dispatchEvent(e);
+      flushSync();
+      return e.defaultPrevented;
+    };
+    const kind = () => one('.inspector .eyebrow').textContent;
+    const wheels = (panel: Panel) => (panel.children[1] as unknown as { children: { id: string }[] }).children.map((c) => c.id);
+    const labelField = () => all('.inspector label.field input')[0] as HTMLInputElement;
+
+    it('Undo and Redo keep the control chosen when it is there in the panel they go to', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(one('[aria-label="Edit Mod"]'));
+      type(labelField(), 'Depth');
+      press(button('Undo'));
+      expect(kind()).toBe('Control');
+      expect(labelField().value).toBe('Mod');
+      press(button('Redo'));
+      expect(kind()).toBe('Control');
+      expect(labelField().value).toBe('Depth');
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+    });
+    it('Undo clears the choice when the place is gone from the panel it goes to, and so does Redo', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(button('Knob'));
+      expect(kind()).toBe('Control');
+      press(button('Undo'));
+      expect(kind()).toBe('Panel');
+      // Redo: a place the panel it goes to hasn't (Mod, removed in the step redone)
+      press(one('[aria-label="Edit Mod"]'));
+      press(button('Delete'));
+      press(button('Undo'));
+      press(one('[aria-label="Edit Mod"]'));
+      expect(kind()).toBe('Control');
+      press(button('Redo'));
+      expect(wheels(props.panel)).toEqual(['bend']);
+      expect(kind()).toBe('Panel');
+    });
+    it('Ctrl+Z undoes and Cmd+Z too, Ctrl+Shift+Z and Ctrl+Y redo, with focus on a control', () => {
+      edit(EXAMPLE_PLAY);
+      const first = one('[aria-label="Edit Mod"]');
+      const mod = () => first;
+      press(mod());
+      type(labelField(), 'Depth');
+      expect(shortcut(mod(), 'z', { ctrl: true })).toBe(true);
+      expect(labelField().value).toBe('Mod');
+      expect(shortcut(mod(), 'Z', { ctrl: true, shift: true })).toBe(true);
+      expect(labelField().value).toBe('Depth');
+      shortcut(mod(), 'z', { meta: true });
+      expect(labelField().value).toBe('Mod');
+      shortcut(mod(), 'y', { ctrl: true });
+      expect(labelField().value).toBe('Depth');
+      shortcut(mod(), 'z', { meta: true, shift: true });
+      // (nothing to redo: the key is left to the page)
+      expect(shortcut(mod(), 'z', { ctrl: true, shift: true })).toBe(false);
+    });
+    it('Delete and Backspace remove the control chosen, and neither does anything with none chosen', () => {
+      const props = edit(EXAMPLE_PLAY);
+      const mod = () => one('[aria-label="Edit Mod"]');
+      expect(shortcut(mod(), 'Delete')).toBe(false);
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+      press(mod());
+      expect(shortcut(mod(), 'Delete')).toBe(true);
+      expect(wheels(props.panel)).toEqual(['bend']);
+      expect(kind()).toBe('Panel');
+      // (the control pressed is gone and took focus with it: focus stays in the editor, so Ctrl+Z works at once)
+      expect(document.activeElement).toBe(one('.wm-editor'));
+      shortcut(document.activeElement!, 'z', { ctrl: true });
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+      press(one('[aria-label="Edit Bend"]'));
+      shortcut(one('[aria-label="Edit Bend"]'), 'Backspace');
+      expect(wheels(props.panel)).toEqual(['mod']);
+      press(button('Undo'));
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+    });
+    it('leave a text field its own keys: no undo, redo or delete from inside one', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(one('[aria-label="Edit Mod"]'));
+      type(labelField(), 'Depth');
+      const before = props.panel;
+      for (const k of ['Delete', 'Backspace']) expect(shortcut(labelField(), k), k).toBe(false);
+      expect(shortcut(labelField(), 'z', { ctrl: true })).toBe(false);
+      expect(shortcut(one('.inspector select'), 'Delete')).toBe(false);
+      expect(props.panel).toBe(before);
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+    });
+    it('does nothing for a key pressed outside the editor', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(one('[aria-label="Edit Mod"]'));
+      expect(shortcut(document.body, 'Delete')).toBe(false);
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+    });
+  });
 });

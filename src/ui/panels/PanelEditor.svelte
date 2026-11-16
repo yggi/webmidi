@@ -123,21 +123,48 @@
     }
     return take(wanted.trim());
   };
+  /** The panel a step goes to: the place chosen is kept where it is still there, else nothing is chosen. */
+  const stepTo = (to: Panel) => {
+    if (selected && !nodeAt(to, selected)) selected = null;
+    note = null;
+    onchange(to);
+  };
   function undo() {
     const back = past.at(-1);
-    if (!back) return;
+    if (!back) return false;
     past = past.slice(0, -1);
     future = [...future, panel];
-    selected = null;
-    onchange(back);
+    stepTo(back);
+    return true;
   }
   function redo() {
     const again = future.at(-1);
-    if (!again) return;
+    if (!again) return false;
     future = future.slice(0, -1);
     past = [...past, panel];
-    selected = null;
-    onchange(again);
+    stepTo(again);
+    return true;
+  }
+  /** Ctrl or Cmd with Z (Shift: redo) or Y, Delete and Backspace on the control chosen: only from inside the editor, and a text field or a select keeps its own keys. */
+  function shortcut(e: KeyboardEvent) {
+    const el = e.target as HTMLElement;
+    if (el.closest('input, textarea, select, [contenteditable]') || e.altKey) return;
+    const k = e.key.toLowerCase();
+    const mod = e.ctrlKey || e.metaKey;
+    const taken =
+      mod && k === 'z'
+        ? e.shiftKey
+          ? redo()
+          : undo()
+        : mod && k === 'y'
+          ? redo()
+          : !mod && (e.key === 'Delete' || e.key === 'Backspace') && !!selected && !!node
+            ? remove()
+            : false;
+    if (!taken) return;
+    e.preventDefault();
+    // (a control removed takes focus with it, once the panel is drawn again: focus goes to the editor, so the next key still reaches it)
+    if (e.key === 'Delete' || e.key === 'Backspace') (e.currentTarget as HTMLElement).focus();
   }
 
   /** What a field holds as a number or an expression; nothing for an empty field. */
@@ -262,7 +289,8 @@
   </label>
 {/snippet}
 
-<div class="wm-editor">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="wm-editor" tabindex="-1" onkeydown={shortcut}>
   <div class="stage">
     <div class="tools" role="toolbar" aria-label="Add to the panel">
       <span class="eyebrow">Add</span>
@@ -511,6 +539,7 @@
   }
   /* end palette */
   .wm-editor {
+    outline: none;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: 14px;

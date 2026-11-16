@@ -1,0 +1,2 @@
+### Fixed
+- **`PanelEditor`'s Undo and Redo keep the control chosen, and Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y, Delete and Backspace work** (yggi/webmidi#67): Undo and Redo cleared the choice, so the inspector vanished after each step; they now keep it when the place is still in the panel they go to and clear it when it isn't. Ctrl or Cmd with Z undoes, with Shift (or Ctrl+Y) redoes, and Delete or Backspace removes the control or group chosen, only while focus is inside the editor and not in a text field or a select (which keep their own keys). Nothing on the wire changes.
