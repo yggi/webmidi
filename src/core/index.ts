@@ -15,6 +15,8 @@ export * from './routing';
 export * from './clock';
 // What a page adds to a message it passes on, measured.
 export * from './thru';
+// The link measured: probes, the loop and the page lag, its stability, a tier (speculative), and a report.
+export * from './link';
 // Out: notes, with their bends and channels, and the clock.
 export * from './bend';
 export * from './rotation';

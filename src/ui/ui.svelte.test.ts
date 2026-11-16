@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { DRUM_PRESETS } from '../core/drum-presets';
 import { DEFAULT_PRESET } from '../core/input-kinds';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   activeSetup,
@@ -34,6 +34,8 @@ import {
 import ChannelMeter from './ChannelMeter.svelte';
 import DeviceDialog from './DeviceDialog.svelte';
 import DeviceInspector from './DeviceInspector.svelte';
+import LinkMeasure from './LinkMeasure.svelte';
+import { LinkMeter, linkReport, type LinkReport } from '../core/link';
 import MidiStatus from './MidiStatus.svelte';
 import PatchMatrix from './PatchMatrix.svelte';
 import SetupPicker from './SetupPicker.svelte';
@@ -296,8 +298,133 @@ describe('DeviceInspector, more', () => {
   });
 });
 
+/** A report of a made run: 100 probes on a loop of 2 ms, no jitter, a page lag of 1, `long` over 60 s. */
+function made(long = false, extra: { loop?: (i: number) => number } = {}): LinkReport {
+  const meter = new LinkMeter();
+  const n = long ? 600 : 100;
+  for (let i = 0; i < n; i++) {
+    const called = 1000 + i * (long ? 100 : 20);
+    const ahead = i % 2 === 0 ? 20 : 0;
+    const { bytes } = meter.sent(called, ahead);
+    const back = called + ahead + (extra.loop?.(i) ?? 2);
+    meter.heard(bytes, back, back + 1);
+  }
+  return linkReport({ at: '2026-11-16T12:00:00.000Z', output: 'Circuit', input: 'KeyStep 37', environment: 'Test' }, meter.stats(1e7));
+}
+
+describe('LinkMeasure (yggi/webmidi#75)', () => {
+  const inputs = [keystep, { id: 'in-2', name: 'Loop In' }];
+  const props = (more: Record<string, unknown> = {}) => ({ outputName: 'Circuit', inputs, onmeasure: vi.fn(), ...more });
+
+  it('says what it sends and when before anything goes out, and sends nothing until the button is pressed', () => {
+    const p = props();
+    show(LinkMeasure, p);
+    const text = one('.wm-link').textContent!;
+    expect(text).toContain('only when you press');
+    expect(text).toContain('100 control changes');
+    expect(text).toContain('CC 119');
+    expect(text).toContain('channel 16');
+    expect([...one<HTMLSelectElement>('select').options].map((o) => o.textContent)).toEqual(['KeyStep 37', 'Loop In']);
+    expect(buttons()).toEqual(['Measure link']);
+    expect(p.onmeasure).not.toHaveBeenCalled();
+  });
+
+  it('measures the input chosen over the run chosen, shows the progress, and can be stopped', async () => {
+    const p = props();
+    show(LinkMeasure, p);
+    const [pickInput, pickRun] = all('select') as HTMLSelectElement[];
+    change(pickInput!, 'in-2');
+    change(pickRun!, 'long');
+    expect(one('.wm-link').textContent).toContain('600 control changes');
+    click('Measure link');
+    expect(p.onmeasure).toHaveBeenCalledOnce();
+    const run = p.onmeasure.mock.calls[0]![0] as { input: { id: string }; length: string; signal: AbortSignal; onprogress: (p: { sent: number; of: number }) => void };
+    expect([run.input.id, run.length, run.signal.aborted]).toEqual(['in-2', 'long', false]);
+    run.onprogress({ sent: 37, of: 600 });
+    flushSync();
+    expect(one('[role=progressbar]').getAttribute('aria-valuenow')).toBe('37');
+    expect(one('.wm-link').textContent).toContain('37 of 600');
+    expect(buttons()).toEqual(['Stop']);
+    click('Stop');
+    expect(run.signal.aborted).toBe(true);
+  });
+
+  it('after a stop says so and can measure again; after a failure says why', async () => {
+    let reject = (_: unknown) => {};
+    const onmeasure = vi.fn(() => new Promise<LinkReport>((_, r) => (reject = r)));
+    show(LinkMeasure, props({ onmeasure }));
+    click('Measure link');
+    reject(new DOMException('stopped', 'AbortError'));
+    await tick();
+    expect(one('[role=status]').textContent).toContain('Stopped');
+    expect(buttons()).toEqual(['Measure link']);
+    click('Measure link');
+    reject(new Error('The port is closed'));
+    await tick();
+    expect(one('[role=alert]').textContent).toContain('The port is closed');
+  });
+
+  it('shows what was measured and what was assumed, each said as which, with the tiers marked speculative', async () => {
+    const onreport = vi.fn();
+    const onmeasure = vi.fn(() => Promise.resolve(made()));
+    show(LinkMeasure, props({ onmeasure, onreport }));
+    click('Measure link');
+    await tick();
+    const text = one('.wm-link').textContent!.replace(/\s+/g, ' ');
+    expect(text).toContain('Loop: median 2 ms');
+    expect(text).toContain('Jitter: 0 ms');
+    expect(text).toContain('Page lag in: median 1 ms');
+    expect(text).toContain('Loss: 0 of 100 probes');
+    expect(text).toContain('Drift: not measured');
+    expect(text).toContain('Timestamps honoured: yes');
+    expect(text).toContain('One way: about 1 ms. An assumption');
+    expect(text).toContain('Wire time per byte: not measured');
+    expect(text).toContain('Scheduled: tight');
+    expect(text).toContain('Played: tight');
+    expect(text).toContain('speculative');
+    expect(onreport).toHaveBeenCalledWith(expect.objectContaining({ report: 'webmidi link', n: 100 }));
+    expect(JSON.parse(one('pre').textContent!)).toMatchObject({ report: 'webmidi link', n: 100 });
+  });
+
+  it('says timestamps ignored, a drift and a loose tier in words', async () => {
+    const report = made(true, { loop: (i) => 2 + (i * 100) / 10000 });
+    show(LinkMeasure, props({ onmeasure: () => Promise.resolve(report) }));
+    click('Measure link');
+    await tick();
+    const text = one('.wm-link').textContent!;
+    expect(text).toMatch(/Drift: \+?6(\.\d)? ms a minute/);
+    expect(text).toContain('Scheduled: poor');
+    expect(text).toContain('drift');
+  });
+
+  it('has nothing to press without an input to listen on, or where the output is not plugged in', () => {
+    show(LinkMeasure, props({ inputs: [] }));
+    expect(one('.wm-link').textContent).toContain('No input is plugged in');
+    expect(buttons()).toEqual([]);
+    show(LinkMeasure, props({ disabled: true }));
+    expect((all('button').at(-1) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('is in the inspector and the dialog where a frontend gives it a way to measure, and not otherwise', () => {
+    const base = {
+      output: { key: 'o1', id: 'a', name: 'Circuit' },
+      slot: 1,
+      ports: [{ id: 'a', name: 'Circuit' }],
+      profile: DEFAULT_PROFILE,
+      onport: () => {},
+      onprofile: () => {},
+    };
+    show(DeviceInspector, base);
+    expect(all('.wm-link').length).toBe(0);
+    document.body.replaceChildren();
+    show(DeviceDialog, { ...base, inputs, onmeasure: vi.fn(), onclose: () => {} });
+    expect(all('.wm-link').length).toBe(1);
+    expect(buttons()).toContain('Measure link');
+  });
+});
+
 describe('the palette', () => {
-  const sources = ['MidiStatus', 'DeviceInspector', 'DeviceDialog', 'ChannelMeter', 'ChannelPicker', 'PatchMatrix', 'SetupPicker'].map((name) =>
+  const sources = ['MidiStatus', 'DeviceInspector', 'DeviceDialog', 'ChannelMeter', 'ChannelPicker', 'PatchMatrix', 'SetupPicker', 'LinkMeasure'].map((name) =>
     readFileSync(`src/ui/${name}.svelte`, 'utf8'),
   );
   /** A component's palette, its root's selector left out. */
@@ -395,6 +522,23 @@ describe('PatchMatrix', () => {
     flushSync();
     expect(heads()).toEqual(['Novation Circuit', 'GM drums']);
     expect(rowCells('Kit')).toEqual(['10', '10']);
+  });
+
+  it('offers Measure link in an output’s dialog over the inputs plugged in, where the frontend can measure (yggi/webmidi#75), and not where it can’t', () => {
+    const onmeasure = vi.fn(() => new Promise<LinkReport>(() => {}));
+    matrix(home(), { onselect: undefined, onmeasure });
+    head('Minilogue xd').click();
+    flushSync();
+    expect(buttons()).toContain('Measure link');
+    click('Measure link');
+    expect(onmeasure).toHaveBeenCalledWith('o2', expect.objectContaining({ input: keystep, length: 'quick' }));
+    click('Stop');
+    expect([...one<HTMLSelectElement>('[role=dialog] .wm-link select').options].map((o) => o.textContent)).toEqual(['KeyStep 37']);
+    document.body.replaceChildren();
+    matrix(home(), { onselect: undefined });
+    head('Minilogue xd').click();
+    flushSync();
+    expect(buttons()).not.toContain('Measure link');
   });
 
   it('opens an output’s details in a dialog from its head, where the frontend doesn’t take the head itself: its port, its profile, its channels', () => {

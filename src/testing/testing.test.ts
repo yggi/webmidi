@@ -15,7 +15,7 @@ afterEach(testing.uninstallMidi);
 
 describe('@yggi/webmidi/testing', () => {
   it("has core's fakes and web's, and nothing else", () => {
-    expect(Object.keys(testing).sort()).toEqual(['fakeAccess', 'fakeConnection', 'fakeInput', 'fakeListenedInput', 'fakePort', 'installMidi', 'uninstallMidi']);
+    expect(Object.keys(testing).sort()).toEqual(['fakeAccess', 'fakeConnection', 'fakeInput', 'fakeListenedInput', 'fakeLoop', 'fakePort', 'installMidi', 'uninstallMidi']);
   });
 
   it('is an export of the package, its source and its declarations both there', () => {

@@ -15,6 +15,8 @@ export interface ThruStats {
     readonly p95: number;
     readonly worst: number;
 }
+/** The smallest value that at least `share` of the sorted values are within (nearest rank); the link meter reads its percentiles the same way. */
+export declare const nearestRank: (sorted: readonly number[], share: number) => number;
 export declare class ThruMeter {
     private readonly size;
     private readonly kept;

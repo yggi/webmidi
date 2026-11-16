@@ -17,6 +17,9 @@ export interface ThruStats {
   readonly worst: number;
 }
 
+/** The smallest value that at least `share` of the sorted values are within (nearest rank); the link meter reads its percentiles the same way. */
+export const nearestRank = (sorted: readonly number[], share: number): number => sorted[Math.max(0, Math.ceil(share * sorted.length) - 1)]!;
+
 export class ThruMeter {
   private readonly kept: number[] = [];
   private next = 0;
@@ -41,8 +44,7 @@ export class ThruMeter {
   get stats(): ThruStats | null {
     if (!this.kept.length) return null;
     const sorted = [...this.kept].sort((a, b) => a - b);
-    // (nearest rank: the smallest delay that at least that share of the messages are within)
-    const within = (share: number) => sorted[Math.max(0, Math.ceil(share * sorted.length) - 1)]!;
+    const within = (share: number) => nearestRank(sorted, share);
     return { count: sorted.length, total: this.total, median: within(0.5), p95: within(0.95), worst: sorted.at(-1)! };
   }
 

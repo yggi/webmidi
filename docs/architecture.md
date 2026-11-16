@@ -12,6 +12,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `drum-presets.ts` drum maps by General MIDI note (GM, Novation Circuit), `deviceNote` out and `gmNotesFor` back
 - `port.ts` what a port and a connection are (`MidiPort`, `PortOption`, `PortAccess`), and which port plugged in a port kept is now (`matchPorts`, decision 006: by its name, one port to one kept); `routing.ts` adopting the ports chosen (`ChosenPorts`), a replugged one by its name; a frontend that keeps no port names passes `''` as `outPortName` and `inPortName`, and a port is adopted by its id alone; `fixtures.ts` the fake ports, access and connection, shipped through `@yggi/webmidi/testing`
 - `thru.ts` what a page adds to a message it passes on (`ThruMeter`): the delay from the port seeing it to the page sending it, its median, what 95 in 100 are within, the worst, over the last 256
+- `link.ts` the MIDI link measured from times a frontend gives (decision 009): `LinkMeter` matches probes (a control change on channel 16, numbered) and keeps the loop (`Tr − Ts`), the page lag (`Th − Tr`), jitter, drift (long runs only), loss, order, duplicates, outliers and whether timestamps are honoured; one way is loop / 2, an assumption; `linkTier` rates a scheduled and a played tier (speculative limits, `LINK_LIMITS`); `linkReport` is the JSON. `thru.ts` shares its nearest-rank percentile (`nearestRank`)
 - `clock.ts` the audio clock against the page's (`clockOffset`): the pair estimate, its slew, jumps confirmed, a `leap` followed at once
 - `bend.ts` cents as 14-bit bends, a note's bends with ramps sampled; `rotation.ts` MPE channels
 - `out.ts` `MidiOut`: `OutNote`s to a port, timestamped, note-offs kept after their note-ons, retriggers, drum maps, silencing that cuts nothing sent since; a run (a glide) struck as the horizon reaches each note; `panic` with a tail, and `sweep` (decision 008)
@@ -41,6 +42,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 - `ports.ts` every port in full, unplugged ones too (`listPorts`), and `guessPort` by patterns a frontend gives (KO-Multitool keeps the EP-133's)
 - `transport.ts` `SysexTransport`, the shape a device's protocol needs (ep133-sysex's `Transport`, met structurally: `transport.test.ts` holds it to a copy), and `MidiTransport` over an input (by `addEventListener`, so `onmidimessage` stays `MidiAccess`'s) and an output, capturing each message and counting how the browser delivered it
 - `book-store.ts` `localBookStore`: the book in `localStorage`, nothing thrown when storage is refused; `panel-store.ts` `localPanelStore`: the panels' library, likewise
+- `link-probe.ts` `runLinkProbe`: the link measured on an output and an input of a loop with timers (decision 009): 100 probes 20 ms apart or 600 100 ms apart, scheduled and at once in turn, one out at a time, abortable, with progress, a `LinkReport` at the end; it sends only when called, so only when a person presses the button
 - `fixtures.ts` the fake `navigator.requestMIDIAccess` and a listened input, shipped through `@yggi/webmidi/testing`
 
 ## Map of src/ui/
@@ -49,6 +51,7 @@ What lives where, module by module, layer by layer; the layers' rules are in [..
 
 - `MidiStatus.svelte` the connection: a light, the message, Connect, or Refresh ports and All notes off; the setup's devices missing
 - `DeviceInspector.svelte` one output: its port (one not plugged in kept; found by its name, decision 006), its device's profile (clock, drum map and each drum's note where a kit is routed to it, bend, MPE, latency, forgetting it), the channels routed to it, test note, notes off, remove; ports under one name told apart by their place. `DeviceDialog.svelte` is it as a dialog over the page
+- `LinkMeasure.svelte` "Measure link", in the inspector where a frontend gives `onmeasure` and `inputs` (and the matrix's dialog, by output key): the input of the loop and the run chosen, what it sends and that it sends only on the button said first, progress and Stop, then the report in words: what is measured (loop, jitter, page lag, loss, drift, timestamps honoured), what is assumed (one way, half the loop; wire time per byte, not measured), the tiers marked speculative, and the JSON (decision 009)
 - `PatchMatrix.svelte` the patch, and nothing of a device's settings: over it the devices plugged in that the setup has no output for, each a chip that adds it; the clock first, then the frontend's rows (`rows.ts`, `MatrixRow`; a kit's members are not rows) and the inputs (`inputRows`, one row per name) down, the outputs across (the built-in first, where the frontend has one: decision 004), each head opening its details in a `DeviceDialog` (or calling the frontend's `onselect`), its × taking it out, asked about only when routes go with it; a slot with no device and no routes is no column; a jack opens `ChannelPicker.svelte`; Heard per input; it takes the book and calls back a new one
 - `SetupPicker.svelte` the setups as chips (devices plugged in, the custom variant marked), Save… (overwrite, save as new, discard), Manage… (rename or remove the named setup in use, a variant's too; the last removed leaves a blank one), the setup suggested, export and import
 - `ChannelMeter.svelte` the 16 channels of an output, used and sounding; `channels.ts` a channel's hue, the same in every component
@@ -71,11 +74,12 @@ The standalone patchbay page ([proposals/patchbay.md](proposals/patchbay.md), se
 - `bay.svelte.ts` `Bay`: what the page keeps and does: the connection, the book and the panels' library in `localStorage`, a `PanelRack`, a message from an input or a panel sent where its row is crossed (`forwardsOf`, `forwardsOfInput`, `panelForwardsOf`), a test note, all notes off, a panel's file in and out, a panel edited, made and deleted, the delay it adds measured (`ThruMeter`), and rows crossed with the built-in played on its own sound
 - `synth.ts` the page's own sound, the built-in of its setups: a small Web Audio synth that takes MIDI (notes, drums on channel 10, the bend, the pedal, volume and filter), so a panel sounds with no device, and where there is no Web MIDI
 - `App.svelte` the page drawn: `MidiStatus`, `SetupPicker`, `PatchMatrix` (inputs and panels down, outputs and panels across, no clock), the panel being played (`PanelView` over the rack's runtime), the last messages through the patch
+- `bay.svelte.ts` also `measureLink`: an output's link measured over the input of its loop (`runLinkProbe`), the probes heard back on an input not passed on while it runs
 - `bay.svelte.test.ts` the page end to end on the fake Web MIDI
 
 ## src/testing/
 
-`index.ts` is `@yggi/webmidi/testing`, for tests only: core's and web's `fixtures.ts` re-exported, so a frontend's tests drive the fakes webmidi's own do (yggi/webmidi#6). `testing.test.ts` holds it to its surface, to the web gate and to `npm pack`.
+`index.ts` is `@yggi/webmidi/testing`, for tests only: core's and web's `fixtures.ts` re-exported, so a frontend's tests drive the fakes webmidi's own do (yggi/webmidi#6). `loop.ts` `fakeLoop`: an output wired to an input with a latency, jitter, drift, loss, reordering, duplicates and a page lag made, seeded, on timers and `performance.now()` (yggi/webmidi#75). `testing.test.ts` holds it to its surface, to the web gate and to `npm pack`.
 
 ## The contracts
 

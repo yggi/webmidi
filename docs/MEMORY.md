@@ -16,13 +16,13 @@ The hub, [yggi/music-commons](https://github.com/yggi/music-commons), holds the 
 
 Module by module: [architecture.md](architecture.md).
 
-- `src/core/` (`@yggi/webmidi/core`, pure): a message read (`surfaces.ts` for a player, `messages.ts` the wire both ways), the keyboard's layout, drum maps, ports and adopting them (`port.ts`, `routing.ts`), the clock offset (`clock.ts`), bends and MPE, notes out (`out.ts`, `MidiOut`), the clock out (`clock-out.ts`), the patchbay's book (`setups.ts` and its neighbours, decisions 002 and 003), SysEx assembled (`sysex.ts`)
+- `src/core/` (`@yggi/webmidi/core`, pure): a message read (`surfaces.ts` for a player, `messages.ts` the wire both ways), the keyboard's layout, drum maps, ports and adopting them (`port.ts`, `routing.ts`), the clock offset (`clock.ts`), bends and MPE, notes out (`out.ts`, `MidiOut`), the clock out (`clock-out.ts`), the link measured and rated (`link.ts`, decision 009), the patchbay's book (`setups.ts` and its neighbours, decisions 002 and 003), SysEx assembled (`sysex.ts`)
 - `src/core/panels/` (`@yggi/webmidi/panels`, pure, decision 005): a control panel kept, its expressions, instantiated, played (`PanelRuntime`), the library
-- `src/web/` (`@yggi/webmidi/web`): Web MIDI asked for and connected (`access.ts`), the ports in full (`ports.ts`), a SysEx transport (`transport.ts`), the book in `localStorage` (`book-store.ts`)
-- `src/ui/` (`@yggi/webmidi/ui`): the patchbay's Svelte components, presentational, coloured by `--wm-*` custom properties
+- `src/web/` (`@yggi/webmidi/web`): Web MIDI asked for and connected (`access.ts`), the ports in full (`ports.ts`), a SysEx transport (`transport.ts`), the book in `localStorage` (`book-store.ts`), the link probed (`link-probe.ts`)
+- `src/ui/` (`@yggi/webmidi/ui`): the patchbay's Svelte components (Measure link among them: what is measured, what is assumed, the tiers speculative), presentational, coloured by `--wm-*` custom properties
 - `src/ui/panels/` (`@yggi/webmidi/ui/panels`): a panel to play (`PanelView`), its widgets, the on-screen keyboard (`Keys`)
 - `site/`: the standalone patchbay page (Vite; `npm run site`), published by hand (`.github/workflows/site.yml`); not in the package
-- `src/testing/` (`@yggi/webmidi/testing`, tests only): core's and web's fakes re-exported
+- `src/testing/` (`@yggi/webmidi/testing`, tests only): core's and web's fakes re-exported, and a fake loop (`loop.ts`)
 
 ## Gates
 
@@ -40,3 +40,4 @@ One line each; the record has the rationale. → [decisions/](decisions/README.m
 - 006 · A port kept is its name's: found by its name once known (an id may be another device's after a replug), by its id only when kept without a name; one port to one output (`matchPorts`) · → decisions/006-a-port-kept-is-its-names.md
 - 007 · Panels in the patch: a setup names its active panels (`Setup.panels`), each a row and a column under `panel:<id>`; a panel is no port (`panelForwardsOf`, a `PanelRack`), and only inputs' and panels' rows cross its column; amended: a panel's row takes a Plays choice as an input's does, `'none'` by default (`panelPlays`) · → decisions/007-panels-in-the-patch.md
 - 008 · Silencing is two things: `panic(…, { tail })` the state-based stop (notes sent ahead sound on up to `tail` seconds, 0 cuts), `sweep` the stateless panic button (All notes off, All sound off, sustain off on every channel) · → decisions/008-silencing-is-two-things.md
+- 009 · The link is measured in parts (loop, page lag; one way is an assumption), rated in two tiers (scheduled, played) from named limits that stay labelled speculative until hardware numbers replace them; the probe goes out only on a button · → decisions/009-the-link-measured-in-parts.md

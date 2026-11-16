@@ -7,3 +7,4 @@
  */
 export { fakeAccess, fakeConnection, fakeInput, fakePort } from '../core/fixtures';
 export { fakeListenedInput, installMidi, uninstallMidi } from '../web/fixtures';
+export { fakeLoop } from './loop';

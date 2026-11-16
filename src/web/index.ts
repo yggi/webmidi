@@ -12,3 +12,5 @@ export * from './transport';
 export * from './book-store';
 // The control panels' library, kept in localStorage.
 export * from './panel-store';
+// The link measured: probes sent on an output and timed back on an input of a loop, only when asked.
+export * from './link-probe';

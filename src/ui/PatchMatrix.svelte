@@ -20,6 +20,8 @@
    * frontend takes the head itself (`onselect`). A kit's members are therefore not rows here. It takes the book and
    * calls back a new one (`onchange`): a change to a named setup becomes its custom variant there (decision 002).
    */
+  import type { ComponentProps } from 'svelte';
+  import type { LinkReport } from '../core/link';
   import { presetNameOf } from '../core/drum-presets';
   import type { PortOption } from '../core/port';
   import { applyPreset, type InputPreset } from '../core/input-kinds';
@@ -105,6 +107,13 @@
     /** In the matrix's own dialog: a test note to an output, and its notes off, by key; left out, not offered. */
     ontest?: (key: string) => void;
     onpanic?: (key: string) => void;
+    /** In the matrix's own dialog: measure the link to an output, by key (`DeviceInspector`'s `onmeasure`, which has `inputs` to pick the loop from); left out, not offered. */
+    onmeasure?: (
+      key: string,
+      run: Parameters<NonNullable<ComponentProps<typeof DeviceDialog>['onmeasure']>>[0],
+    ) => ReturnType<NonNullable<ComponentProps<typeof DeviceDialog>['onmeasure']>>;
+    /** A link report made there. */
+    onlinkreport?: (report: LinkReport) => void;
     /** The built-in's head pressed, where the matrix opens the details itself: its settings are the frontend's (decision 004). */
     onbuiltin?: () => void;
   }
@@ -128,6 +137,8 @@
     onselect,
     ontest,
     onpanic,
+    onmeasure,
+    onlinkreport,
     onbuiltin,
   }: Props = $props();
 
@@ -577,6 +588,9 @@
     onprofile={(change: Partial<DeviceProfile>) => onchange(withProfile(book, o.name, change))}
     ontest={ontest && (() => ontest(o.key))}
     onpanic={onpanic && (() => onpanic(o.key))}
+    onmeasure={onmeasure && ((run) => onmeasure(o.key, run))}
+    {inputs}
+    {onlinkreport}
     onremove={locked ? undefined : () => remove(o.key)}
     onforget={Object.hasOwn(book.devices, o.name) ? () => onchange(forgetDevice(book, o.name)) : undefined}
     onclose={() => (detail = null)}
