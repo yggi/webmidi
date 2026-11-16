@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { childrenAt, containerOf, duplicateNode, insertNode, moveNode, newControl, newGroup, nodeAt, ofKind, removeNode, samePath, updateNode } from './edit';
+import { childrenAt, containerOf, duplicateNode, insertNode, moveNode, nameProblem, newControl, newGroup, nodeAt, ofKind, removeNode, samePath, updateNode } from './edit';
 import { EXAMPLE_MIXER, EXAMPLE_PLAY } from './examples';
 import { instantiate } from './instantiate';
 import { CONTROL_TYPES, isGroup, readPanel, type Control, type Panel } from './model';
@@ -102,5 +102,34 @@ describe('a panel edited', () => {
     expect(ofKind({ kind: 'cc', number: '10 + ch', range: [0, 100], channel: 2 }, 'note')).toEqual({ kind: 'note', number: '10 + ch', channel: 2 });
     expect(ofKind({ kind: 'cc', number: 7, axis: 'y' }, 'bend')).toEqual({ kind: 'bend', axis: 'y' });
     expect(ofKind({ kind: 'bend' }, 'nrpn')).toEqual({ kind: 'nrpn', number: 1 });
+  });
+});
+
+describe('a name asked for', () => {
+  // (EXAMPLE_PLAY's top level: group "tone", group "wheels", group "play"; wheels holds the controls "bend" and "mod")
+  const mod = { at: [1, 1] };
+  it('is a problem in words when it isn’t a name the reader keeps: it would be dropped, and the control lose its key', () => {
+    for (const wanted of ['a/b c', 'has space', '1st', 'é', 'a-b', 'x'.repeat(33)]) expect(nameProblem(EXAMPLE_PLAY, mod, wanted), wanted).toMatch(/letter|_/);
+    for (const wanted of ['volume', '_x', 'A1_b', 'x'.repeat(32)]) expect(nameProblem(EXAMPLE_PLAY, mod, wanted), wanted).toBeUndefined();
+  });
+  it('is a problem when a sibling, a control or a group, already has it; its own name is no problem', () => {
+    expect(nameProblem(EXAMPLE_PLAY, mod, 'bend')).toBe('“bend” is already the name of a control beside it.');
+    expect(nameProblem(EXAMPLE_PLAY, mod, 'mod')).toBeUndefined();
+    expect(nameProblem(EXAMPLE_PLAY, { at: [2] }, 'tone')).toBe('“tone” is already the name of a group beside it.');
+    // (a control and a group share one key space: two under one name leave the second out)
+    expect(nameProblem(EXAMPLE_PLAY, { at: [2] }, 'wheels')).toMatch(/already the name of a group/);
+  });
+  it('may be empty for a control (it is then kept by its place) and not for a group', () => {
+    expect(nameProblem(EXAMPLE_PLAY, mod, '')).toBeUndefined();
+    expect(nameProblem(EXAMPLE_PLAY, { at: [1] }, '')).toBe('A group needs a name.');
+  });
+  it('is judged among the siblings in a template, the same for every group that uses it', () => {
+    const strip = { template: 'strip', at: [0] };
+    const siblings = childrenAt(EXAMPLE_MIXER, { template: 'strip', at: [] })!.map((n) => (isGroup(n) ? n.group : n.id));
+    const other = siblings.find((n, i) => i !== 0 && n)!;
+    expect(nameProblem(EXAMPLE_MIXER, strip, other)).toMatch(/already the name/);
+  });
+  it('is no problem for a place that isn’t there', () => {
+    expect(nameProblem(EXAMPLE_PLAY, { at: [9] }, 'x')).toBeUndefined();
   });
 });
