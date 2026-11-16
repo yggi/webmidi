@@ -9,3 +9,5 @@
 export { fakeAccess, fakeConnection, fakeInput, fakePort } from '../core/fixtures';
 // Web's: `navigator.requestMIDIAccess` answering with a fake access (or refusing), and an input a transport listens to.
 export { fakeListenedInput, installMidi, uninstallMidi } from '../web/fixtures';
+// A loop to measure the link over without hardware: an output wired to an input, with a latency, jitter, loss, reordering and drift made (yggi/webmidi#75).
+export { fakeLoop } from './loop';

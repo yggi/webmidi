@@ -76,7 +76,7 @@ The standalone patchbay page ([proposals/patchbay.md](proposals/patchbay.md), se
 
 ## src/testing/
 
-`index.ts` is `@yggi/webmidi/testing`, for tests only: core's and web's `fixtures.ts` re-exported, so a frontend's tests drive the fakes webmidi's own do (yggi/webmidi#6). `testing.test.ts` holds it to its surface, to the web gate and to `npm pack`.
+`index.ts` is `@yggi/webmidi/testing`, for tests only: core's and web's `fixtures.ts` re-exported, so a frontend's tests drive the fakes webmidi's own do (yggi/webmidi#6). `loop.ts` `fakeLoop`: an output wired to an input with a latency, jitter, drift, loss, reordering, duplicates and a page lag made, seeded, on timers and `performance.now()` (yggi/webmidi#75). `testing.test.ts` holds it to its surface, to the web gate and to `npm pack`.
 
 ## The contracts
 
