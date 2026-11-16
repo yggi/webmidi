@@ -10,6 +10,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
+## v0.8.1 — 2026-11-16
+
+The panel editor's plain fields and its undo, found driving it in a browser (yggi/webmidi#66, #67): a number that can't be read is refused in words where it was turned into another, and Undo and Redo keep what is chosen and answer Ctrl/Cmd+Z, Delete and Backspace. A fix, with `numberProblem` and `MAX_GRID` added in a surface outside what 1.0 promises. Nothing on the wire changes and nothing breaks a frontend's code, so it is a patch.
+
+### Added
+- **`numberProblem(field, text)` and `MAX_GRID`** (`@yggi/webmidi/panels`, yggi/webmidi#66): why a text typed into a plain number field (`'start'`, `'note'`, `'notes'`, `'span'`) can't be taken, in words, or undefined. `MAX_GRID` (64, the most columns a grid has and the furthest cell) is exported for the span's range. Additive.
+
+### Fixed
+- **`PanelEditor`'s Undo and Redo keep the control chosen, and Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y, Delete and Backspace work** (yggi/webmidi#67): Undo and Redo cleared the choice, so the inspector vanished after each step; they now keep it when the place is still in the panel they go to and clear it when it isn't. Ctrl or Cmd with Z undoes, with Shift (or Ctrl+Y) redoes, and Delete or Backspace removes the control or group chosen, only while focus is inside the editor and not in a text field or a select (which keep their own keys). Nothing on the wire changes.
+- **`PanelEditor`'s plain number fields take what is typed or say why not** (yggi/webmidi#66): *Starts at* turned a word into 0 and held 7 to 1, *Notes* dropped a word among the pads' notes (`36, abc, 40` made four pads two), and *Lowest note*, *Highest note* and *Spans columns/rows* rounded a fraction or made a word nothing. Each is now read strictly: a text that isn't a number in the field's range (*Starts at* 0 to 1, notes 0 to 127, spans 1 to 64) is refused, the field goes back to what the panel holds and the note says the range. Nothing on the wire changes.
+
 ## v0.8.0 — 2026-11-16
 
 The MIDI link measured (decision 009; yggi/webmidi#75, the MIDI side of yggi/jambot#27): a loop through a port timed in the parts one browser clock can tell apart, how stable it is, and a two-part tier (scheduled and played). Additive: nothing existing changes on the wire, and the probes go out only when a person presses *Measure link*. The thresholds of the tiers are a proposal and are marked speculative until hardware numbers replace them. A minor version for the new API.

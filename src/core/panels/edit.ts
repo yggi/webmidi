@@ -4,7 +4,7 @@
  * template's, so a change there is a change to every group that uses it; adding into a group that uses a template
  * adds to the template. An operation on a place that isn't there gives the panel as it was.
  */
-import { BINDING_KINDS, isGroup, type Binding, type Control, type ControlType, type Group, type NodePath, type Panel, type PanelNode } from './model';
+import { BINDING_KINDS, isGroup, MAX_GRID, type Binding, type Control, type ControlType, type Group, type NodePath, type Panel, type PanelNode } from './model';
 
 export const samePath = (a: NodePath | null | undefined, b: NodePath | null | undefined): boolean =>
   !!a && !!b && a.template === b.template && a.at.length === b.at.length && a.at.every((n, i) => n === b.at[i]);
@@ -181,4 +181,36 @@ export function nameProblem(panel: Panel, path: NodePath, wanted: string): strin
   const siblings = childrenAt(panel, { ...path, at: path.at.slice(0, -1) }) ?? [];
   const taken = siblings.find((n, i) => i !== own && (isGroup(n) ? n.group : n.id) === wanted);
   return taken ? `“${wanted}” is already the name of a ${isGroup(taken) ? 'group' : 'control'} beside it.` : undefined;
+}
+
+/** The plain number fields the editor reads strictly: where a control starts, a key or a note, a pad's notes, and how far a control spans a grid. */
+export type NumberField = 'start' | 'note' | 'notes' | 'span';
+
+const WHOLE = /^\d+$/;
+const DECIMAL = /^(\d+(\.\d*)?|\.\d+)$/;
+
+/**
+ * Why a text typed into a plain number field can't be taken, in words; undefined when it can. The reader keeps a value
+ * only inside its range, so the editor takes the text as written or not at all: a word, a fraction where a whole number
+ * is wanted, or a number out of range is a problem here, never turned into another number. An empty text is no problem
+ * (it clears the field), and a pad's notes are a list, each held to a note's range.
+ */
+export function numberProblem(field: NumberField, text: string): string | undefined {
+  const t = text.trim();
+  if (t === '') return undefined;
+  switch (field) {
+    case 'start':
+      return DECIMAL.test(t) && Number(t) <= 1 ? undefined : 'Starts at takes a number from 0 to 1.';
+    case 'note':
+      return WHOLE.test(t) && Number(t) <= 127 ? undefined : 'A note is a whole number from 0 to 127.';
+    case 'notes':
+      return t
+        .split(/[\s,]+/)
+        .filter(Boolean)
+        .every((n) => WHOLE.test(n) && Number(n) <= 127)
+        ? undefined
+        : 'Notes are whole numbers from 0 to 127, separated by commas or spaces.';
+    case 'span':
+      return WHOLE.test(t) && Number(t) >= 1 && Number(t) <= MAX_GRID ? undefined : `A span is a whole number from 1 to ${MAX_GRID}.`;
+  }
 }

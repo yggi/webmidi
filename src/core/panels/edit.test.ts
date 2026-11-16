@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { childrenAt, containerOf, duplicateNode, insertNode, moveNode, nameProblem, newControl, newGroup, nodeAt, ofKind, removeNode, samePath, updateNode } from './edit';
+import {
+  childrenAt,
+  containerOf,
+  duplicateNode,
+  insertNode,
+  moveNode,
+  nameProblem,
+  newControl,
+  newGroup,
+  numberProblem,
+  nodeAt,
+  ofKind,
+  removeNode,
+  samePath,
+  updateNode,
+} from './edit';
 import { EXAMPLE_MIXER, EXAMPLE_PLAY } from './examples';
 import { instantiate } from './instantiate';
-import { CONTROL_TYPES, isGroup, readPanel, type Control, type Panel } from './model';
+import { CONTROL_TYPES, isGroup, MAX_GRID, readPanel, type Control, type Panel } from './model';
 
 const ids = (panel: Panel, path = { at: [] as number[] }) => childrenAt(panel, path)!.map((n) => (isGroup(n) ? n.group : n.id));
 
@@ -131,5 +146,31 @@ describe('a name asked for', () => {
   });
   it('is no problem for a place that isn’t there', () => {
     expect(nameProblem(EXAMPLE_PLAY, { at: [9] }, 'x')).toBeUndefined();
+  });
+});
+
+describe('a number typed into a plain field', () => {
+  // each field's own range, both sides of each boundary: what is outside is a problem in words, what is inside none
+  const cases: [Parameters<typeof numberProblem>[0], string[], string[]][] = [
+    ['start', ['0', '1', '0.5', '.25', '1.0', ' 0.5 ', ''], ['abc', '7', '-0.1', '1.01', '2', '1e0', '0,5', 'NaN', '0x1']],
+    ['note', ['0', '127', '60', ''], ['128', '-1', '60.5', 'abc', '1e1', ' x']],
+    ['notes', ['36', '36, 38 40', '0,127', ''], ['36, abc, 40', '128', '36, -1', '1.5', 'abc']],
+    ['span', ['1', '64', '3', ''], ['0', '65', '2.5', 'abc', '-1']],
+  ];
+  for (const [field, good, bad] of cases) {
+    it(`${field}: takes what is in range and gives a problem in words for the rest`, () => {
+      for (const t of good) expect(numberProblem(field, t), `${field} ${JSON.stringify(t)}`).toBeUndefined();
+      for (const t of bad) expect(numberProblem(field, t), `${field} ${JSON.stringify(t)}`).toMatch(/^[A-Z].*\.$/);
+    });
+  }
+  it('names the range in its words', () => {
+    expect(numberProblem('start', 'abc')).toBe('Starts at takes a number from 0 to 1.');
+    expect(numberProblem('note', '128')).toBe('A note is a whole number from 0 to 127.');
+    expect(numberProblem('notes', 'abc')).toBe('Notes are whole numbers from 0 to 127, separated by commas or spaces.');
+    expect(numberProblem('span', '65')).toBe('A span is a whole number from 1 to 64.');
+  });
+  it('takes a span up to the most a grid has (the reader’s own bound), over every whole number either side', () => {
+    for (let n = 0; n <= MAX_GRID + 6; n++) expect(numberProblem('span', String(n)) === undefined, String(n)).toBe(n >= 1 && n <= MAX_GRID);
+    for (let n = -2; n <= 130; n++) expect(numberProblem('note', String(n)) === undefined, String(n)).toBe(n >= 0 && n <= 127);
   });
 });

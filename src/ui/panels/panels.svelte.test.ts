@@ -419,4 +419,150 @@ describe('PanelEditor', () => {
     press(one('[aria-label="Edit Bend"]'));
     expect(all('.note').length).toBe(0);
   });
+
+  describe('a plain number field', () => {
+    const input = (label: string) =>
+      all('.inspector label.field')
+        .find((l) => l.querySelector('span')?.firstChild?.textContent === label)!
+        .querySelector('input')!;
+    const find = (panel: Panel, id: string) => {
+      const walk = (children: readonly { id?: string; children?: unknown }[]): Record<string, unknown> | undefined => {
+        for (const n of children) {
+          if (n.id === id) return n as Record<string, unknown>;
+          const hit = n.children ? walk(n.children as never) : undefined;
+          if (hit) return hit;
+        }
+      };
+      return walk(panel.children as never)!;
+    };
+    /** A text refused: the panel is the one it was, the field is back, and the note says the range; a text taken follows. */
+    function refuses(id: string, label: string, bad: string[], note: RegExp, held: string, good: string, kept: (c: Record<string, unknown>) => unknown, wanted: unknown) {
+      const props = edit(EXAMPLE_PLAY);
+      press(one(`[aria-label="Edit ${id === 'keys' ? 'Keys' : id === 'pads' ? 'Drums' : 'Mod'}"]`));
+      const before = props.panel;
+      for (const t of bad) {
+        type(input(label), t);
+        expect(props.panel, `${label} ${t}`).toBe(before);
+        expect(input(label).value, `${label} ${t}`).toBe(held);
+        expect(one('.note').textContent).toMatch(note);
+      }
+      expect((button('Undo') as HTMLButtonElement).disabled).toBe(true);
+      type(input(label), good);
+      expect(all('.note').length).toBe(0);
+      expect(kept(find(props.panel, id))).toEqual(wanted);
+    }
+    it('Starts at: a word or a number over 1 is not taken (it was 0, or held to 1)', () => {
+      refuses('mod', 'Starts at', ['abc', '7'], /0 to 1/, '', '0.25', (c) => c.value, 0.25);
+    });
+    it('Pad notes: a word among the notes is not taken (four pads stay four)', () => {
+      refuses('pads', 'Notes', ['36, abc, 40', '36, 200'], /0 to 127/, '36, 38, 42, 46', '40 41', (c) => c.notes, [40, 41]);
+    });
+    it('Lowest and highest note: a word or a number over 127 is not taken', () => {
+      refuses('keys', 'Lowest note', ['abc', '128'], /0 to 127/, '48', '40', (c) => c.low, 40);
+      document.body.innerHTML = '';
+      refuses('keys', 'Highest note', ['abc', '128'], /0 to 127/, '72', '80', (c) => c.high, 80);
+    });
+    it('Spans columns: a word or 0 or over the grid’s most is not taken', () => {
+      refuses('mod', 'Spans columns', ['abc', '0', '65'], /1 to 64/, '', '2', (c) => (c.cell as { columns?: number } | undefined)?.columns, 2);
+    });
+    it('Spans rows: a word or 0 or over the grid’s most is not taken', () => {
+      refuses('mod', 'Spans rows', ['abc', '0', '65'], /1 to 64/, '', '3', (c) => (c.cell as { rows?: number } | undefined)?.rows, 3);
+    });
+  });
+
+  describe('undo, redo and the keyboard', () => {
+    /** A key pressed on an element, with the modifiers; says whether the page's own default was left alone. */
+    const shortcut = (el: Element, k: string, mods: { ctrl?: boolean; meta?: boolean; shift?: boolean } = {}) => {
+      const e = new KeyboardEvent('keydown', { key: k, ctrlKey: !!mods.ctrl, metaKey: !!mods.meta, shiftKey: !!mods.shift, bubbles: true, cancelable: true });
+      el.dispatchEvent(e);
+      flushSync();
+      return e.defaultPrevented;
+    };
+    const kind = () => one('.inspector .eyebrow').textContent;
+    const wheels = (panel: Panel) => (panel.children[1] as unknown as { children: { id: string }[] }).children.map((c) => c.id);
+    const labelField = () => all('.inspector label.field input')[0] as HTMLInputElement;
+
+    it('Undo and Redo keep the control chosen when it is there in the panel they go to', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(one('[aria-label="Edit Mod"]'));
+      type(labelField(), 'Depth');
+      press(button('Undo'));
+      expect(kind()).toBe('Control');
+      expect(labelField().value).toBe('Mod');
+      press(button('Redo'));
+      expect(kind()).toBe('Control');
+      expect(labelField().value).toBe('Depth');
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+    });
+    it('Undo clears the choice when the place is gone from the panel it goes to, and so does Redo', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(button('Knob'));
+      expect(kind()).toBe('Control');
+      press(button('Undo'));
+      expect(kind()).toBe('Panel');
+      // Redo: a place the panel it goes to hasn't (Mod, removed in the step redone)
+      press(one('[aria-label="Edit Mod"]'));
+      press(button('Delete'));
+      press(button('Undo'));
+      press(one('[aria-label="Edit Mod"]'));
+      expect(kind()).toBe('Control');
+      press(button('Redo'));
+      expect(wheels(props.panel)).toEqual(['bend']);
+      expect(kind()).toBe('Panel');
+    });
+    it('Ctrl+Z undoes and Cmd+Z too, Ctrl+Shift+Z and Ctrl+Y redo, with focus on a control', () => {
+      edit(EXAMPLE_PLAY);
+      const first = one('[aria-label="Edit Mod"]');
+      const mod = () => first;
+      press(mod());
+      type(labelField(), 'Depth');
+      expect(shortcut(mod(), 'z', { ctrl: true })).toBe(true);
+      expect(labelField().value).toBe('Mod');
+      expect(shortcut(mod(), 'Z', { ctrl: true, shift: true })).toBe(true);
+      expect(labelField().value).toBe('Depth');
+      shortcut(mod(), 'z', { meta: true });
+      expect(labelField().value).toBe('Mod');
+      shortcut(mod(), 'y', { ctrl: true });
+      expect(labelField().value).toBe('Depth');
+      shortcut(mod(), 'z', { meta: true, shift: true });
+      // (nothing to redo: the key is left to the page)
+      expect(shortcut(mod(), 'z', { ctrl: true, shift: true })).toBe(false);
+    });
+    it('Delete and Backspace remove the control chosen, and neither does anything with none chosen', () => {
+      const props = edit(EXAMPLE_PLAY);
+      const mod = () => one('[aria-label="Edit Mod"]');
+      expect(shortcut(mod(), 'Delete')).toBe(false);
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+      press(mod());
+      expect(shortcut(mod(), 'Delete')).toBe(true);
+      expect(wheels(props.panel)).toEqual(['bend']);
+      expect(kind()).toBe('Panel');
+      // (the control pressed is gone and took focus with it: focus stays in the editor, so Ctrl+Z works at once)
+      expect(document.activeElement).toBe(one('.wm-editor'));
+      shortcut(document.activeElement!, 'z', { ctrl: true });
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+      press(one('[aria-label="Edit Bend"]'));
+      shortcut(one('[aria-label="Edit Bend"]'), 'Backspace');
+      expect(wheels(props.panel)).toEqual(['mod']);
+      press(button('Undo'));
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+    });
+    it('leave a text field its own keys: no undo, redo or delete from inside one', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(one('[aria-label="Edit Mod"]'));
+      type(labelField(), 'Depth');
+      const before = props.panel;
+      for (const k of ['Delete', 'Backspace']) expect(shortcut(labelField(), k), k).toBe(false);
+      expect(shortcut(labelField(), 'z', { ctrl: true })).toBe(false);
+      expect(shortcut(one('.inspector select'), 'Delete')).toBe(false);
+      expect(props.panel).toBe(before);
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+    });
+    it('does nothing for a key pressed outside the editor', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(one('[aria-label="Edit Mod"]'));
+      expect(shortcut(document.body, 'Delete')).toBe(false);
+      expect(wheels(props.panel)).toEqual(['bend', 'mod']);
+    });
+  });
 });

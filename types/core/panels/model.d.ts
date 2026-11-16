@@ -104,5 +104,7 @@ export declare const panelRow: (id: string) => string;
 export declare const isGroup: (node: PanelNode) => node is Group;
 /** How deep groups nest, a template's children counted where they are used. */
 export declare const MAX_DEPTH = 16;
+/** The most columns a grid has, and the furthest cell. */
+export declare const MAX_GRID = 64;
 /** A panel from what was kept: anything. Junk is dropped field by field; what has no id is no panel. */
 export declare function readPanel(v: unknown): Panel | null;

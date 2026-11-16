@@ -49,3 +49,12 @@ export declare function ofKind(binding: Binding, kind: Binding['kind']): Binding
  * group may not.
  */
 export declare function nameProblem(panel: Panel, path: NodePath, wanted: string): string | undefined;
+/** The plain number fields the editor reads strictly: where a control starts, a key or a note, a pad's notes, and how far a control spans a grid. */
+export type NumberField = 'start' | 'note' | 'notes' | 'span';
+/**
+ * Why a text typed into a plain number field can't be taken, in words; undefined when it can. The reader keeps a value
+ * only inside its range, so the editor takes the text as written or not at all: a word, a fraction where a whole number
+ * is wanted, or a number out of range is a problem here, never turned into another number. An empty text is no problem
+ * (it clears the field), and a pad's notes are a list, each held to a note's range.
+ */
+export declare function numberProblem(field: NumberField, text: string): string | undefined;
