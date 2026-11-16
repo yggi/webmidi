@@ -10,6 +10,7 @@ export * from './port';
 export * from './routing';
 export * from './clock';
 export * from './thru';
+export * from './link';
 export * from './bend';
 export * from './rotation';
 export * from './out';

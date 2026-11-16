@@ -1,0 +1,2 @@
+### Added
+- Core: `LinkMeter`, `linkTier` and `linkReport` (`link.ts`, yggi/webmidi#75, decision 009): the MIDI link measured from the times a frontend gives it, as a loop and the page lag (one way is the loop's half, an assumption), its jitter, drift, loss, order, duplicates and outliers, whether timestamps are honoured, two tiers (scheduled, played; the limits are speculative) and a JSON report. `nearestRank` is `thru.ts`'s percentile, shared.
