@@ -1,0 +1,3 @@
+### Added
+
+- **`MidiOut.panic` takes a `tail`, and `MidiOut.sweep`** (decision 008; yggi/jambot#680): `panic(now, toDeviceMs, { tail })` lets notes already sent ahead sound on for up to `tail` seconds (each released at its own end, a key two notes hold once, a bend put back after the last, no All notes off); `tail` 0, the default, is the cut it was, and `Infinity` lets every note sound out. `sweep(now, toDeviceMs, channels?)` sends All notes off, All sound off and sustain off on each channel (all sixteen by default), now, from nothing `MidiOut` knows, for a panic button after a reload or a replug; it counts as no use of a channel. Additive: a call without the new option sends what it sent, and nothing breaks a frontend's code.

@@ -228,6 +228,98 @@ describe('MidiOut', () => {
   });
 });
 
+describe('MidiOut: a tail, and a sweep', () => {
+  it('lets notes sent ahead sound out for the tail, and cuts what would sound past it: no All notes off, a note-off at each end', () => {
+    const { midi, sent } = made();
+    midi.play(note('lead', 60, 0, 0.5), toDeviceMs);
+    midi.play(note('bass', 40, 0.4, 10), toDeviceMs);
+    midi.panic(0.1, toDeviceMs, { tail: 1 });
+    expect(sent.slice(2)).toEqual([
+      { data: [NOTE_OFF | 0, 60, 0], timestamp: 500 },
+      { data: [NOTE_OFF | 1, 40, 0], timestamp: 1100 },
+    ]);
+    sent.length = 0;
+    midi.advance(20, toDeviceMs);
+    expect(sent).toEqual([]);
+  });
+
+  it('with no tail, or a tail of 0, is the cut it was: All notes off now and a note-off for each note held', () => {
+    for (const options of [undefined, { tail: 0 }]) {
+      const { midi, sent } = made();
+      midi.play(note('lead', 60, 0, 10), toDeviceMs);
+      midi.panic(0.1, toDeviceMs, options);
+      expect(sent.slice(1)).toEqual([
+        { data: [CC | 0, ALL_NOTES_OFF, 0], timestamp: 100 },
+        { data: [NOTE_OFF | 0, 60, 0], timestamp: 100 },
+      ]);
+    }
+  });
+
+  it('releases a key held by two notes once, when the last ends, and never before its own note-on', () => {
+    const { midi, sent } = made();
+    midi.play(note('lead', 60, 0, 1), toDeviceMs);
+    midi.play(note('lead', 60, 0.5, 1), toDeviceMs); // retriggers at 0.5, held to 1.5
+    midi.panic(0.2, toDeviceMs, { tail: Infinity });
+    const offs = sent.filter((m) => m.data[0] === NOTE_OFF && m.timestamp! > 500);
+    expect(offs).toEqual([{ data: [NOTE_OFF | 0, 60, 0], timestamp: 1500 }]);
+  });
+
+  it('puts a bend back to the centre after the last note of its channel has sounded out', () => {
+    const { midi, sent } = made();
+    midi.play(note('lead', 60, 0, 1, { freq: 261.6 * 1.03 }), toDeviceMs);
+    sent.length = 0;
+    midi.panic(0.2, toDeviceMs, { tail: 5 });
+    const centre = sent.find((m) => (m.data[0] & 0xf0) === BEND);
+    expect(centre).toBeDefined();
+    expect(centre!.timestamp).toBeGreaterThanOrEqual(1000);
+  });
+
+  it('sweeps every channel by default with All notes off, All sound off and sustain off, now, whatever was played', () => {
+    const { midi, sent } = made();
+    midi.sweep(0.25, toDeviceMs);
+    expect(sent).toHaveLength(48);
+    for (let c = 0; c < 16; c++)
+      expect(sent.filter((m) => (m.data[0] & 0x0f) === c)).toEqual([
+        { data: [CC | c, 123, 0], timestamp: 250 },
+        { data: [CC | c, 120, 0], timestamp: 250 },
+        { data: [CC | c, 64, 0], timestamp: 250 },
+      ]);
+  });
+
+  it('sweeps only the channels it is given, 1 to 16, and clamps a timestamp before now to zero', () => {
+    const { midi, sent } = made();
+    midi.sweep(1, (s) => s * 1000 - 5000, [1, 10]);
+    expect(sent.map((m) => [m.data[0] & 0x0f, m.data[1], m.timestamp])).toEqual([
+      [0, 123, 0],
+      [0, 120, 0],
+      [0, 64, 0],
+      [9, 123, 0],
+      [9, 120, 0],
+      [9, 64, 0],
+    ]);
+  });
+
+  it('sweeps with no port, or a port that throws, without a sound or an error', () => {
+    new MidiOut().sweep(0, toDeviceMs);
+    const midi = new MidiOut({
+      send: () =>
+        void (() => {
+          throw new Error('gone');
+        })(),
+    });
+    expect(() => midi.sweep(0, toDeviceMs)).not.toThrow();
+  });
+
+  it('a sweep is no use of a channel: a stop after it sends All notes off only where notes were played', () => {
+    const { midi, sent } = made();
+    midi.sweep(0, toDeviceMs);
+    sent.length = 0;
+    midi.play(note('lead', 60, 0, 1), toDeviceMs);
+    midi.panic(0.1, toDeviceMs);
+    expect([...allNotesOffChannels(sent)]).toEqual([0]);
+  });
+});
+
 describe('MidiOut: bends', () => {
   const at19 = (k: number) => 440 * Math.pow(2, k / 19);
 
