@@ -90,6 +90,20 @@ export interface OutOptions {
   readonly rotate: readonly number[] | null;
 }
 
+/** How `panic` silences. */
+export interface PanicOptions {
+  /**
+   * How long, in seconds, notes already sent ahead may sound on: each is released at its own end, but no later than
+   * `now + tail`. 0 (the default) cuts at once, with All notes off; `Infinity` lets every note sound out. A note-off
+   * sent ahead can't be taken back, so a long tail is for notes within the look-ahead.
+   */
+  readonly tail?: number;
+}
+
+const ALL_CHANNELS: readonly number[] = Array.from({ length: 16 }, (_, i) => i + 1);
+/** What a sweep says on a channel: All notes off, All sound off, sustain pedal off. */
+const SWEEP = [ALL_NOTES_OFF, 120, 64] as const;
+
 export class MidiOut {
   #port: MidiPort | null;
   #options: OutOptions = { drums: {}, bendRange: 2, rotate: null };
@@ -150,9 +164,23 @@ export class MidiOut {
    * note-off for every note still held (at `now`, or at its start for one struck ahead), the bends put back; then
    * what's held is forgotten. Nothing goes later than the notes already sent ahead, so what plays next isn't cut.
    */
-  panic(now: number, toDeviceMs: ToDeviceMs): void {
-    this.#silence(now, toDeviceMs);
+  panic(now: number, toDeviceMs: ToDeviceMs, options: PanicOptions = {}): void {
+    this.#silence(now, toDeviceMs, Math.max(0, options.tail ?? 0));
     this.#reset();
+  }
+
+  /**
+   * All notes off, All sound off and sustain off on each of `channels` (1–16; all sixteen by default), now, from nothing
+   * this knows: after a reload, a replug, or a note left sounding by something else, where `panic` has no record of
+   * what to release. It cuts at once and forgets nothing (follow a `panic` with it: the state-based silence first), and
+   * counts as no use of a channel, so a later `panic` sends All notes off only where notes were played.
+   */
+  sweep(now: number, toDeviceMs: ToDeviceMs, channels: readonly number[] = ALL_CHANNELS): void {
+    const ms = Math.max(0, toDeviceMs(now));
+    for (const c of channels) {
+      const status = CONTROL_CHANGE | nibble(c);
+      for (const controller of SWEEP) this.#sendAt([status, controller, 0], ms, false);
+    }
   }
 
   /** Forget what's held and what was sent, as after All notes off from elsewhere, or for another port. */
@@ -277,19 +305,28 @@ export class MidiOut {
 
   // All notes off on every channel sent on now, a note-off for every note held (one struck ahead at its start, which
   // All notes off now can't reach), and a bend back to the centre where one was left off it, after any sent ahead
-  #silence(now: number, toDeviceMs: ToDeviceMs): void {
-    for (const c of this.#used) this.#send([CONTROL_CHANGE | c, ALL_NOTES_OFF, 0], now, toDeviceMs);
+  // With a tail, notes sound on to their ends, but no later than `now + tail`: each is released then, once (a key two
+  // notes hold is released when the last ends), and no All notes off goes, which would cut them at once.
+  #silence(now: number, toDeviceMs: ToDeviceMs, tail: number): void {
+    if (tail === 0) for (const c of this.#used) this.#send([CONTROL_CHANGE | c, ALL_NOTES_OFF, 0], now, toDeviceMs);
     for (const o of this.#offs) if (o.at > now) this.#struck.push(o);
+    const last = new Map<number, number>();
     for (const [key, holders] of this.#open) {
       const [channel, note] = key.split(':').map(Number) as [number, number];
-      for (const at of new Set(holders.map((h) => Math.max(now, h.start)))) {
+      const ends = new Set<number>();
+      for (const h of holders) {
+        if (tail > 0 && holders.some((o) => o !== h && o.start <= h.end && h.end < o.end)) continue;
+        ends.add(Math.max(now, h.start, Math.min(h.end, now + tail)));
+      }
+      for (const at of ends) {
         const ms = this.#note([NOTE_OFF | channel, note, 0], key, at, toDeviceMs);
         if (at > now) this.#struck.push({ key, at, ms });
+        last.set(channel, Math.max(at, last.get(channel) ?? at));
       }
     }
     for (const [c, v] of this.#bend) {
       if (v === BEND_CENTRE) continue;
-      const at = Math.max(now, this.#bendAt.get(c) ?? now);
+      const at = Math.max(now, this.#bendAt.get(c) ?? now, last.get(c) ?? now);
       this.#send(bendMessage(c + 1, BEND_CENTRE), at, toDeviceMs);
       if (at > now) this.#bentBack.set(c, at);
     }
@@ -307,9 +344,9 @@ export class MidiOut {
     return ms;
   }
 
-  #sendAt(data: readonly number[], ms: number): void {
+  #sendAt(data: readonly number[], ms: number, use = true): void {
     if (!this.#port) return;
-    this.#used.add(data[0]! & 0x0f);
+    if (use) this.#used.add(data[0]! & 0x0f);
     try {
       this.#port.send(data, ms);
     } catch {

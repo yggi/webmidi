@@ -10,6 +10,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
+## v0.6.0 — 2026-11-16
+
+Silencing in two parts (decision 008), for Jambot's move onto `MidiOut` (yggi/jambot#680): `panic` takes a `tail`, and `sweep` is a panic button that needs no record of what was sent. Additive, and a call without the new option sends what it sent; nothing on the wire changes and nothing breaks a frontend's code, so it is a minor version for the new API.
+
+### Added
+- **`MidiOut.panic` takes a `tail`, and `MidiOut.sweep`** (decision 008; yggi/jambot#680): `panic(now, toDeviceMs, { tail })` lets notes already sent ahead sound on for up to `tail` seconds (each released at its own end, a key two notes hold once, a bend put back after the last, no All notes off); `tail` 0, the default, is the cut it was, and `Infinity` lets every note sound out. `sweep(now, toDeviceMs, channels?)` sends All notes off, All sound off and sustain off on each channel (all sixteen by default), now, from nothing `MidiOut` knows, for a panic button after a reload or a replug; it counts as no use of a channel. Additive: a call without the new option sends what it sent, and nothing breaks a frontend's code.
+
 ## v0.5.0 — 2026-11-16
 
 Control panels and a roomier patchbay: panels of controls kept as data (`@yggi/webmidi/panels`), played (`@yggi/webmidi/ui/panels`), edited, and made rows and columns of the matrix; every channel message read and written; an output's details in a dialog; a port found by its name. Nothing on the wire changes except for one case (a kept id that is another device's now, under *Changed*). `PatchMatrix` no longer docks the inspector or lists a kit's members as rows, which a frontend that did must follow, so it is a minor version: the migration is under *Changed*.

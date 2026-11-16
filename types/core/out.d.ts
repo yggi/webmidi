@@ -47,6 +47,15 @@ export interface OutOptions {
     /** The channels every voice's notes rotate over (one per sounding note, MPE-style, for microtonal pieces), or null: each voice on its channel. */
     readonly rotate: readonly number[] | null;
 }
+/** How `panic` silences. */
+export interface PanicOptions {
+    /**
+     * How long, in seconds, notes already sent ahead may sound on: each is released at its own end, but no later than
+     * `now + tail`. 0 (the default) cuts at once, with All notes off; `Infinity` lets every note sound out. A note-off
+     * sent ahead can't be taken back, so a long tail is for notes within the look-ahead.
+     */
+    readonly tail?: number;
+}
 export declare class MidiOut {
     #private;
     /** Told once when notes with different bends overlap on one channel (a microtonal piece without rotation). */
@@ -61,7 +70,14 @@ export declare class MidiOut {
      * note-off for every note still held (at `now`, or at its start for one struck ahead), the bends put back; then
      * what's held is forgotten. Nothing goes later than the notes already sent ahead, so what plays next isn't cut.
      */
-    panic(now: number, toDeviceMs: ToDeviceMs): void;
+    panic(now: number, toDeviceMs: ToDeviceMs, options?: PanicOptions): void;
+    /**
+     * All notes off, All sound off and sustain off on each of `channels` (1–16; all sixteen by default), now, from nothing
+     * this knows: after a reload, a replug, or a note left sounding by something else, where `panic` has no record of
+     * what to release. It cuts at once and forgets nothing (follow a `panic` with it: the state-based silence first), and
+     * counts as no use of a channel, so a later `panic` sends All notes off only where notes were played.
+     */
+    sweep(now: number, toDeviceMs: ToDeviceMs, channels?: readonly number[]): void;
     /** Forget what's held and what was sent, as after All notes off from elsewhere, or for another port. */
     forget(): void;
     /**
