@@ -1,3 +1,0 @@
-### Changed
-
-- **`PanelEditor` edits what is chosen in a sheet docked to the bottom where the two columns stack** (yggi/webmidi#69): below 760 px of the editor's own width (a phone) the inspector followed the whole panel, 450 px under the stage, so a control chosen and its binding meant scrolling down and back for each field. While something is chosen the inspector is now a sheet at the bottom of the editor, at most 40% of the viewport high, with the chosen thing's name and a close control (44 px), its bindings first and the other fields below, scrolling inside it; the control chosen is scrolled clear of the sheet. With nothing chosen the panel's own fields stay where they are, and wider than 760 px nothing changes. Nothing on the wire changes.
