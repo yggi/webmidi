@@ -2,9 +2,25 @@
  * A panel edited (decision 005, the editor's pure part): each operation takes a panel and a place (`NodePath`) and
  * gives a new panel, so an editor keeps nothing of its own but what is selected. A place inside a template is the
  * template's, so a change there is a change to every group that uses it; adding into a group that uses a template
- * adds to the template. An operation on a place that isn't there gives the panel as it was.
+ * adds to the template. An operation on a place that isn't there gives the panel as it was. A node moves among its
+ * siblings, or into another group or out of its own, as one operation (`moveNode`), refused in words (`moveProblem`)
+ * wherever it would change what the node means or what the reader keeps.
  */
-import { BINDING_KINDS, isGroup, MAX_GRID, type Binding, type Control, type ControlType, type Group, type NodePath, type Panel, type PanelNode } from './model';
+import { EXPRESSION_FUNCTIONS } from './expr';
+import {
+  BINDING_KINDS,
+  isGroup,
+  MAX_DEPTH,
+  MAX_GRID,
+  type Binding,
+  type Control,
+  type ControlType,
+  type Group,
+  type NodePath,
+  type Num,
+  type Panel,
+  type PanelNode,
+} from './model';
 
 export const samePath = (a: NodePath | null | undefined, b: NodePath | null | undefined): boolean =>
   !!a && !!b && a.template === b.template && a.at.length === b.at.length && a.at.every((n, i) => n === b.at[i]);
@@ -74,14 +90,168 @@ export function removeNode(panel: Panel, path: NodePath): Panel {
   return withChildren(panel, parentOf(path), (children) => children.filter((_, i) => i !== indexOf(path)));
 }
 
-/** A node moved among its siblings, one earlier (`-1`) or later (`1`): the panel, and its place now (as it was at an end). */
-export function moveNode(panel: Panel, path: NodePath, by: -1 | 1): { panel: Panel; path: NodePath } {
-  const siblings = childrenAt(panel, parentOf(path));
+/** Where a node goes: among a container's children (`containerOf`), at the index it will have there once it has moved. */
+export interface Destination {
+  readonly container: NodePath;
+  readonly index: number;
+}
+
+/** A path moved for an insertion at `index` among `container`'s children (`by` 1), or the taking out of the child there (`by` -1). */
+function shifted(path: NodePath, container: NodePath, index: number, by: 1 | -1): NodePath {
+  const n = container.at.length;
+  const inside = path.template === container.template && path.at.length > n && container.at.every((x, i) => path.at[i] === x);
+  return inside && path.at[n]! >= index + (by === 1 ? 0 : 1) ? { ...path, at: path.at.map((x, i) => (i === n ? x + by : x)) } : path;
+}
+
+/** The names an expression, or the `{…}` of a label, reads: not its functions. */
+function namesIn(source: Num | undefined, braced = false): string[] {
+  if (typeof source !== 'string') return [];
+  const parts = braced ? [...source.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]!) : [source];
+  return parts.flatMap((p) => p.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []).filter((n) => !EXPRESSION_FUNCTIONS.includes(n));
+}
+
+/** The parameters a node reads from the place it stands in: its own repeat's are its own. */
+function freeNames(node: PanelNode): Set<string> {
+  if (!isGroup(node)) {
+    const bound = (node.bind ?? []).flatMap((b) => [b.number, b.channel, ...(b.range ?? [])]);
+    return new Set([...namesIn(node.label, true), ...bound.flatMap((v) => namesIn(v))]);
+  }
+  const inner = new Set([
+    ...namesIn(node.label, true),
+    ...Object.values(node.overrides ?? {}).flatMap((o) => namesIn(o.label, true)),
+    ...namesIn(node.channel),
+    ...Object.values(node.with ?? {}).flatMap((v) => namesIn(v)),
+    ...(node.use === undefined ? (node.children ?? []).flatMap((c) => [...freeNames(c)]) : []),
+  ]);
+  if (node.repeat) inner.delete(node.repeat.name);
+  return new Set([...inner, ...namesIn(node.repeat?.from), ...namesIn(node.repeat?.to)]);
+}
+
+/** The parameters in scope for the children kept at a container: a template's, and the repeats of the groups on the way down. */
+function scopeOf(panel: Panel, container: NodePath): Set<string> {
+  const names = new Set(container.template === undefined ? [] : (panel.templates?.[container.template]?.params ?? []));
+  let children = top(panel, container) ?? [];
+  for (const i of container.at) {
+    const n = children[i];
+    if (!n || !isGroup(n)) break;
+    if (n.repeat) names.add(n.repeat.name);
+    children = n.children ?? [];
+  }
+  return names;
+}
+
+/** The templates a node uses, and those they use, and so on. */
+function usedBy(panel: Panel, node: PanelNode, seen = new Set<string>()): Set<string> {
+  if (!isGroup(node)) return seen;
+  if (node.use !== undefined) {
+    if (!seen.has(node.use)) {
+      seen.add(node.use);
+      for (const c of panel.templates?.[node.use]?.children ?? []) usedBy(panel, c, seen);
+    }
+  } else for (const c of node.children ?? []) usedBy(panel, c, seen);
+  return seen;
+}
+
+/** How many groups deep a node's own groups go: a control none, a group one more than its deepest child (a template's, counted for a group that uses one). */
+function height(panel: Panel, node: PanelNode, seen: readonly string[] = []): number {
+  if (!isGroup(node)) return 0;
+  if (node.use === undefined) return 1 + Math.max(0, ...(node.children ?? []).map((c) => height(panel, c, seen)));
+  if (seen.includes(node.use)) return 1;
+  return 1 + Math.max(0, ...(panel.templates?.[node.use]?.children ?? []).map((c) => height(panel, c, [...seen, node.use!])));
+}
+
+/** The depth the reader reads the children kept at a container at (top is 1); a template's are counted where it is used, the deepest use. */
+function depthAt(panel: Panel, container: NodePath, seen: readonly string[] = []): number {
+  if (container.template === undefined) return container.at.length + 1;
+  if (seen.includes(container.template)) return 1;
+  const template = container.template;
+  let base = 1;
+  const walk = (children: readonly PanelNode[], home: NodePath) =>
+    children.forEach((n, i) => {
+      if (!isGroup(n)) return;
+      if (n.use === template) base = Math.max(base, depthAt(panel, home, [...seen, template]) + 1);
+      if (n.use === undefined) walk(n.children ?? [], { ...home, at: [...home.at, i] });
+    });
+  walk(panel.children, { at: [] });
+  for (const [name, t] of Object.entries(panel.templates ?? {})) walk(t.children, { template: name, at: [] });
+  return base + container.at.length;
+}
+
+/**
+ * Why a node can't go among the children kept at a container, in words; undefined when it can. Not into itself or a
+ * group inside it, not where a sibling has its name (`nameProblem`'s rules: a control and a group share one key space,
+ * a control with no name is kept by its place), not where it would read a parameter that place doesn't have (a
+ * template's own, a repeat's: they are the same name in another place only by chance, so it is the name that is held),
+ * not into a template that it, or what it holds, uses, and not deeper than the reader reads (`MAX_DEPTH`).
+ */
+export function moveProblem(panel: Panel, path: NodePath, container: NodePath): string | undefined {
+  const node = nodeAt(panel, path);
+  if (!node) return undefined;
+  const siblings = childrenAt(panel, container);
+  if (!siblings) return 'That isn’t a group.';
+  if (path.template === container.template && container.at.length >= path.at.length && path.at.every((x, i) => container.at[i] === x))
+    return 'A group can’t go into itself or into a group inside it.';
+  if (container.template !== undefined && usedBy(panel, node).has(container.template)) return 'That template would use itself.';
+  const wanted = isGroup(node) ? node.group : node.id;
+  const own = samePath(parentOf(path), container) ? indexOf(path) : -1;
+  const taken = wanted === undefined ? undefined : siblings.find((n, i) => i !== own && (isGroup(n) ? n.group : n.id) === wanted);
+  if (taken)
+    return `“${wanted}” is already the name of a ${isGroup(taken) ? 'group' : 'control'} in ${container.at.length ? 'the group' : container.template === undefined ? 'the panel' : 'the template'}.`;
+  const scope = scopeOf(panel, container);
+  const missing = [...freeNames(node)].find((n) => !scope.has(n));
+  if (missing !== undefined) return `It uses “${missing}”, which is not set in that place.`;
+  if (depthAt(panel, container) + height(panel, node) > MAX_DEPTH) return `Groups nest at most ${MAX_DEPTH} deep.`;
+  return undefined;
+}
+
+/**
+ * A node moved: one earlier (`-1`) or later (`1`) among its siblings, or to a destination, into any container (its own
+ * parent's too: a place among its siblings is one case of it). The panel, and the node's place now; as it was at an end,
+ * for a place that isn't there, or when `moveProblem` has something to say.
+ */
+export function moveNode(panel: Panel, path: NodePath, to: -1 | 1 | Destination): { panel: Panel; path: NodePath } {
+  const node = nodeAt(panel, path);
+  const parent = parentOf(path);
   const from = indexOf(path);
-  const to = from + by;
-  if (!siblings || !siblings[from] || to < 0 || to >= siblings.length) return { panel, path };
-  const moved = withChildren(panel, parentOf(path), (c) => c.map((n, i) => (i === from ? c[to]! : i === to ? c[from]! : n)));
-  return { panel: moved, path: { ...path, at: [...path.at.slice(0, -1), to] } };
+  const siblings = childrenAt(panel, parent);
+  if (!node || !siblings) return { panel, path };
+  const where: Destination = typeof to === 'number' ? { container: parent, index: from + to } : to;
+  const kept = samePath(where.container, parent) ? siblings.length - 1 : (childrenAt(panel, where.container)?.length ?? 0);
+  if (typeof to === 'number' && (where.index < 0 || where.index > kept)) return { panel, path };
+  if (moveProblem(panel, path, where.container) !== undefined) return { panel, path };
+  const index = Math.max(0, Math.min(kept, where.index));
+  // inserted first, so the container's own place can't have moved; then the node taken from where it was, shifted for that
+  const at = samePath(where.container, parent) && index > from ? index + 1 : index;
+  const put = insertNode(panel, where.container, node, at);
+  const old = shifted(path, where.container, at, 1);
+  const moved = shifted(put.path, parentOf(old), indexOf(old), -1);
+  return { panel: removeNode(put.panel, old), path: moved };
+}
+
+/** Where moving a node out of its group goes: right after that group, in the container the group is in; none at the top of the panel or a template. */
+export function moveOutOf(panel: Panel, path: NodePath): Destination | undefined {
+  const parent = parentOf(path);
+  return nodeAt(panel, path) && parent.at.length ? { container: parentOf(parent), index: indexOf(parent) + 1 } : undefined;
+}
+
+/** The groups a node can go into, by name (a group of a template, and one that uses it, are the template's body): not the one it is in, nor one it is refused (`moveProblem`). */
+export function moveTargets(panel: Panel, path: NodePath): { group: NodePath; name: string }[] {
+  const home = containerOf(panel, parentOf(path));
+  const out: { group: NodePath; name: string }[] = [];
+  const walk = (template: string | undefined, children: readonly PanelNode[], at: number[], names: string[]) =>
+    children.forEach((n, i) => {
+      if (!isGroup(n)) return;
+      const group: NodePath = { ...(template === undefined ? {} : { template }), at: [...at, i] };
+      const here = [...names, n.group];
+      const container = containerOf(panel, group);
+      if (container && !(home && samePath(container, home)) && !out.some((o) => samePath(containerOf(panel, o.group), container)) && !moveProblem(panel, path, container))
+        out.push({ group, name: `${here.join(' / ')}${n.use === undefined ? '' : ` (template ${n.use})`}` });
+      if (n.use === undefined) walk(template, n.children ?? [], [...at, i], here);
+    });
+  if (!nodeAt(panel, path)) return out;
+  walk(undefined, panel.children, [], []);
+  for (const [name, t] of Object.entries(panel.templates ?? {})) walk(name, t.children, [], [`template ${name}`]);
+  return out;
 }
 
 /** A name no sibling has: the base, or the base with the first free number after it (`knob`, `knob2`). */
