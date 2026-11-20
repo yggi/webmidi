@@ -7,7 +7,9 @@
    * through `readPanel`, so what it gives is always a panel that keeps; it keeps only what is chosen, and what to undo.
    * Given `onsend`, a Try toggle plays the panel as it stands (a press plays and chooses nothing) through it; without
    * one there is nothing to try and the editor only edits. A node moves into a group of its choice or out of its own
-   * (`moveNode`), refused in words where the move would change what it means.
+   * (`moveNode`), refused in words where the move would change what it means. Where the two columns stack (a phone),
+   * what is chosen is edited in a sheet docked to the bottom, with its name and a close control, its bindings first, so
+   * the control and its first binding are in view at once; the panel's own fields stay where they are.
    */
 import { type Panel } from '../../core/panels/index';
 interface Props {

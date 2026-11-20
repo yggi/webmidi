@@ -8,7 +8,9 @@
    * through `readPanel`, so what it gives is always a panel that keeps; it keeps only what is chosen, and what to undo.
    * Given `onsend`, a Try toggle plays the panel as it stands (a press plays and chooses nothing) through it; without
    * one there is nothing to try and the editor only edits. A node moves into a group of its choice or out of its own
-   * (`moveNode`), refused in words where the move would change what it means.
+   * (`moveNode`), refused in words where the move would change what it means. Where the two columns stack (a phone),
+   * what is chosen is edited in a sheet docked to the bottom, with its name and a close control, its bindings first, so
+   * the control and its first binding are in view at once; the panel's own fields stay where they are.
    */
   import {
     BINDING_KINDS,
@@ -82,6 +84,21 @@
   /** The instances of the control chosen, in the order drawn. */
   const instances = $derived(made.controls.filter((c) => samePath(c.source, selected)));
   const uid = $props.id();
+  let editor: HTMLElement | undefined = $state();
+  let sheet: HTMLElement | undefined = $state();
+  /** What the sheet calls what is chosen. */
+  const what = $derived(!node ? '' : isGroup(node) ? node.group : node.label || node.id || node.type);
+  /** Closed: nothing is chosen, and focus stays in the editor, so its keys still work. */
+  function close() {
+    selected = null;
+    note = null;
+    editor?.focus();
+  }
+  // a thing chosen where the inspector is a sheet is kept clear of it: scrolled into view above it
+  $effect(() => {
+    if (!selected || !sheet || getComputedStyle(sheet).position !== 'sticky') return;
+    editor?.querySelector('.stage .picked')?.scrollIntoView?.({ block: 'nearest' });
+  });
 
   // another panel given: nothing of the one before is chosen, or to undo
   let editing: string | null = null;
@@ -321,7 +338,7 @@
 {/snippet}
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="wm-editor" tabindex="-1" onkeydown={shortcut}>
+<div class="wm-editor" tabindex="-1" bind:this={editor} onkeydown={shortcut}>
   <div class="stage">
     <div class="tools" role="toolbar" aria-label="Add to the panel">
       <span class="eyebrow">Add</span>
@@ -342,7 +359,13 @@
     <PanelView bind:this={stage} {panel} onsend={onsend ?? (() => {})} bar={false} {selected} onselect={trying ? undefined : (source) => ((selected = source), (note = null))} />
   </div>
 
-  <aside class="inspector" aria-label="What is chosen">
+  <aside class="inspector" class:sheet={!!selected && !!node} aria-label="What is chosen" bind:this={sheet}>
+    {#if selected && node}
+      <div class="sheet-head">
+        <span class="what">{what}</span>
+        <button type="button" class="close" aria-label="Close" onclick={close}>×</button>
+      </div>
+    {/if}
     {#if here && note}<p class="note" role="alert">{note.message}</p>{/if}
     {#if selected && node && !isGroup(node)}
       {@const c = node as Control}
@@ -395,98 +418,100 @@
       </div>
 
       {#if c.type !== 'label' && c.type !== 'keyboard' && c.type !== 'pads'}
-        <p class="eyebrow">Sends and receives</p>
-        {#each c.bind ?? [] as b, i (i)}
-          <div class="binding" role="group" aria-label="Binding {i + 1}">
-            <div class="line">
-              <select aria-label="What it speaks" value={b.kind} onchange={(e) => binding(i, (x) => ofKind(x, text(e) as BindingKind))}>
-                {#each BINDING_KINDS as kind (kind)}<option value={kind}>{KINDS[kind]}</option>{/each}
-              </select>
-              {#if numbered(b.kind)}
+        <div class="sends">
+          <p class="eyebrow">Sends and receives</p>
+          {#each c.bind ?? [] as b, i (i)}
+            <div class="binding" role="group" aria-label="Binding {i + 1}">
+              <div class="line">
+                <select aria-label="What it speaks" value={b.kind} onchange={(e) => binding(i, (x) => ofKind(x, text(e) as BindingKind))}>
+                  {#each BINDING_KINDS as kind (kind)}<option value={kind}>{KINDS[kind]}</option>{/each}
+                </select>
+                {#if numbered(b.kind)}
+                  <input
+                    class="mono"
+                    aria-label="Number, or an expression"
+                    placeholder="number"
+                    value={b.number ?? ''}
+                    spellcheck="false"
+                    onchange={(e) =>
+                      settle(
+                        e,
+                        binding(i, (x) => set(x, 'number', toNum(text(e)))),
+                        b.number,
+                      )}
+                  />
+                {/if}
+                <button
+                  type="button"
+                  class="quiet x"
+                  aria-label="Remove binding {i + 1}"
+                  onclick={() =>
+                    control(
+                      'bind',
+                      (c.bind ?? []).filter((_, j) => j !== i),
+                    )}>×</button
+                >
+              </div>
+              <div class="line">
+                <span class="small">sends</span>
                 <input
-                  class="mono"
-                  aria-label="Number, or an expression"
-                  placeholder="number"
-                  value={b.number ?? ''}
+                  class="mono short"
+                  aria-label="From"
+                  placeholder="0"
+                  value={b.range?.[0] ?? ''}
                   spellcheck="false"
                   onchange={(e) =>
                     settle(
                       e,
-                      binding(i, (x) => set(x, 'number', toNum(text(e)))),
-                      b.number,
+                      binding(i, (x) => set(x, 'range', range(x, toNum(text(e)), x.range?.[1]))),
+                      b.range?.[0],
                     )}
                 />
-              {/if}
-              <button
-                type="button"
-                class="quiet x"
-                aria-label="Remove binding {i + 1}"
-                onclick={() =>
-                  control(
-                    'bind',
-                    (c.bind ?? []).filter((_, j) => j !== i),
-                  )}>×</button
-              >
+                <span class="small">to</span>
+                <input
+                  class="mono short"
+                  aria-label="To"
+                  placeholder="max"
+                  value={b.range?.[1] ?? ''}
+                  spellcheck="false"
+                  onchange={(e) =>
+                    settle(
+                      e,
+                      binding(i, (x) => set(x, 'range', range(x, x.range?.[0], toNum(text(e))))),
+                      b.range?.[1],
+                    )}
+                />
+                <span class="small">ch</span>
+                <input
+                  class="mono short"
+                  aria-label="Channel"
+                  placeholder="—"
+                  value={b.channel ?? ''}
+                  spellcheck="false"
+                  onchange={(e) =>
+                    settle(
+                      e,
+                      binding(i, (x) => set(x, 'channel', toNum(text(e)))),
+                      b.channel,
+                    )}
+                />
+                {#if c.type === 'xy'}
+                  <select aria-label="Which value" value={b.axis ?? 'x'} onchange={(e) => binding(i, (x) => set(x, 'axis', text(e) === 'y' ? 'y' : undefined))}>
+                    <option value="x">across</option>
+                    <option value="y">up</option>
+                  </select>
+                {/if}
+              </div>
+              <p class="comes">{resolved(i, b)}</p>
             </div>
-            <div class="line">
-              <span class="small">sends</span>
-              <input
-                class="mono short"
-                aria-label="From"
-                placeholder="0"
-                value={b.range?.[0] ?? ''}
-                spellcheck="false"
-                onchange={(e) =>
-                  settle(
-                    e,
-                    binding(i, (x) => set(x, 'range', range(x, toNum(text(e)), x.range?.[1]))),
-                    b.range?.[0],
-                  )}
-              />
-              <span class="small">to</span>
-              <input
-                class="mono short"
-                aria-label="To"
-                placeholder="max"
-                value={b.range?.[1] ?? ''}
-                spellcheck="false"
-                onchange={(e) =>
-                  settle(
-                    e,
-                    binding(i, (x) => set(x, 'range', range(x, x.range?.[0], toNum(text(e))))),
-                    b.range?.[1],
-                  )}
-              />
-              <span class="small">ch</span>
-              <input
-                class="mono short"
-                aria-label="Channel"
-                placeholder="—"
-                value={b.channel ?? ''}
-                spellcheck="false"
-                onchange={(e) =>
-                  settle(
-                    e,
-                    binding(i, (x) => set(x, 'channel', toNum(text(e)))),
-                    b.channel,
-                  )}
-              />
-              {#if c.type === 'xy'}
-                <select aria-label="Which value" value={b.axis ?? 'x'} onchange={(e) => binding(i, (x) => set(x, 'axis', text(e) === 'y' ? 'y' : undefined))}>
-                  <option value="x">across</option>
-                  <option value="y">up</option>
-                </select>
-              {/if}
-            </div>
-            <p class="comes">{resolved(i, b)}</p>
-          </div>
-        {/each}
-        {#if why.length}
-          <ul class="why" aria-label="Why it isn’t read">
-            {#each why as reason (reason)}<li>{reason}</li>{/each}
-          </ul>
-        {/if}
-        <div class="actions"><button type="button" onclick={() => control('bind', [...(c.bind ?? []), { kind: 'cc', number: 1 }])}>Add a binding</button></div>
+          {/each}
+          {#if why.length}
+            <ul class="why" aria-label="Why it isn’t read">
+              {#each why as reason (reason)}<li>{reason}</li>{/each}
+            </ul>
+          {/if}
+          <div class="actions"><button type="button" onclick={() => control('bind', [...(c.bind ?? []), { kind: 'cc', number: 1 }])}>Add a binding</button></div>
+        </div>
       {/if}
     {:else if selected && node && isGroup(node)}
       {@const g = node as Group}
@@ -596,10 +621,76 @@
     color: var(--_text);
     container-type: inline-size;
   }
+  .sheet-head {
+    display: none;
+  }
+  .sends {
+    display: grid;
+    gap: 10px;
+  }
+  /* where the columns stack: what is chosen is edited in a sheet docked to the bottom of the editor, at most 40% of the viewport high (the bound is 60%) */
   @container (max-width: 760px) {
     .stage,
     .inspector {
       grid-column: 1 / -1;
+    }
+    .inspector.sheet {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      box-sizing: border-box;
+      max-height: 40vh;
+      max-height: 40dvh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      gap: 8px;
+      padding-top: 0;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      border-radius: 12px 12px 0 0;
+      box-shadow: 0 -6px 18px rgb(0 0 0 / 0.18);
+    }
+    /* the head names it, so its kind's eyebrow goes; the bindings lead, the other fields follow */
+    .sheet > .eyebrow,
+    .sheet .field small {
+      display: none;
+    }
+    .sheet-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      order: -4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0 -12px;
+      padding: 0 4px 0 12px;
+      border-bottom: 1px solid var(--_line);
+      background: var(--_panel-2);
+    }
+    .sheet-head .what {
+      overflow: hidden;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sheet-head .close {
+      flex: none;
+      min-height: 44px;
+      min-width: 44px;
+      padding: 0;
+      border-color: transparent;
+      background: transparent;
+      font-size: 22px;
+    }
+    .sheet > .note {
+      order: -3;
+    }
+    .sheet > .scope {
+      order: -2;
+    }
+    .sheet > .sends {
+      order: -1;
     }
   }
   .stage {

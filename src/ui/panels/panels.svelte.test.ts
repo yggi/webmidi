@@ -613,6 +613,36 @@ describe('PanelEditor', () => {
     });
   });
 
+  describe('the inspector as a sheet, on a phone', () => {
+    // (the layout is the stylesheet's: below the container width where the columns stack, the inspector of what is chosen is docked to the bottom)
+    const source = readFileSync('src/ui/panels/PanelEditor.svelte', 'utf8');
+    it('names what is chosen and has a close control, which chooses nothing again and keeps focus in the editor', () => {
+      edit(EXAMPLE_PLAY);
+      expect(document.querySelector('.sheet-head')).toBeNull();
+      press(one('[aria-label="Edit Mod"]'));
+      expect(one('.sheet-head .what').textContent).toBe('Mod');
+      expect(one('.inspector').classList.contains('sheet')).toBe(true);
+      press(one('.sheet-head button[aria-label="Close"]'));
+      expect(one('.inspector .eyebrow').textContent).toBe('Panel');
+      expect(document.querySelector('.sheet-head')).toBeNull();
+      expect(one('.inspector').classList.contains('sheet')).toBe(false);
+      expect(document.activeElement).toBe(one('.wm-editor'));
+      // a group is named by its name, a control with no label by its name or its kind
+      press(one('section[aria-label="WHEELS"]'));
+      expect(one('.sheet-head .what').textContent).toBe('wheels');
+    });
+    it('is a sheet only while something is chosen: the panel’s own fields stay where they are', () => {
+      edit(EXAMPLE_PLAY);
+      expect(one('.inspector').classList.contains('sheet')).toBe(false);
+      expect(source).toMatch(/@container \(max-width: 760px\)[^]*\.inspector\.sheet \{[^}]*position: sticky;[^}]*bottom: 0;/);
+    });
+    it('is at most 40% of the viewport high (the bound is 60%), and its close control at least 44 px', () => {
+      const height = [...source.matchAll(/max-height: (\d+)dvh/g)].map((m) => Number(m[1]));
+      expect(height).toEqual([40]);
+      expect(source).toMatch(/\.sheet-head \.close \{[^}]*min-height: 44px;[^}]*min-width: 44px;/);
+    });
+  });
+
   describe('undo, redo and the keyboard', () => {
     /** A key pressed on an element, with the modifiers; says whether the page's own default was left alone. */
     const shortcut = (el: Element, k: string, mods: { ctrl?: boolean; meta?: boolean; shift?: boolean } = {}) => {
