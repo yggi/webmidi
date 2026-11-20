@@ -271,8 +271,8 @@ describe('@yggi/webmidi/ui/panels', () => {
 
 describe('PanelEditor', () => {
   /** A panel being edited, each change kept as a frontend would keep it. */
-  function edit(panel: Panel) {
-    const props = $state({ panel, onchange: (next: Panel) => void (props.panel = next) });
+  function edit(panel: Panel, onsend?: (data: number[]) => void) {
+    const props = $state({ panel, onchange: (next: Panel) => void (props.panel = next), onsend });
     mounted.push(mount(PanelEditor, { target: document.body, props }));
     flushSync();
     return props;
@@ -467,6 +467,149 @@ describe('PanelEditor', () => {
     });
     it('Spans rows: a word or 0 or over the grid’s most is not taken', () => {
       refuses('mod', 'Spans rows', ['abc', '0', '65'], /1 to 64/, '', '3', (c) => (c.cell as { rows?: number } | undefined)?.rows, 3);
+    });
+  });
+
+  describe('try a control while editing', () => {
+    it('shows no Try where the editor has nowhere to send, and is as it was: a press chooses', () => {
+      edit(EXAMPLE_PLAY);
+      expect(button('Try')).toBeUndefined();
+      press(one('[aria-label="Edit Mod"]'));
+      expect(one('.inspector .eyebrow').textContent).toBe('Control');
+    });
+    it('plays a control pressed while it is on, through onsend, and chooses nothing; off, a press chooses again', () => {
+      const sent: number[][] = [];
+      edit(EXAMPLE_PLAY, (data) => void sent.push(data));
+      expect(button('Try')!.getAttribute('aria-pressed')).toBe('false');
+      press(button('Try'));
+      expect(button('Try')!.getAttribute('aria-pressed')).toBe('true');
+      expect(all('[aria-label="Edit Mod"]')).toEqual([]);
+      key(slider('Mod'), 'ArrowUp');
+      expect(sent.length).toBe(1);
+      expect(sent[0]!.slice(0, 2)).toEqual([0xb0, 1]);
+      expect(one('.inspector .eyebrow').textContent).toBe('Panel');
+      press(button('Try'));
+      expect(button('Try')!.getAttribute('aria-pressed')).toBe('false');
+      press(one('[aria-label="Edit Mod"]'));
+      expect(one('.inspector .eyebrow').textContent).toBe('Control');
+      expect(sent.length).toBe(1);
+    });
+    it('keeps what was chosen, and its inspector, while it is on: a press plays and doesn’t change the choice', () => {
+      edit(EXAMPLE_PLAY, () => {});
+      press(one('[aria-label="Edit Mod"]'));
+      press(button('Try'));
+      key(slider('Bend'), 'ArrowUp');
+      expect(one('.inspector .eyebrow').textContent).toBe('Control');
+      expect(all('.ctl.picked').length).toBe(1);
+      expect((all('.inspector label.field input')[0] as HTMLInputElement).value).toBe('Mod');
+    });
+    it('releases every note held when it is turned off', () => {
+      const sent: number[][] = [];
+      edit(EXAMPLE_PLAY, (data) => void sent.push(data));
+      press(button('Try'));
+      key(one('button[aria-label="C4"]'), 'Enter');
+      expect(sent).toEqual([[0x90, 60, 100]]);
+      press(button('Try'));
+      expect(sent).toEqual([
+        [0x90, 60, 100],
+        [0x80, 60, 0],
+      ]);
+    });
+    it('plays what an edit has just changed: the panel it plays is the panel it holds', () => {
+      const sent: number[][] = [];
+      edit(EXAMPLE_PLAY, (data) => void sent.push(data));
+      press(one('[aria-label="Edit Mod"]'));
+      type(one('[aria-label="Number, or an expression"]'), '21');
+      press(button('Try'));
+      key(slider('Mod'), 'ArrowUp');
+      expect(sent[0]!.slice(0, 2)).toEqual([0xb0, 21]);
+    });
+  });
+
+  describe('move into a group or out of one', () => {
+    const into = () => one<HTMLSelectElement>('select[aria-label="Move into"]');
+    const choose = (name: string) => {
+      const select = into();
+      select.value = [...select.options].find((o) => o.textContent?.trim() === name)!.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      flushSync();
+    };
+    const idsIn = (panel: Panel, at: number[]) => {
+      let nodes = panel.children as readonly { id?: string; group?: string; children?: unknown }[];
+      for (const i of at) nodes = nodes[i]!.children as typeof nodes;
+      return nodes.map((n) => n.id ?? n.group);
+    };
+    const kind = () => one('.inspector .eyebrow').textContent;
+    const shortcut = (el: Element, k: string) => {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true, cancelable: true }));
+      flushSync();
+    };
+
+    it('offers the groups a control can go into, by name, but the one it is in; and moves it, still chosen, as one step of Undo', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(one('[aria-label="Edit Mod"]'));
+      expect([...into().options].map((o) => o.textContent?.trim())).toEqual(['Move into…', 'tone', 'play', 'play / row']);
+      choose('tone');
+      expect(idsIn(props.panel, [0])).toEqual(['filter', 'volume', 'detune', 'mod']);
+      expect(idsIn(props.panel, [1])).toEqual(['bend']);
+      expect(kind()).toBe('Control');
+      expect((all('.inspector label.field input')[0] as HTMLInputElement).value).toBe('Mod');
+      expect(all('.ctl.picked').length).toBe(1);
+      // the choice is reset, and what is chosen can go out again; Undo takes it back in one step
+      expect(into().value).toBe('');
+      press(button('Move out'));
+      expect(idsIn(props.panel, [])).toEqual(['tone', 'mod', 'wheels', 'play']);
+      expect(kind()).toBe('Control');
+      press(button('Undo'));
+      expect(idsIn(props.panel, [0])).toEqual(['filter', 'volume', 'detune', 'mod']);
+      press(button('Undo'));
+      expect(props.panel).toEqual(EXAMPLE_PLAY);
+      expect((button('Undo') as HTMLButtonElement).disabled).toBe(true);
+    });
+    it('moves a group into another, and Ctrl+Z undoes the move', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(one('section[aria-label="WHEELS"]'));
+      expect(kind()).toBe('Group');
+      choose('tone');
+      expect(idsIn(props.panel, [])).toEqual(['tone', 'play']);
+      expect(idsIn(props.panel, [0])).toEqual(['filter', 'volume', 'detune', 'wheels']);
+      expect(kind()).toBe('Group');
+      shortcut(one('.wm-editor'), 'z');
+      expect(props.panel).toEqual(EXAMPLE_PLAY);
+    });
+    it('has no Move out at the top of the panel or of a template, and nothing to move into where there is no group', () => {
+      edit(EXAMPLE_MIXER);
+      press(one('[aria-label="Edit High"]'));
+      expect(button('Move out')).toBeUndefined();
+      expect(document.querySelector('select[aria-label="Move into"]')).toBeNull();
+      press(one('[aria-label="Edit Main"]'));
+      expect(button('Move out')).toBeUndefined();
+      expect([...into().options].map((o) => o.textContent?.trim())).toEqual(['Move into…', 'strips (template strip)']);
+    });
+    it('moves a control from the panel into a template, so every strip gets it', () => {
+      const props = edit(EXAMPLE_MIXER);
+      press(one('[aria-label="Edit Main"]'));
+      choose('strips (template strip)');
+      expect(instantiate(props.panel).controls.length).toBe(40);
+      expect(props.panel.templates!.strip!.children.map((c) => (c as { id: string }).id)).toEqual(['high', 'mid', 'mute', 'level', 'main']);
+      expect(kind()).toBe('Control');
+    });
+    it('says why a move out is refused, at the control, and changes nothing', () => {
+      const props = edit(EXAMPLE_PLAY);
+      press(one('[aria-label="Edit Accent"]'));
+      press(button('Move out'));
+      expect(one('.note').textContent).toBe('It uses “ch”, which is not set in that place.');
+      expect(props.panel).toEqual(EXAMPLE_PLAY);
+      expect((button('Undo') as HTMLButtonElement).disabled).toBe(true);
+      // another place chosen: the reason isn't carried there
+      press(one('[aria-label="Edit Hold"]'));
+      expect(document.querySelector('.note')).toBeNull();
+    });
+    it('offers a panel with no group nothing to move into', () => {
+      edit({ id: 'p', name: 'P', children: [{ type: 'knob', id: 'k' }] });
+      press(one('.ctl'));
+      expect(kind()).toBe('Control');
+      expect(document.querySelector('select[aria-label="Move into"]')).toBeNull();
     });
   });
 

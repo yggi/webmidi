@@ -6,6 +6,9 @@
    * A binding is one line (what it speaks, its number or an expression, its range), with what it comes to in each
    * instance said under it. Controlled: it takes the panel and calls back the panel changed (`onchange`), read
    * through `readPanel`, so what it gives is always a panel that keeps; it keeps only what is chosen, and what to undo.
+   * Given `onsend`, a Try toggle plays the panel as it stands (a press plays and chooses nothing) through it; without
+   * one there is nothing to try and the editor only edits. A node moves into a group of its choice or out of its own
+   * (`moveNode`), refused in words where the move would change what it means.
    */
   import {
     BINDING_KINDS,
@@ -18,6 +21,9 @@
     isGroup,
     MAX_VALUE,
     moveNode,
+    moveOutOf,
+    moveProblem,
+    moveTargets,
     nameProblem,
     newControl,
     newGroup,
@@ -44,9 +50,20 @@
   interface Props {
     panel: Panel;
     onchange: (panel: Panel) => void;
+    /** Where Try sends what a press makes (a frontend's: the panel's row of the patch); without it there is no Try. */
+    onsend?: (data: number[]) => void;
   }
 
-  let { panel, onchange }: Props = $props();
+  let { panel, onchange, onsend }: Props = $props();
+
+  /** Whether the stage is played, not chosen from: a press plays the control (through `onsend`) and the choice stays as it was. */
+  let trying = $state(false);
+  let stage: { silence(): void } | undefined = $state();
+  function toggleTry() {
+    // (turning it off lets go of every note held, as leaving the view does)
+    if (trying) stage?.silence();
+    trying = !trying;
+  }
 
   /** The place chosen: a control or a group; none is the panel itself. */
   let selected: NodePath | null = $state(null);
@@ -205,6 +222,20 @@
     commit(twice.panel, twice.path);
   };
   const remove = () => selected && commit(removeNode(panel, selected), null);
+  /** Moved to a place: one change, the node still chosen; refused in words at the node when it can't go. */
+  function moveTo(container: NodePath, index?: number) {
+    if (!selected) return;
+    const problem = moveProblem(panel, selected, container);
+    if (problem) {
+      note = { at: selected, message: problem };
+      return;
+    }
+    const moved = moveNode(panel, selected, { container, index: index ?? childrenAt(panel, container)?.length ?? 0 });
+    commit(moved.panel, moved.path);
+  }
+  /** The groups the node chosen can go into, and the place right after its own group, if it is in one. */
+  const targets = $derived(selected && node ? moveTargets(panel, selected) : []);
+  const out = $derived(selected && node ? moveOutOf(panel, selected) : undefined);
 
   /** Why this control's instances aren't read as written, each reason once (the same one in every instance of a definition), without the instance it came from. */
   const why = $derived.by(() => {
@@ -297,6 +328,7 @@
       {#each CONTROL_TYPES as type (type)}<button type="button" onclick={() => add(type)}>{TYPES[type]}</button>{/each}
       <button type="button" onclick={() => add('group')}>Group</button>
       <span class="grow"></span>
+      {#if onsend}<button type="button" class:on={trying} aria-pressed={trying} onclick={toggleTry}>Try</button>{/if}
       <button type="button" class="quiet" onclick={undo} disabled={!past.length}>Undo</button>
       <button type="button" class="quiet" onclick={redo} disabled={!future.length}>Redo</button>
     </div>
@@ -307,7 +339,7 @@
           : 'New things go beside the control chosen.'
         : 'New things go into the panel. Press a control or a group to choose it.'}
     </p>
-    <PanelView {panel} onsend={() => {}} bar={false} {selected} onselect={(source) => ((selected = source), (note = null))} />
+    <PanelView bind:this={stage} {panel} onsend={onsend ?? (() => {})} bar={false} {selected} onselect={trying ? undefined : (source) => ((selected = source), (note = null))} />
   </div>
 
   <aside class="inspector" aria-label="What is chosen">
@@ -500,6 +532,21 @@
 
     {#if selected && node}
       <div class="actions">
+        {#if targets.length}
+          <select
+            aria-label="Move into"
+            value=""
+            onchange={(e) => {
+              const to = targets[Number(text(e))];
+              e.currentTarget.value = '';
+              if (to) moveTo(containerOf(panel, to.group)!);
+            }}
+          >
+            <option value="" disabled>Move into…</option>
+            {#each targets as to, i (i)}<option value={i}>{to.name}</option>{/each}
+          </select>
+        {/if}
+        {#if out}<button type="button" onclick={() => moveTo(out.container, out.index)}>Move out</button>{/if}
         <button type="button" onclick={() => move(-1)}>Earlier</button>
         <button type="button" onclick={() => move(1)}>Later</button>
         <button type="button" onclick={copy}>Duplicate</button>
@@ -697,6 +744,10 @@
   button.danger {
     margin-left: auto;
     color: var(--_warn);
+  }
+  button.on {
+    border-color: var(--_accent);
+    background: color-mix(in oklab, var(--_accent) 16%, var(--_panel));
   }
   button:disabled {
     opacity: 0.45;

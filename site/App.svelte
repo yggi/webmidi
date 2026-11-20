@@ -96,7 +96,7 @@
     </div>
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
     {#if editing && shownPanel}
-      <PanelEditor panel={shownPanel} onchange={(panel) => bay.editPanel(panel)} />
+      <PanelEditor panel={shownPanel} onchange={(panel) => bay.editPanel(panel)} onsend={(data) => bay.played(shownPanel.id, data)} />
       <div class="bar">
         <span class="grow"></span><button type="button" class="danger" onclick={() => (bay.deletePanel(shownPanel.id), (editing = false))}>Delete this panel</button>
       </div>
