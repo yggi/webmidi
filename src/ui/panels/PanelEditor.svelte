@@ -6,8 +6,9 @@
    * A binding is one line (what it speaks, its number or an expression, its range), with what it comes to in each
    * instance said under it. Controlled: it takes the panel and calls back the panel changed (`onchange`), read
    * through `readPanel`, so what it gives is always a panel that keeps; it keeps only what is chosen, and what to undo.
-   * Given `onsend`, a Try toggle plays the panel as it stands (a press plays and chooses nothing) through it; without
-   * one there is nothing to try and the editor only edits. A node moves into a group of its choice or out of its own
+   * Given `onsend`, a Try toggle plays the panel as it stands (a press plays and chooses nothing) through it, and
+   * only while it is on: with Try off nothing the stage does reaches `onsend`; without one there is nothing to try and the
+   * editor only edits. A node moves into a group of its choice or out of its own
    * (`moveNode`), refused in words where the move would change what it means. Where the two columns stack (a phone),
    * what is chosen is edited in a sheet docked to the bottom, with its name and a close control, its bindings first, so
    * the control and its first binding are in view at once; the panel's own fields stay where they are.
@@ -61,6 +62,14 @@
   /** Whether the stage is played, not chosen from: a press plays the control (through `onsend`) and the choice stays as it was. */
   let trying = $state(false);
   let stage: { silence(): void } | undefined = $state();
+  /**
+   * What the stage sends, and the only way it reaches `onsend`: while Try is off nothing goes through, whatever made it
+   * (a key on a widget, a drag begun while Try was on). The stage stays a view to choose from, its widgets inert; this gate
+   * is read at each message, so no press, key or drag that outlives Try's turning off sends after it.
+   */
+  const stageSend = (data: number[]) => {
+    if (trying) onsend?.(data);
+  };
   function toggleTry() {
     // (turning it off lets go of every note held, as leaving the view does)
     if (trying) stage?.silence();
@@ -356,7 +365,7 @@
           : 'New things go beside the control chosen.'
         : 'New things go into the panel. Press a control or a group to choose it.'}
     </p>
-    <PanelView bind:this={stage} {panel} onsend={onsend ?? (() => {})} bar={false} {selected} onselect={trying ? undefined : (source) => ((selected = source), (note = null))} />
+    <PanelView bind:this={stage} {panel} onsend={stageSend} bar={false} {selected} onselect={trying ? undefined : (source) => ((selected = source), (note = null))} />
   </div>
 
   <aside class="inspector" class:sheet={!!selected && !!node} aria-label="What is chosen" bind:this={sheet}>
