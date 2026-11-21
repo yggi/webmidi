@@ -10,6 +10,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
+## v0.10.1 — 2026-11-21
+
+A fix to the panel editor's Try, found by the Jambot agent wiring it (yggi/jambot#715; yggi/webmidi#83): with Try off, a key on a stage widget still sent to `onsend`, so an editor given the frontend's outputs could play real MIDI hardware. A frontend that passes `onsend` to `PanelEditor` should take this before showing the editor to anyone with hardware connected. Nothing on the wire changes for a panel played in `PanelView` and nothing breaks a frontend's code, so it is a patch.
+
+### Fixed
+- **`PanelEditor` sends nothing to `onsend` while Try is off** (yggi/webmidi#83): the stage was given `onsend` whether or not Try was on, and Try only decided whether a press chose, so with Try off a key on a stage widget (Enter or Space on a key, a pad or a button, an arrow, Home or End on a knob, a fader or an XY pad, a switch's click), or a drag that outlived Try's turning off, still sent to the frontend's outputs. The stage now sends through a gate read at each message, open only while Try is on, so nothing a control does with Try off reaches `onsend`; controls stay choosable by a press, Enter or Space, and turning Try off still releases every note held. A frontend that passes `onsend` to `PanelEditor` should take this before showing the editor to anyone with hardware connected. A standalone `PanelView` sends as before, and nothing else on the wire changes.
+
 ## v0.10.0 — 2026-11-21
 
 A crossing of several channels on one output (decision 010; yggi/webmidi#25): the book widens, so a voice can be sent on 1 and 3 of one output, as a cells piece's MIDI cards ask. `Crossing` is now `number | readonly number[]`, which breaks a frontend's code that reads a crossing as a number, so it is a minor version: the migration is under *Changed*. Nothing on the wire changes for a setup with no set of channels, and a set of one is the bare number, so every stored book and file reads and writes as before.
