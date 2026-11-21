@@ -6,32 +6,15 @@
  * siblings, or into another group or out of its own, as one operation (`moveNode`), refused in words (`moveProblem`)
  * wherever it would change what the node means or what the reader keeps.
  */
-import { EXPRESSION_FUNCTIONS } from './expr';
-import {
-  BINDING_KINDS,
-  isGroup,
-  MAX_DEPTH,
-  MAX_GRID,
-  type Binding,
-  type Control,
-  type ControlType,
-  type Group,
-  type NodePath,
-  type Num,
-  type Panel,
-  type PanelNode,
-} from './model';
+import { BINDING_KINDS, isGroup, MAX_DEPTH, MAX_GRID, type Binding, type Control, type ControlType, type Group, type NodePath, type Panel, type PanelNode } from './model';
+import { depthAt, freeNames, height, NAME, NAME_RULE, scopeOf, topChildren, usedBy } from './scope';
 
 export const samePath = (a: NodePath | null | undefined, b: NodePath | null | undefined): boolean =>
   !!a && !!b && a.template === b.template && a.at.length === b.at.length && a.at.every((n, i) => n === b.at[i]);
 
-/** The children a path's top is among: the panel's, or a template's (undefined: no such template). */
-const top = (panel: Panel, path: NodePath): readonly PanelNode[] | undefined =>
-  path.template === undefined ? panel.children : panel.templates && Object.hasOwn(panel.templates, path.template) ? panel.templates[path.template]!.children : undefined;
-
 /** The node at a place, or undefined: nothing there, or the empty path (which is the panel or the template itself). */
 export function nodeAt(panel: Panel, path: NodePath): PanelNode | undefined {
-  let children = top(panel, path);
+  let children = topChildren(panel, path);
   let node: PanelNode | undefined;
   for (const i of path.at) {
     node = children?.[i];
@@ -45,7 +28,7 @@ export function nodeAt(panel: Panel, path: NodePath): PanelNode | undefined {
  * template for a group that uses one; undefined for a control, or nothing there.
  */
 export function containerOf(panel: Panel, path: NodePath): NodePath | undefined {
-  if (!path.at.length) return top(panel, path) ? path : undefined;
+  if (!path.at.length) return topChildren(panel, path) ? path : undefined;
   const node = nodeAt(panel, path);
   if (!node || !isGroup(node)) return undefined;
   return node.use === undefined ? path : containerOf(panel, { template: node.use, at: [] });
@@ -53,7 +36,7 @@ export function containerOf(panel: Panel, path: NodePath): NodePath | undefined 
 
 /** The children kept at a container's place (`containerOf`), or undefined. */
 export function childrenAt(panel: Panel, container: NodePath): readonly PanelNode[] | undefined {
-  if (!container.at.length) return top(panel, container);
+  if (!container.at.length) return topChildren(panel, container);
   const node = nodeAt(panel, container);
   return node && isGroup(node) && node.use === undefined ? (node.children ?? []) : undefined;
 }
@@ -63,7 +46,7 @@ function withChildren(panel: Panel, container: NodePath, change: (children: read
   if (childrenAt(panel, container) === undefined) return panel;
   const down = (children: readonly PanelNode[], at: readonly number[]): readonly PanelNode[] =>
     at.length ? children.map((n, i) => (i === at[0] && isGroup(n) ? { ...n, children: down(n.children ?? [], at.slice(1)) } : n)) : change(children);
-  const changed = down(top(panel, container)!, container.at);
+  const changed = down(topChildren(panel, container)!, container.at);
   if (container.template === undefined) return { ...panel, children: changed };
   return { ...panel, templates: { ...panel.templates, [container.template]: { ...panel.templates![container.template]!, children: changed } } };
 }
@@ -101,80 +84,6 @@ function shifted(path: NodePath, container: NodePath, index: number, by: 1 | -1)
   const n = container.at.length;
   const inside = path.template === container.template && path.at.length > n && container.at.every((x, i) => path.at[i] === x);
   return inside && path.at[n]! >= index + (by === 1 ? 0 : 1) ? { ...path, at: path.at.map((x, i) => (i === n ? x + by : x)) } : path;
-}
-
-/** The names an expression, or the `{…}` of a label, reads: not its functions. */
-function namesIn(source: Num | undefined, braced = false): string[] {
-  if (typeof source !== 'string') return [];
-  const parts = braced ? [...source.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]!) : [source];
-  return parts.flatMap((p) => p.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []).filter((n) => !EXPRESSION_FUNCTIONS.includes(n));
-}
-
-/** The parameters a node reads from the place it stands in: its own repeat's are its own. */
-function freeNames(node: PanelNode): Set<string> {
-  if (!isGroup(node)) {
-    const bound = (node.bind ?? []).flatMap((b) => [b.number, b.channel, ...(b.range ?? [])]);
-    return new Set([...namesIn(node.label, true), ...bound.flatMap((v) => namesIn(v))]);
-  }
-  const inner = new Set([
-    ...namesIn(node.label, true),
-    ...Object.values(node.overrides ?? {}).flatMap((o) => namesIn(o.label, true)),
-    ...namesIn(node.channel),
-    ...Object.values(node.with ?? {}).flatMap((v) => namesIn(v)),
-    ...(node.use === undefined ? (node.children ?? []).flatMap((c) => [...freeNames(c)]) : []),
-  ]);
-  if (node.repeat) inner.delete(node.repeat.name);
-  return new Set([...inner, ...namesIn(node.repeat?.from), ...namesIn(node.repeat?.to)]);
-}
-
-/** The parameters in scope for the children kept at a container: a template's, and the repeats of the groups on the way down. */
-function scopeOf(panel: Panel, container: NodePath): Set<string> {
-  const names = new Set(container.template === undefined ? [] : (panel.templates?.[container.template]?.params ?? []));
-  let children = top(panel, container) ?? [];
-  for (const i of container.at) {
-    const n = children[i];
-    if (!n || !isGroup(n)) break;
-    if (n.repeat) names.add(n.repeat.name);
-    children = n.children ?? [];
-  }
-  return names;
-}
-
-/** The templates a node uses, and those they use, and so on. */
-function usedBy(panel: Panel, node: PanelNode, seen = new Set<string>()): Set<string> {
-  if (!isGroup(node)) return seen;
-  if (node.use !== undefined) {
-    if (!seen.has(node.use)) {
-      seen.add(node.use);
-      for (const c of panel.templates?.[node.use]?.children ?? []) usedBy(panel, c, seen);
-    }
-  } else for (const c of node.children ?? []) usedBy(panel, c, seen);
-  return seen;
-}
-
-/** How many groups deep a node's own groups go: a control none, a group one more than its deepest child (a template's, counted for a group that uses one). */
-function height(panel: Panel, node: PanelNode, seen: readonly string[] = []): number {
-  if (!isGroup(node)) return 0;
-  if (node.use === undefined) return 1 + Math.max(0, ...(node.children ?? []).map((c) => height(panel, c, seen)));
-  if (seen.includes(node.use)) return 1;
-  return 1 + Math.max(0, ...(panel.templates?.[node.use]?.children ?? []).map((c) => height(panel, c, [...seen, node.use!])));
-}
-
-/** The depth the reader reads the children kept at a container at (top is 1); a template's are counted where it is used, the deepest use. */
-function depthAt(panel: Panel, container: NodePath, seen: readonly string[] = []): number {
-  if (container.template === undefined) return container.at.length + 1;
-  if (seen.includes(container.template)) return 1;
-  const template = container.template;
-  let base = 1;
-  const walk = (children: readonly PanelNode[], home: NodePath) =>
-    children.forEach((n, i) => {
-      if (!isGroup(n)) return;
-      if (n.use === template) base = Math.max(base, depthAt(panel, home, [...seen, template]) + 1);
-      if (n.use === undefined) walk(n.children ?? [], { ...home, at: [...home.at, i] });
-    });
-  walk(panel.children, { at: [] });
-  for (const [name, t] of Object.entries(panel.templates ?? {})) walk(t.children, { template: name, at: [] });
-  return base + container.at.length;
 }
 
 /**
@@ -333,9 +242,6 @@ export function ofKind(binding: Binding, kind: Binding['kind']): Binding {
   return { ...rest, kind, ...(numbered ? { number: number ?? 1 } : {}) };
 }
 
-/** A name the reader keeps: a letter or `_`, then letters, digits and `_`, at most 32. Any other is dropped, and with it the key. */
-const NAME = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/;
-
 /**
  * Why a name asked for, for the control or group at `path`, can't be taken, in words; undefined when it can. It must be
  * a name the reader keeps, and no sibling's: a control and a group beside each other share one key space, and
@@ -346,7 +252,7 @@ export function nameProblem(panel: Panel, path: NodePath, wanted: string): strin
   const node = nodeAt(panel, path);
   if (!node) return undefined;
   if (wanted === '') return isGroup(node) ? 'A group needs a name.' : undefined;
-  if (!NAME.test(wanted)) return 'A name starts with a letter or _, then letters, digits and _, up to 32 characters.';
+  if (!NAME.test(wanted)) return NAME_RULE;
   const own = path.at.at(-1);
   const siblings = childrenAt(panel, { ...path, at: path.at.slice(0, -1) }) ?? [];
   const taken = siblings.find((n, i) => i !== own && (isGroup(n) ? n.group : n.id) === wanted);
