@@ -35,13 +35,30 @@ export interface SetupOutput {
 }
 
 /**
- * What a crossing sends, from a row to an output: a channel 1–16, or `AS_PLAYED` (0), an input's message on the channel
- * it came in on. A crossing that is absent sends nothing.
+ * What a crossing sends, from a row to an output (decision 010): a channel 1–16, or `AS_PLAYED` (0), an input's message
+ * on the channel it came in on, or a set of 2 or more distinct channels, ascending, each message sent once on each (a
+ * voice layered on one device). A set of one is the bare number, so a crossing of one channel is spelled one way. A
+ * crossing is a set of channels or as played, never both. A crossing that is absent sends nothing.
  */
-export type Crossing = number;
+export type Crossing = number | readonly number[];
 
 /** An input row's crossing that keeps the channel a message came in on. */
 export const AS_PLAYED = 0;
+
+/**
+ * A crossing in its one spelling, or undefined: no crossing. A number is kept when it is 0 (`AS_PLAYED`) or a channel
+ * 1–16; an array is a set of channels, its elements not channels 1–16 (0 among them: as played isn't mixed in) dropped,
+ * the rest sorted and deduped, and a set of one is its number. Anything else is no crossing.
+ */
+export function crossingFrom(v: unknown): Crossing | undefined {
+  if (isInt(v, 0, 16)) return v;
+  if (!Array.isArray(v)) return undefined;
+  const channels = [...new Set(v.filter((c): c is number => isInt(c, 1, 16)))].sort((a, b) => a - b);
+  return channels.length === 0 ? undefined : channels.length === 1 ? channels[0]! : channels;
+}
+
+/** The channels a crossing sends on, ascending: a number's own, a set's, and none as played (it keeps each message's own). */
+export const channelsOf = (c: Crossing): readonly number[] => (typeof c === 'number' ? (c === AS_PLAYED ? [] : [c]) : c);
 
 /** A context's routes: a row's id to its crossings, by output key. */
 export type Routes = Readonly<Record<string, Readonly<Record<string, Crossing>>>>;
@@ -178,7 +195,7 @@ function routes(v: unknown): Routes {
   return Object.fromEntries(
     Object.entries(v).flatMap(([row, crossings]) => {
       if (!isRecord(crossings)) return [];
-      const kept = Object.fromEntries(Object.entries(crossings).filter((e): e is [string, number] => isInt(e[1], 0, 16)));
+      const kept = Object.fromEntries(Object.entries(crossings).flatMap(([output, c]) => (crossingFrom(c) === undefined ? [] : [[output, crossingFrom(c)!] as const])));
       return Object.keys(kept).length ? [[row, kept] as const] : [];
     }),
   );
@@ -405,12 +422,13 @@ export function withProfile(book: SetupBook, name: string, change: Partial<Devic
   return { ...book, devices: { ...book.devices, [name]: kept } };
 }
 
-/** A crossing of the setup in use set (a channel 1–16, or `AS_PLAYED`), or cleared (undefined, or out of range). */
+/** A crossing of the setup in use set (a channel 1–16, a set of them, or `AS_PLAYED`: `crossingFrom`'s one spelling), or cleared (undefined, no channel in range). */
 export function withCrossing(book: SetupBook, context: string, row: string, output: string, value: Crossing | undefined): SetupBook {
   return withActive(book, (s) => {
     const r = own(s.routes, context) ?? {};
     const { [output]: _old, ...rest } = own(r, row) ?? {};
-    const crossings = value !== undefined && isInt(value, 0, 16) ? { ...rest, [output]: value } : rest;
+    const crossing = crossingFrom(value);
+    const crossings = crossing !== undefined ? { ...rest, [output]: crossing } : rest;
     const { [row]: _row, ...others } = r;
     const next = Object.keys(crossings).length ? { ...others, [row]: crossings } : others;
     return { ...s, routes: { ...s.routes, [context]: next } };
@@ -594,15 +612,22 @@ const FORMAT = 'webmidi-setup';
 /**
  * The version a setup's file is written at: 2 since a setup keeps what each input plays (decision 003), where version 1
  * kept the inputs heard. A reader before it refuses a version 2 file in words ("update the app") rather than read it as
- * hearing nothing; this reader takes both, a version 1 file's inputs heard as playing the default.
+ * hearing nothing; this reader takes both, a version 1 file's inputs heard as playing the default. A file is written at
+ * 3 only when it holds a crossing of several channels (`SET_FILE_VERSION`), so every other file stays 2.
  */
 const FILE_VERSION = 2;
+
+/** The version of a file whose setup holds a crossing of several channels (decision 010): a reader before it would read the crossing as none, so it is told the file is newer. */
+const SET_FILE_VERSION = 3;
+
+/** Whether a setup holds a crossing of several channels. */
+const hasSet = (setup: Setup): boolean => Object.values(setup.routes).some((r) => Object.values(r).some((c) => Object.values(c).some((x) => typeof x !== 'number')));
 
 /** A setup as a file's text (`.midisetup.json`): the setup, and the profiles of its devices that the book has. */
 export function exportSetup(book: SetupBook, id: string = book.active): string {
   const setup = book.setups.find((s) => s.id === id) ?? activeSetup(book);
   const devices = Object.fromEntries(setup.outputs.flatMap((o) => (own(book.devices, o.name) ? [[o.name, own(book.devices, o.name)!]] : [])));
-  return JSON.stringify({ format: FORMAT, version: FILE_VERSION, setup: unbased(setup), devices }, null, 2);
+  return JSON.stringify({ format: FORMAT, version: hasSet(setup) ? SET_FILE_VERSION : FILE_VERSION, setup: unbased(setup), devices }, null, 2);
 }
 
 /**
@@ -617,7 +642,7 @@ export function importSetup(book: SetupBook, text: string): SetupBook | string {
     return 'This file isn’t a MIDI setup: it isn’t JSON.';
   }
   if (!isRecord(kept) || kept.format !== FORMAT) return 'This file isn’t a MIDI setup.';
-  if (kept.version !== 1 && kept.version !== FILE_VERSION) return 'This MIDI setup was saved by a newer version: update the app to open it.';
+  if (kept.version !== 1 && kept.version !== FILE_VERSION && kept.version !== SET_FILE_VERSION) return 'This MIDI setup was saved by a newer version: update the app to open it.';
   const read = readSetup(kept.setup);
   if (!read) return 'This MIDI setup is damaged: it has no setup in it.';
   const id = freeId(book);

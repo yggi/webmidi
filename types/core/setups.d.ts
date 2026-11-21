@@ -26,12 +26,22 @@ export interface SetupOutput {
     readonly name: string;
 }
 /**
- * What a crossing sends, from a row to an output: a channel 1–16, or `AS_PLAYED` (0), an input's message on the channel
- * it came in on. A crossing that is absent sends nothing.
+ * What a crossing sends, from a row to an output (decision 010): a channel 1–16, or `AS_PLAYED` (0), an input's message
+ * on the channel it came in on, or a set of 2 or more distinct channels, ascending, each message sent once on each (a
+ * voice layered on one device). A set of one is the bare number, so a crossing of one channel is spelled one way. A
+ * crossing is a set of channels or as played, never both. A crossing that is absent sends nothing.
  */
-export type Crossing = number;
+export type Crossing = number | readonly number[];
 /** An input row's crossing that keeps the channel a message came in on. */
 export declare const AS_PLAYED = 0;
+/**
+ * A crossing in its one spelling, or undefined: no crossing. A number is kept when it is 0 (`AS_PLAYED`) or a channel
+ * 1–16; an array is a set of channels, its elements not channels 1–16 (0 among them: as played isn't mixed in) dropped,
+ * the rest sorted and deduped, and a set of one is its number. Anything else is no crossing.
+ */
+export declare function crossingFrom(v: unknown): Crossing | undefined;
+/** The channels a crossing sends on, ascending: a number's own, a set's, and none as played (it keeps each message's own). */
+export declare const channelsOf: (c: Crossing) => readonly number[];
 /** A context's routes: a row's id to its crossings, by output key. */
 export type Routes = Readonly<Record<string, Readonly<Record<string, Crossing>>>>;
 /**
@@ -161,7 +171,7 @@ export declare function overwrite(book: SetupBook): SetupBook;
 export declare function discard(book: SetupBook): SetupBook;
 /** A device's profile changed (by its port's name), each value clamped to what it may be. */
 export declare function withProfile(book: SetupBook, name: string, change: Partial<DeviceProfile>): SetupBook;
-/** A crossing of the setup in use set (a channel 1–16, or `AS_PLAYED`), or cleared (undefined, or out of range). */
+/** A crossing of the setup in use set (a channel 1–16, a set of them, or `AS_PLAYED`: `crossingFrom`'s one spelling), or cleared (undefined, no channel in range). */
 export declare function withCrossing(book: SetupBook, context: string, row: string, output: string, value: Crossing | undefined): SetupBook;
 /** An output added to the setup in use, under a key of its own: its key, and the book. */
 export declare function addOutput(book: SetupBook, device?: PortOption): {

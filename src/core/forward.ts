@@ -4,7 +4,7 @@
 
 import type { PortOption } from './port';
 import { isHeard, playsOf, type PlayableRow } from './plays';
-import { activeSetup, ANY_INPUT, AS_PLAYED, BUILT_IN, inputRow, isPanelKey, panelKey, panelsOf, type SetupBook } from './setups';
+import { activeSetup, ANY_INPUT, AS_PLAYED, BUILT_IN, channelsOf, inputRow, isPanelKey, panelKey, panelsOf, type Crossing, type SetupBook } from './setups';
 
 /** A message to send to one output of the setup in use, by its key. */
 export interface Forward {
@@ -13,9 +13,16 @@ export interface Forward {
 }
 
 /**
+ * A channel voice message as a crossing sends it: as it came (`AS_PLAYED`), or once on each channel of the crossing,
+ * ascending, its channel replaced (decision 010); a crossing of one channel is the case of a set of one.
+ */
+const sent = (crossing: Crossing, bytes: readonly number[]): number[][] =>
+  crossing === AS_PLAYED ? [[...bytes]] : channelsOf(crossing).map((channel) => [(bytes[0]! & 0xf0) | (channel - 1), ...bytes.slice(1)]);
+
+/**
  * The messages a raw message on `row` sends, by the setup in use's crossings of that row in `context`: a channel voice
- * message (status 0x80–0xEF) once to each output crossed, its channel replaced by the crossing's (1–16), or kept as it
- * came (`AS_PLAYED`); the built-in, which takes no MIDI, none, and a panel's column none here (`panelForwardsOf`: a panel is no port). Nothing else is forwarded: a system message (0xF0–0xFF: SysEx, the clock, Start and Stop, which are
+ * message (status 0x80–0xEF) once to each output crossed, once on each channel of the crossing (1–16, ascending: a
+ * crossing may hold several, decision 010), its channel replaced, or kept as it came (`AS_PLAYED`); the built-in, which takes no MIDI, none, and a panel's column none here (`panelForwardsOf`: a panel is no port). Nothing else is forwarded: a system message (0xF0–0xFF: SysEx, the clock, Start and Stop, which are
  * the clock row's and a device's own) and a message with no status byte (Web MIDI delivers whole messages).
  */
 export function forwardsOf(book: SetupBook, context: string, row: string, data: ArrayLike<number>): Forward[] {
@@ -25,16 +32,7 @@ export function forwardsOf(book: SetupBook, context: string, row: string, data: 
   const crossings = Object.hasOwn(routes, context) && Object.hasOwn(routes[context]!, row) ? routes[context]![row]! : {};
   const bytes = Array.from(data);
   // (the built-in plays a row, and takes no MIDI)
-  return Object.entries(crossings).flatMap(([output, channel]) =>
-    output === BUILT_IN.key || isPanelKey(output)
-      ? []
-      : [
-          {
-            output,
-            data: channel === AS_PLAYED ? bytes : [(status & 0xf0) | (channel - 1), ...bytes.slice(1)],
-          },
-        ],
-  );
+  return Object.entries(crossings).flatMap(([output, crossing]) => (output === BUILT_IN.key || isPanelKey(output) ? [] : sent(crossing, bytes).map((data) => ({ output, data }))));
 }
 
 /** A message to hand to one panel active in the setup in use, by its id: its controls move by it (`PanelRuntime.receive`). */
@@ -59,10 +57,10 @@ export function panelForwardsOf(book: SetupBook, context: string, row: string | 
   const out: PanelForward[] = [];
   for (const r of rows)
     for (const id of panelsOf(setup)) {
-      const channel = Object.hasOwn(routes, r) && Object.hasOwn(routes[r]!, panelKey(id)) ? routes[r]![panelKey(id)]! : undefined;
-      if (channel === undefined || r === panelKey(id)) continue;
-      const sent = channel === AS_PLAYED ? bytes : [(status & 0xf0) | (channel - 1), ...bytes.slice(1)];
-      if (!out.some((o) => o.panel === id && o.data.length === sent.length && o.data.every((b, i) => b === sent[i]))) out.push({ panel: id, data: sent });
+      const crossing = Object.hasOwn(routes, r) && Object.hasOwn(routes[r]!, panelKey(id)) ? routes[r]![panelKey(id)]! : undefined;
+      if (crossing === undefined || r === panelKey(id)) continue;
+      for (const data of sent(crossing, bytes))
+        if (!out.some((o) => o.panel === id && o.data.length === data.length && o.data.every((b, i) => b === data[i]))) out.push({ panel: id, data });
     }
   return out;
 }

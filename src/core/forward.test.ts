@@ -173,3 +173,121 @@ describe('panels in the patch (decision 007)', () => {
     expect(panelForwardsOf({ ...book, setups: book.setups.map((s) => ({ ...s, panels: ['pads'] })) }, 'bay', keys, [0xb0, 1, 2]).map((f) => f.panel)).toEqual(['pads']);
   });
 });
+
+describe('a crossing of several channels (yggi/webmidi#25, decision 010)', () => {
+  /** The seven channel voice messages webmidi reads, each as status nibble and its data bytes. */
+  const kinds: readonly (readonly [string, number, readonly number[]])[] = [
+    ['note off', 0x80, [60, 64]],
+    ['note on', 0x90, [60, 100]],
+    ['poly aftertouch', 0xa0, [60, 33]],
+    ['control change', 0xb0, [7, 99]],
+    ['program change', 0xc0, [12]],
+    ['channel aftertouch', 0xd0, [44]],
+    ['pitch bend', 0xe0, [1, 100]],
+  ];
+  const sets: readonly (readonly number[])[] = [[5], [1, 3], [2, 9, 16], Array.from({ length: 16 }, (_, i) => i + 1)];
+  /** A book whose row sends to o1 on `channels` (a bare number for a set of one: the crossing is the same either way). */
+  const sending = (channels: readonly number[]) =>
+    withCrossing(chooseDevice(newBook(), 'o1', { id: 'out-1', name: 'Synth' }), 'band', row, 'o1', channels.length === 1 ? channels[0]! : channels);
+
+  it('sends a channel voice message once per channel, ascending, each re-channelled, for each of the 7 kinds and set sizes 1, 2, 3 and 16', () => {
+    for (const [, status, rest] of kinds)
+      for (const channels of sets) {
+        // (a set given unsorted comes out ascending: the book keeps it so)
+        const given = [...channels].reverse();
+        const b = withCrossing(sending([1]), 'band', row, 'o1', given.length === 1 ? given[0]! : given);
+        expect(forwardsOf(b, 'band', row, [status | 7, ...rest])).toEqual(channels.map((c) => ({ output: 'o1', data: [status | (c - 1), ...rest] })));
+      }
+  });
+
+  it('sends a system message or one with no status once: not at all, as before, whatever the set', () => {
+    const b = sending([1, 3, 5]);
+    for (const status of [0xf0, 0xf1, 0xf2, 0xf8, 0xfa, 0xfb, 0xfc, 0xfe, 0xff]) expect(forwardsOf(b, 'band', row, status === 0xf0 ? [0xf0, 0x7e, 0xf7] : [status])).toEqual([]);
+    expect(forwardsOf(b, 'band', row, [60, 100])).toEqual([]);
+  });
+
+  it('sends a set beside another output’s crossing, in the order of the outputs, each output’s channels ascending', () => {
+    const b = withCrossing(addOutput(sending([3, 1]), { id: 'out-2', name: 'Drums' }).book, 'band', row, 'o2', AS_PLAYED);
+    expect(forwardsOf(b, 'band', row, [0x95, 60, 100])).toEqual([
+      { output: 'o1', data: [0x90, 60, 100] },
+      { output: 'o1', data: [0x92, 60, 100] },
+      { output: 'o2', data: [0x95, 60, 100] },
+    ]);
+  });
+
+  it('sends nothing to the built-in even where a set is routed there, and nothing for an empty set', () => {
+    const b = withCrossing(withBuiltIn(sending([1, 3]), true), 'band', row, BUILT_IN.key, [1, 3]);
+    expect(forwardsOf(b, 'band', row, [0x90, 60, 100]).map((f) => f.output)).toEqual(['o1', 'o1']);
+    expect(forwardsOf(withCrossing(sending([1, 3]), 'band', row, 'o1', []), 'band', row, [0x90, 60, 100])).toEqual([]);
+  });
+
+  it('forwardsOfInput sends the set by the input’s row, and once the same bytes that every input’s row also sends', () => {
+    let b = withPlays(sending([1, 3]), ANY_INPUT, 'default');
+    b = withCrossing(b, 'band', ANY_INPUT, 'o1', [3, 4]);
+    expect(forwardsOfInput(b, 'band', keys, [0x90, 60, 100])).toEqual([
+      { output: 'o1', data: [0x90, 60, 100] },
+      { output: 'o1', data: [0x92, 60, 100] },
+      { output: 'o1', data: [0x93, 60, 100] },
+    ]);
+  });
+
+  it('forwardsAsPlayed sends the set of the row an input plays: a voice on 1 and 3 of one output', () => {
+    const b = withPlays(sending([1, 3]), row, { row: 'band-lead' });
+    const voice = withCrossing(b, 'band', 'band-lead', 'o1', [1, 3]);
+    expect(forwardsAsPlayed(voice, 'band', keys, [{ id: 'band-lead' }], [0x90, 64, 90])).toEqual([
+      { output: 'o1', data: [0x90, 64, 90] },
+      { output: 'o1', data: [0x92, 64, 90] },
+    ]);
+  });
+
+  it('panelForwardsOf hands a panel the message once per channel of the set, and once the same bytes from two rows', () => {
+    let b = withCrossing(
+      withPanelActive(withPanelActive(chooseDevice(newBook(), 'o1', { id: 'out-1', name: 'Synth' }), 'mixer', true), 'pads', true),
+      'bay',
+      row,
+      panelKey('mixer'),
+      [2, 4],
+    );
+    expect(panelForwardsOf(b, 'bay', keys, [0xb0, 7, 100]).filter((f) => f.panel === 'mixer')).toEqual([
+      { panel: 'mixer', data: [0xb1, 7, 100] },
+      { panel: 'mixer', data: [0xb3, 7, 100] },
+    ]);
+    b = withPlays(withCrossing(b, 'bay', ANY_INPUT, panelKey('mixer'), [4, 2]), ANY_INPUT, 'default');
+    expect(
+      panelForwardsOf(b, 'bay', keys, [0xb0, 7, 100])
+        .filter((f) => f.panel === 'mixer')
+        .map((f) => f.data[0]),
+    ).toEqual([0xb1, 0xb3]);
+  });
+
+  it('sends a setup with no set exactly the messages v0.9.0 sent: the same bytes, outputs and order for every channel voice status', () => {
+    // (a book as v0.9.0 kept it, read as it is read now: o1 on channel 5, o2 as played)
+    const stored = {
+      version: 1,
+      devices: {},
+      defaults: {},
+      active: 's1',
+      setups: [
+        {
+          id: 's1',
+          name: 'Home',
+          outputs: [
+            { key: 'o1', id: 'out-1', name: 'Synth' },
+            { key: 'o2', id: 'out-2', name: 'Drums' },
+          ],
+          plays: {},
+          routes: { band: { [row]: { o1: 5, o2: 0 } } },
+          clock: [],
+        },
+      ],
+    };
+    const b = readBook(JSON.parse(JSON.stringify(stored)));
+    for (let status = 0x80; status <= 0xef; status++) {
+      const data = (status & 0xf0) === 0xc0 || (status & 0xf0) === 0xd0 ? [status, 7] : [status, 60, 100];
+      expect(forwardsOf(b, 'band', row, data)).toEqual([
+        { output: 'o1', data: [(status & 0xf0) | 4, ...data.slice(1)] },
+        { output: 'o2', data },
+      ]);
+    }
+  });
+});
