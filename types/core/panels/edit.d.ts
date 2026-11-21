@@ -1,9 +1,3 @@
-/**
- * A panel edited (decision 005, the editor's pure part): each operation takes a panel and a place (`NodePath`) and
- * gives a new panel, so an editor keeps nothing of its own but what is selected. A place inside a template is the
- * template's, so a change there is a change to every group that uses it; adding into a group that uses a template
- * adds to the template. An operation on a place that isn't there gives the panel as it was.
- */
 import { type Binding, type Control, type ControlType, type Group, type NodePath, type Panel, type PanelNode } from './model';
 export declare const samePath: (a: NodePath | null | undefined, b: NodePath | null | undefined) => boolean;
 /** The node at a place, or undefined: nothing there, or the empty path (which is the panel or the template itself). */
@@ -23,11 +17,35 @@ export declare function insertNode(panel: Panel, container: NodePath, node: Pane
     path: NodePath;
 };
 export declare function removeNode(panel: Panel, path: NodePath): Panel;
-/** A node moved among its siblings, one earlier (`-1`) or later (`1`): the panel, and its place now (as it was at an end). */
-export declare function moveNode(panel: Panel, path: NodePath, by: -1 | 1): {
+/** Where a node goes: among a container's children (`containerOf`), at the index it will have there once it has moved. */
+export interface Destination {
+    readonly container: NodePath;
+    readonly index: number;
+}
+/**
+ * Why a node can't go among the children kept at a container, in words; undefined when it can. Not into itself or a
+ * group inside it, not where a sibling has its name (`nameProblem`'s rules: a control and a group share one key space,
+ * a control with no name is kept by its place), not where it would read a parameter that place doesn't have (a
+ * template's own, a repeat's: they are the same name in another place only by chance, so it is the name that is held),
+ * not into a template that it, or what it holds, uses, and not deeper than the reader reads (`MAX_DEPTH`).
+ */
+export declare function moveProblem(panel: Panel, path: NodePath, container: NodePath): string | undefined;
+/**
+ * A node moved: one earlier (`-1`) or later (`1`) among its siblings, or to a destination, into any container (its own
+ * parent's too: a place among its siblings is one case of it). The panel, and the node's place now; as it was at an end,
+ * for a place that isn't there, or when `moveProblem` has something to say.
+ */
+export declare function moveNode(panel: Panel, path: NodePath, to: -1 | 1 | Destination): {
     panel: Panel;
     path: NodePath;
 };
+/** Where moving a node out of its group goes: right after that group, in the container the group is in; none at the top of the panel or a template. */
+export declare function moveOutOf(panel: Panel, path: NodePath): Destination | undefined;
+/** The groups a node can go into, by name (a group of a template, and one that uses it, are the template's body): not the one it is in, nor one it is refused (`moveProblem`). */
+export declare function moveTargets(panel: Panel, path: NodePath): {
+    group: NodePath;
+    name: string;
+}[];
 /** A node again right after itself, under a name of its own: the panel, and the copy's place. */
 export declare function duplicateNode(panel: Panel, path: NodePath): {
     panel: Panel;
