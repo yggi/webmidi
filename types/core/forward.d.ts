@@ -8,8 +8,8 @@ export interface Forward {
 }
 /**
  * The messages a raw message on `row` sends, by the setup in use's crossings of that row in `context`: a channel voice
- * message (status 0x80–0xEF) once to each output crossed, its channel replaced by the crossing's (1–16), or kept as it
- * came (`AS_PLAYED`); the built-in, which takes no MIDI, none, and a panel's column none here (`panelForwardsOf`: a panel is no port). Nothing else is forwarded: a system message (0xF0–0xFF: SysEx, the clock, Start and Stop, which are
+ * message (status 0x80–0xEF) once to each output crossed, once on each channel of the crossing (1–16, ascending: a
+ * crossing may hold several, decision 010), its channel replaced, or kept as it came (`AS_PLAYED`); the built-in, which takes no MIDI, none, and a panel's column none here (`panelForwardsOf`: a panel is no port). Nothing else is forwarded: a system message (0xF0–0xFF: SysEx, the clock, Start and Stop, which are
  * the clock row's and a device's own) and a message with no status byte (Web MIDI delivers whole messages).
  */
 export declare function forwardsOf(book: SetupBook, context: string, row: string, data: ArrayLike<number>): Forward[];

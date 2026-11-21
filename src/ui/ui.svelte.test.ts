@@ -40,7 +40,7 @@ import MidiStatus from './MidiStatus.svelte';
 import PatchMatrix from './PatchMatrix.svelte';
 import SetupPicker from './SetupPicker.svelte';
 import { inputRows, type MatrixRow } from './rows';
-import { channelHue, clamp } from './channels';
+import { channelHue, clamp, crossingText, crossingWords } from './channels';
 
 let mounted: Record<string, unknown>[] = [];
 afterEach(() => {
@@ -493,6 +493,10 @@ const keydown = (key: string) => {
   one('[role=dialog]').dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
   flushSync();
 };
+const pad = (n: number) => {
+  (all('[role=dialog] .pads button').find((b) => b.textContent?.trim() === String(n)) as HTMLButtonElement).click();
+  flushSync();
+};
 const jack = (label: string, out: string) => all('.jack').find((j) => j.getAttribute('aria-label')?.startsWith(`${label} to ${out}`)) as HTMLButtonElement;
 
 describe('PatchMatrix', () => {
@@ -628,6 +632,94 @@ describe('PatchMatrix', () => {
     flushSync();
     click('Not sent');
     expect(crossingOf(props.book, 'piece:a', 'pad', 'o1')).toBeUndefined();
+  });
+
+  it('builds a set of channels by presses in Several mode, kept as the book’s one spelling, the picker open until Done (yggi/webmidi#25)', () => {
+    const { props } = matrix(home());
+    const now = () => crossingOf(props.book, 'piece:a', 'pad', 'o1');
+    const pressed = () => all('[role=dialog] .pads button[aria-pressed=true]').map((b) => b.textContent);
+    jack('&pad', 'Circuit Tracks').click();
+    flushSync();
+    click('Several');
+    expect(one('[role=dialog]')).not.toBeNull();
+    pad(3);
+    expect(now()).toBe(3);
+    pad(1);
+    expect([now(), pressed(), one('[role=dialog]') !== null]).toEqual([[1, 3], ['1', '3'], true]);
+    pad(16);
+    expect(now()).toEqual([1, 3, 16]);
+    pad(3);
+    pad(16);
+    expect([now(), pressed()]).toEqual([1, ['1']]);
+    pad(1);
+    expect(now()).toBeUndefined();
+    click('Done');
+    expect(one('[role=dialog]')).toBeNull();
+  });
+
+  it('opens in Several mode on a crossing that is a set, and a pad pressed outside it still picks one channel and closes, as before', () => {
+    const { props } = matrix(withCrossing(home(), 'piece:a', 'pad', 'o1', [2, 4]));
+    jack('&pad', 'Circuit Tracks').click();
+    flushSync();
+    expect(all('[role=dialog] .pads button[aria-pressed=true]').map((b) => b.textContent)).toEqual(['2', '4']);
+    expect(one('[role=dialog] [aria-pressed=true]:not(.pads button)').textContent).toBe('Several');
+    click('Done');
+    jack('&pad', 'Circuit Tracks').click();
+    flushSync();
+    click('Several');
+    pad(9);
+    expect([crossingOf(props.book, 'piece:a', 'pad', 'o1'), one('[role=dialog]')]).toEqual([9, null]);
+  });
+
+  it('replaces as played by a channel pressed, and a set by as played: a crossing is one or the other', () => {
+    const { props } = matrix(home());
+    const now = () => crossingOf(props.book, 'piece:a', inputRow(keystep), 'o1');
+    jack('KeyStep 37', 'Circuit Tracks').click();
+    flushSync();
+    click('= As played');
+    expect(now()).toBe(AS_PLAYED);
+    jack('KeyStep 37', 'Circuit Tracks').click();
+    flushSync();
+    click('Several');
+    pad(5);
+    pad(7);
+    expect(now()).toEqual([5, 7]);
+    click('= As played');
+    expect(now()).toBe(AS_PLAYED);
+  });
+
+  it('writes a crossing as its chip: 1, 1+3, 1+3+5, as played =, and a count from 4 channels; the label and title give every channel', () => {
+    expect([1, [1, 3], [1, 3, 5], AS_PLAYED, [1, 2, 3, 4], Array.from({ length: 16 }, (_, i) => i + 1)].map(crossingText)).toEqual(['1', '1+3', '1+3+5', '=', '×4', '×16']);
+    expect([crossingWords(1), crossingWords([1, 3]), crossingWords([1, 3, 5]), crossingWords(AS_PLAYED)]).toEqual([
+      'channel 1',
+      'channels 1 and 3',
+      'channels 1, 3 and 5',
+      'as played',
+    ]);
+    const book = withCrossing(withCrossing(withCrossing(home(), 'piece:a', 'lead', 'o1', [1, 3]), 'piece:a', 'pad', 'o1', [1, 3, 5]), 'piece:a', 'pad', 'o2', [2, 4, 6, 8]);
+    matrix(book);
+    expect(rowCells('&lead')).toEqual(['1+3', '1']);
+    expect(rowCells('&pad')).toEqual(['1+3+5', '×4']);
+    expect(jack('&lead', 'Circuit Tracks').getAttribute('aria-label')).toBe('&lead to Circuit Tracks: channels 1 and 3');
+    expect(one('[aria-label$="channels 2, 4, 6 and 8"] .chip').getAttribute('title')).toBe('channels 2, 4, 6 and 8');
+    // (a locked matrix, a piece’s own, shows the same)
+    document.body.replaceChildren();
+    matrix(book, { locked: true });
+    expect(rowCells('&lead')).toEqual(['1+3', '1']);
+  });
+
+  it('counts every channel of a set as routed to an output, in its details and on the meter', () => {
+    matrix(withCrossing(home(), 'piece:a', 'pad', 'o2', [3, 12]), { onselect: undefined });
+    head('Minilogue xd').click();
+    flushSync();
+    expect(all('[role=dialog] .cell.on').map((c) => Number((c as HTMLElement).dataset.channel))).toEqual([1, 3, 12]);
+  });
+
+  it('marks as busy, in the picker, each channel of another row’s set', () => {
+    matrix(withCrossing(home(), 'piece:a', 'lead', 'o1', [4, 6]));
+    jack('&pad', 'Circuit Tracks').click();
+    flushSync();
+    expect(all('[role=dialog] .busy').map((b) => b.textContent)).toEqual(['4', '6', '10']);
   });
 
   it('the channel picker closes even when the frontend’s change throws', () => {
