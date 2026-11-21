@@ -526,6 +526,156 @@ describe('PanelEditor', () => {
     });
   });
 
+  describe('what the stage may send: nothing while Try is off', () => {
+    /** One control of every kind the stage draws, each with the ways of pressing it: a pointer, and the keys. */
+    const EVERY: Panel = {
+      id: 'every',
+      name: 'Every',
+      children: [
+        { type: 'knob', id: 'k', label: 'K', bind: [{ kind: 'cc', number: 20 }] },
+        { type: 'fader', id: 'f', label: 'F', bind: [{ kind: 'cc', number: 21 }] },
+        {
+          type: 'xy',
+          id: 'xy',
+          label: 'XY',
+          bind: [
+            { kind: 'cc', number: 22 },
+            { kind: 'cc', number: 23, axis: 'y' },
+          ],
+        },
+        { type: 'button', id: 'b', label: 'B', bind: [{ kind: 'cc', number: 24 }] },
+        { type: 'switch', id: 's', label: 'S', bind: [{ kind: 'cc', number: 25 }] },
+        { type: 'pads', id: 'p', label: 'P', notes: [36, 38] },
+        { type: 'keyboard', id: 'kb', label: 'KB', low: 48, high: 60 },
+      ],
+    };
+    /** Each kind's two ways: [kind, a pointer press (a drag), the keys]. */
+    const WAYS: [string, () => void, () => void][] = [
+      [
+        'knob',
+        () => {
+          const el = slider('K');
+          pointer(el, 'pointerdown', 0, 100);
+          pointer(el, 'pointermove', 0, 20);
+          pointer(el, 'pointerup');
+        },
+        () => (key(slider('K'), 'ArrowUp'), key(slider('K'), 'Home')),
+      ],
+      [
+        'fader',
+        () => {
+          const el = boxed(slider('F'), 40, 200);
+          pointer(el, 'pointerdown', 20, 20);
+          pointer(el, 'pointermove', 20, 60);
+          pointer(el, 'pointerup');
+        },
+        () => (key(slider('F'), 'ArrowUp'), key(slider('F'), 'End')),
+      ],
+      [
+        'xy',
+        () => {
+          const el = boxed(slider('XY'), 200, 200);
+          pointer(el, 'pointerdown', 100, 100);
+          pointer(el, 'pointermove', 150, 50);
+          pointer(el, 'pointerup');
+        },
+        () => (key(slider('XY'), 'ArrowLeft'), key(slider('XY'), 'End')),
+      ],
+      [
+        'button',
+        () => {
+          const el = one('button[aria-label="B"]');
+          pointer(el, 'pointerdown');
+          pointer(el, 'pointerup');
+        },
+        () => {
+          const el = one('button[aria-label="B"]');
+          for (const k of ['Enter', ' ']) (key(el, k), key(el, k, 'keyup'));
+        },
+      ],
+      [
+        'switch',
+        () => one<HTMLButtonElement>('[role=switch][aria-label="S"]').click(),
+        // (a native button's Enter and Space come to a click: the keys and that click)
+        () => {
+          const el = one<HTMLButtonElement>('[role=switch][aria-label="S"]');
+          for (const k of ['Enter', ' ']) (key(el, k), key(el, k, 'keyup'), el.click());
+        },
+      ],
+      [
+        'pads',
+        () => {
+          const el = one('button[aria-label="P C2"]');
+          pointer(el, 'pointerdown');
+          pointer(el, 'pointerup');
+        },
+        () => {
+          const el = one('button[aria-label="P C2"]');
+          for (const k of ['Enter', ' ']) (key(el, k), key(el, k, 'keyup'));
+        },
+      ],
+      [
+        'keys',
+        () => {
+          const el = boxed(one('.wm-keys'), 70, 100);
+          pointer(el, 'pointerdown', 5, 100);
+          pointer(el, 'pointermove', 15, 100);
+          pointer(el, 'pointerup', 15, 100);
+        },
+        () => {
+          const el = one('button[aria-label="C4"]');
+          for (const k of ['Enter', ' ']) (key(el, k), key(el, k, 'keyup'));
+        },
+      ],
+    ];
+
+    for (const [kind, byPointer, byKeys] of WAYS) {
+      it(`a ${kind}: with Try off no press, key or drag sends, and with Try on each does`, () => {
+        const sent: number[][] = [];
+        edit(EVERY, (data) => void sent.push(data));
+        byPointer();
+        byKeys();
+        expect(sent).toEqual([]);
+        press(button('Try'));
+        byPointer();
+        const byTouch = sent.length;
+        expect(byTouch).toBeGreaterThan(0);
+        byKeys();
+        expect(sent.length).toBeGreaterThan(byTouch);
+      });
+    }
+
+    it('sends nothing after Try is turned off in the middle of a drag, and the notes held are released once', () => {
+      const sent: number[][] = [];
+      edit(EVERY, (data) => void sent.push(data));
+      press(button('Try'));
+      const keys = boxed(one('.wm-keys'), 70, 100);
+      pointer(keys, 'pointerdown', 5, 100);
+      expect(sent).toEqual([[0x90, 48, 127]]);
+      const fader = boxed(slider('F'), 40, 200);
+      pointer(fader, 'pointerdown', 20, 20);
+      const before = sent.length;
+      press(button('Try'));
+      expect(sent.slice(before)).toEqual([[0x80, 48, 0]]);
+      pointer(keys, 'pointermove', 15, 100);
+      pointer(fader, 'pointermove', 20, 100);
+      pointer(keys, 'pointerup', 15, 100);
+      pointer(fader, 'pointerup');
+      expect(sent.slice(before)).toEqual([[0x80, 48, 0]]);
+    });
+
+    it('still chooses a control by Enter or Space with Try off, and sends nothing doing it', () => {
+      const sent: number[][] = [];
+      edit(EVERY, (data) => void sent.push(data));
+      key(one('[aria-label="Edit KB"]'), 'Enter');
+      expect(one('.inspector .eyebrow').textContent).toBe('Control');
+      expect((all('.inspector label.field input')[0] as HTMLInputElement).value).toBe('KB');
+      key(one('[aria-label="Edit B"]'), ' ');
+      expect((all('.inspector label.field input')[0] as HTMLInputElement).value).toBe('B');
+      expect(sent).toEqual([]);
+    });
+  });
+
   describe('move into a group or out of one', () => {
     const into = () => one<HTMLSelectElement>('select[aria-label="Move into"]');
     const choose = (name: string) => {
