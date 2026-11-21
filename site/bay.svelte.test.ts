@@ -125,6 +125,19 @@ describe('the standalone patchbay', () => {
     expect(synth.sent.slice(1).map((m) => m.data)).toEqual([[0x90, 60, 100], ...Array.from({ length: 16 }, (_, ch) => [0xb0 | ch, 123, 0])]);
   });
 
+  it('passes an input on once per channel of a crossing of several, two messages in the monitor for a voice on 1 and 3 of one output (yggi/webmidi#25)', async () => {
+    const { bay, keys, synth } = await rig();
+    let book = chooseDevice(bay.book, 'o1', { id: 'out-2', name: 'Minilogue xd' });
+    book = withCrossing(book, CONTEXT, inputRow({ id: 'in-2', name: 'KeyStep 37' }), 'o1', [3, 1]);
+    bay.keep(book);
+    keys.play([0x90, 60, 100]);
+    expect(synth.sent.map((m) => m.data)).toEqual([
+      [0x90, 60, 100],
+      [0x92, 60, 100],
+    ]);
+    expect(bay.seen.map((m) => m.bytes).length).toBe(2);
+  });
+
   it('plays a panel and an input on the page’s own sound where their rows cross the built-in, with no device at all', async () => {
     const { bay, keys, mixerIn, played, synth } = await rig();
     let book = withBuiltIn(bay.book, true);

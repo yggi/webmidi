@@ -12,4 +12,4 @@ export { default as PatchMatrix } from './PatchMatrix.svelte';
 export { default as ChannelPicker } from './ChannelPicker.svelte';
 export { default as SetupPicker } from './SetupPicker.svelte';
 export { inputRows, type MatrixRow } from './rows';
-export { CHANNELS, channelHue } from './channels';
+export { CHANNELS, channelHue, crossingText, crossingWords } from './channels';

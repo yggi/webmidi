@@ -41,6 +41,7 @@
     withBuiltIn,
     removeOutput,
     AS_PLAYED,
+    channelsOf,
     inputRow,
     isPanelKey,
     panelKey,
@@ -57,7 +58,7 @@
     type SetupOutput,
   } from '../core/setups';
   import ChannelPicker from './ChannelPicker.svelte';
-  import { channelHue } from './channels';
+  import { channelHue, crossingText, crossingWords } from './channels';
   import DeviceDialog from './DeviceDialog.svelte';
   import { inputRows, type MatrixRow } from './rows';
 
@@ -221,11 +222,11 @@
 
   let picking: { row: MatrixRow; key: string; name: string; anchor: DOMRect } | null = $state(null);
 
-  /** A channel picked: the picker closes first, whatever the frontend then does with the change. */
-  function pick(value: Crossing | undefined) {
+  /** A channel picked: the picker closes first, whatever the frontend then does with the change; it stays open while a set is built (`more`). */
+  function pick(value: Crossing | undefined, more = false) {
     if (!picking) return;
     const { row, key } = picking;
-    picking = null;
+    if (!more) picking = null;
     onchange(withCrossing(book, context, row.id, key, value));
   }
 
@@ -252,9 +253,8 @@
     else detail = o.key;
   }
   /** The channels this context routes to an output, and those sounding on it now (`lit`). */
-  const usedOn = (key: string) => [...new Set(Object.values(routes).flatMap((c) => (Object.hasOwn(c, key) && c[key]! > 0 ? [c[key]!] : [])))].sort((a, b) => a - b);
-  const litOn = (key: string) =>
-    new Set([...(lit ?? [])].flatMap((id) => (id.endsWith(`|${key}`) ? [crossing(id.slice(0, -key.length - 1), key) ?? 0] : [])).filter((ch) => ch > 0));
+  const usedOn = (key: string) => [...new Set(Object.values(routes).flatMap((c) => (Object.hasOwn(c, key) ? channelsOf(c[key]!) : [])))].sort((a, b) => a - b);
+  const litOn = (key: string) => new Set([...(lit ?? [])].flatMap((id) => (id.endsWith(`|${key}`) ? channelsOf(crossing(id.slice(0, -key.length - 1), key) ?? AS_PLAYED) : [])));
   /** A drum map on a head: a device's own by its name ("Novation Circuit"), General MIDI and one edited by hand as "GM drums", "Custom drums". */
   const drumsText = (preset: string) => (preset === 'GM' || preset === 'Custom' ? `${preset} drums` : preset);
   /** What a head says under its name: where it is, what is missing, how its device takes notes. */
@@ -271,7 +271,7 @@
 
   /** The channels other rows send on to an output. */
   function busy(row: string, key: string): number[] {
-    return Object.entries(routes).flatMap(([r, c]) => (r !== row && Object.hasOwn(c, key) && c[key]! > 0 ? [c[key]!] : []));
+    return Object.entries(routes).flatMap(([r, c]) => (r !== row && Object.hasOwn(c, key) ? channelsOf(c[key]!) : []));
   }
 
   /** What an input row plays, chosen: as every input (''), not heard, the default, or a row (kept with its role). */
@@ -500,20 +500,29 @@
                     <span class="via" title="Heard here through the part it plays">—</span>
                   {/if}
                 {:else}
-                  {@const chip = value === undefined ? null : value === AS_PLAYED ? '=' : String(value)}
+                  {@const chip = value === undefined ? null : crossingText(value)}
+                  {@const words = value === undefined ? 'not sent' : crossingWords(value)}
                   {#if locked && !free(row)}
-                    <span class="jack" aria-label="{row.label} to {outLabel(o)}: {chip ?? 'not sent'}">
-                      {#if chip}<span class="chip" class:keep={value === AS_PLAYED} style:--h={channelHue(value ?? 1)}>{chip}</span>{:else}<span class="hole"></span>{/if}
+                    <span class="jack" aria-label="{row.label} to {outLabel(o)}: {words}">
+                      {#if chip}<span class="chip" class:keep={value === AS_PLAYED} title={words} style:--h={channelHue(channelsOf(value ?? 1)[0] ?? 1)}>{chip}</span>{:else}<span
+                          class="hole"
+                        ></span>{/if}
                     </span>
                   {:else}
                     <button
                       type="button"
                       class="jack"
-                      aria-label="{row.label} to {outLabel(o)}: {chip === null ? 'not sent' : value === AS_PLAYED ? 'as played' : `channel ${value}`}"
+                      aria-label="{row.label} to {outLabel(o)}: {words}"
                       onclick={(e) => (picking = { row, key: o.key, name: outLabel(o), anchor: e.currentTarget.getBoundingClientRect() })}
                     >
                       {#if chip}
-                        <span class="chip" class:keep={value === AS_PLAYED} class:lit={lit?.has(`${row.id}|${o.key}`)} style:--h={channelHue(value ?? 1)}>{chip}</span>
+                        <span
+                          class="chip"
+                          class:keep={value === AS_PLAYED}
+                          class:lit={lit?.has(`${row.id}|${o.key}`)}
+                          title={words}
+                          style:--h={channelHue(channelsOf(value ?? 1)[0] ?? 1)}>{chip}</span
+                        >
                       {:else}<span class="hole"></span>{/if}
                     </button>
                   {/if}

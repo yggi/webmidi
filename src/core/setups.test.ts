@@ -11,6 +11,8 @@ import {
   ANY_INPUT,
   AS_PLAYED,
   changedFrom,
+  channelsOf,
+  crossingFrom,
   chooseDevice,
   crossingOf,
   DEFAULT_PROFILE,
@@ -302,7 +304,7 @@ describe('a setup as a file', () => {
   it('says in words what is wrong with a file that isn’t one', () => {
     expect(importSetup(newBook(), 'not json')).toMatch(/isn’t JSON/);
     expect(importSetup(newBook(), '{"format":"other"}')).toMatch(/isn’t a MIDI setup/);
-    expect(importSetup(newBook(), '{"format":"webmidi-setup","version":3}')).toMatch(/newer version/);
+    expect(importSetup(newBook(), '{"format":"webmidi-setup","version":4}')).toMatch(/newer version/);
     expect(importSetup(newBook(), '{"format":"webmidi-setup","version":1}')).toMatch(/damaged/);
     expect(importSetup(newBook(), '{"format":"webmidi-setup","version":2}')).toMatch(/damaged/);
   });
@@ -478,5 +480,127 @@ describe('the built-in (this device’s own sound) as an output', () => {
     const setup = activeSetup(readBook(kept));
     expect(setup.outputs).toEqual([BUILT_IN, { key: 'o1', id: 'out-1', name: 'X' }]);
     expect(setup.routes).toEqual({ band: { lead: { builtin: 1 } } });
+  });
+});
+
+describe('a crossing of several channels (yggi/webmidi#25, decision 010)', () => {
+  const pairs = Array.from({ length: 16 }, (_, a) => Array.from({ length: 16 - a - 1 }, (_, i) => [a + 1, a + i + 2] as const)).flat();
+  const all16 = Array.from({ length: 16 }, (_, i) => i + 1);
+  /** A book with `value` as the lead’s crossing to o2, saved. */
+  const sending = (value: number | readonly number[]) => overwrite(withCrossing(home(), 'band', 'lead', 'o2', value));
+  /** Through the text a frontend keeps, as `localBookStore` does. */
+  const kept = (book: SetupBook) => readBook(JSON.parse(JSON.stringify(book)));
+
+  it('is a channel, as played, or a set of 2 or more channels ascending; a set of one is the bare number', () => {
+    expect(pairs.length).toBe(120);
+    expect([crossingFrom(5), crossingFrom(0), crossingFrom([5]), crossingFrom([3, 1]), crossingFrom(all16)]).toEqual([5, 0, 5, [1, 3], all16]);
+    expect([channelsOf(0), channelsOf(5), channelsOf([1, 3])]).toEqual([[], [5], [1, 3]]);
+  });
+
+  it('is normalised, by withCrossing and by reading: sorted, deduped, out-of-range dropped, one element a number, none no crossing, as played not mixed in', () => {
+    const cases: readonly (readonly [unknown, number | readonly number[] | undefined])[] = [
+      [
+        [3, 1, 3],
+        [1, 3],
+      ],
+      [[1, 1], 1],
+      [
+        [16, 1, 9],
+        [1, 9, 16],
+      ],
+      [[0, 5], 5],
+      [
+        [0, 1, 3],
+        [1, 3],
+      ],
+      [[0], undefined],
+      [[17, 3, -1, 1.5, NaN], 3],
+      [[17], undefined],
+      [[], undefined],
+      [['1', null, 2], 2],
+      [7, 7],
+      [0, 0],
+      [17, undefined],
+      [-1, undefined],
+      [1.5, undefined],
+      ['1', undefined],
+      [null, undefined],
+      [undefined, undefined],
+      [{ 0: 1 }, undefined],
+    ];
+    for (const [given, want] of cases) {
+      expect(crossingFrom(given), JSON.stringify(given)).toEqual(want);
+      expect(crossingOf(withCrossing(home(), 'band', 'lead', 'o2', given as never), 'band', 'lead', 'o2'), JSON.stringify(given)).toEqual(want);
+      // (read from what was kept: the same answer, and no row left for no crossing)
+      const text = JSON.parse(JSON.stringify(home()));
+      text.setups[0].routes = { band: { lead: { o2: given } } };
+      expect(crossingOf(readBook(text), 'band', 'lead', 'o2'), JSON.stringify(given)).toEqual(want);
+    }
+    expect(activeSetup(withCrossing(home(), 'band', 'lead', 'o2', [])).routes.band).toEqual({});
+  });
+
+  it('round-trips each of the 16 single channels, as played, each of the 120 pairs, a set of 3 and the set of 16, through the book and through the file', () => {
+    const values: (number | readonly number[])[] = [AS_PLAYED, ...all16, ...pairs.map((p) => [...p]), [2, 9, 16], all16];
+    expect(values.length).toBe(1 + 16 + 120 + 2);
+    for (const value of values) {
+      const book = sending(value);
+      expect(crossingOf(book, 'band', 'lead', 'o2')).toEqual(value);
+      expect(crossingOf(kept(book), 'band', 'lead', 'o2')).toEqual(value);
+      const imported = importSetup(newBook(), exportSetup(book));
+      if (typeof imported === 'string') throw new Error(imported);
+      expect(crossingOf(imported, 'band', 'lead', 'o2')).toEqual(value);
+    }
+  });
+
+  it('keeps a set through every edit of the book that moves routes: an output given another device, a variant, an input renamed', () => {
+    const book = withCrossing(sending([1, 3]), 'band', inputRow(keystep), 'o1', [2, 4]);
+    expect(crossingOf(chooseDevice(book, 'o2', { id: 'out-9', name: 'MicroFreak' }), 'band', 'lead', 'o2')).toEqual([1, 3]);
+    expect(crossingOf(removeOutput(book, 'o1'), 'band', 'lead', 'o2')).toEqual([1, 3]);
+    expect(activeSetup(removeOutput(book, 'o1')).routes.band).toEqual({ lead: { o2: [1, 3] } });
+    expect(crossingOf(withCrossing(book, 'band', 'pad', 'o1', 3), 'band', 'lead', 'o2')).toEqual([1, 3]);
+  });
+
+  it('is written to a file as version 3 only when the file holds a set: every other file stays version 2 for a reader before, and a version 4 is refused in words', () => {
+    for (const value of [AS_PLAYED, 1, 16]) expect(JSON.parse(exportSetup(sending(value))).version).toBe(2);
+    expect(JSON.parse(exportSetup(home())).version).toBe(2);
+    expect(JSON.parse(exportSetup(sending([1, 3]))).version).toBe(3);
+    // (another setup of the book holding a set doesn't make this one's file version 3)
+    const other = withCrossing(saveAs(home(), 'Venue'), 'band', 'lead', 'o2', [1, 3]);
+    expect(JSON.parse(exportSetup(other, 's1')).version).toBe(2);
+    expect(JSON.parse(exportSetup(other)).version).toBe(3);
+    expect(importSetup(newBook(), JSON.stringify({ format: 'webmidi-setup', version: 4, setup: { id: 'x' } }))).toMatch(/newer version/);
+  });
+
+  it('reads books and files kept by v0.9.0 as they were: every crossing a number, the same bytes written back', () => {
+    // as `localBookStore` kept it at v0.9.0
+    const stored = {
+      version: 1,
+      devices: { 'Circuit Tracks': { drums: { 36: 60 }, bend: 12, mpe: null, latency: 5 } },
+      defaults: { drums: {}, bend: 2, mpe: null, latency: 0 },
+      active: 's1',
+      setups: [
+        {
+          id: 's1',
+          name: 'Home',
+          outputs: [
+            { key: 'o1', id: 'out-1', name: 'Circuit Tracks' },
+            { key: 'o2', id: 'out-2', name: 'Minilogue xd' },
+          ],
+          plays: { 'in:KeyStep 37': 'default' },
+          routes: { band: { lead: { o2: 1 }, drums: { o1: 10 }, 'in:KeyStep 37': { o1: 0, o2: 16 } }, 'piece:a': { pad: { o2: 3 } } },
+          clock: ['o1'],
+        },
+      ],
+    };
+    const book = readBook(stored);
+    expect(activeSetup(book).routes).toEqual(stored.setups[0]!.routes);
+    expect(JSON.parse(JSON.stringify(book))).toEqual(JSON.parse(JSON.stringify(readBook(JSON.parse(JSON.stringify(book))))));
+    expect(JSON.parse(JSON.stringify(activeSetup(book).routes))).toEqual(stored.setups[0]!.routes);
+    // as `exportSetup` wrote it at v0.9.0 (version 2)
+    const file = JSON.stringify({ format: 'webmidi-setup', version: 2, setup: stored.setups[0], devices: {} });
+    const imported = importSetup(newBook(), file);
+    if (typeof imported === 'string') throw new Error(imported);
+    expect(activeSetup(imported).routes).toEqual(stored.setups[0]!.routes);
+    expect(JSON.parse(exportSetup(imported)).version).toBe(2);
   });
 });

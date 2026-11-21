@@ -1,10 +1,13 @@
 <script lang="ts">
   /**
-   * The channel of a crossing, chosen from 16 pads in their hues (docs/proposals/patchbay.md): a dot marks a channel
-   * another row already sends on to this output; "As played" for an input's row; "Not sent" clears it. A small dialog
-   * beside the jack it opened from; Escape or a press outside closes it.
+   * The channels of a crossing, chosen from 16 pads in their hues (docs/proposals/patchbay.md): a dot marks a channel
+   * another row already sends on to this output; "As played" for an input's row; "Not sent" clears it. A pad pressed
+   * picks that channel and closes, as it always did; "Several" (open already on a crossing that is a set) makes the pads
+   * toggles instead, each press changing the crossing at once with the picker left open until "Done" (decision 010),
+   * and a channel pressed on an as-played crossing replaces it. A small dialog beside the jack it opened from;
+   * Escape or a press outside closes it.
    */
-  import { AS_PLAYED, type Crossing } from '../core/setups';
+  import { AS_PLAYED, channelsOf, crossingFrom, type Crossing } from '../core/setups';
   import { CHANNELS, channelHue } from './channels';
 
   interface Props {
@@ -17,11 +20,25 @@
     asPlayed?: boolean;
     /** Where the jack is, to sit beside it. */
     anchor: { readonly left: number; readonly right: number; readonly top: number; readonly bottom: number };
-    onpick: (value: Crossing | undefined) => void;
+    /** A crossing picked (`more`: in Several mode, the picker stays open for the next press). */
+    onpick: (value: Crossing | undefined, more?: boolean) => void;
     onclose: () => void;
   }
 
   let { label, value, busy = [], asPlayed = false, anchor, onpick, onclose }: Props = $props();
+
+  /** Several mode: pressed on or off by the person, else on while the crossing is a set. */
+  let pressed: boolean | null = $state(null);
+  const several = $derived(pressed ?? channelsOf(value ?? AS_PLAYED).length > 1);
+  /** The channels pressed in Several mode, kept here so a press doesn't wait on the frontend's change coming back as `value`. */
+  let chosen: readonly number[] | null = $state(null);
+  const channels = $derived(chosen ?? channelsOf(value ?? AS_PLAYED));
+  function press(ch: number) {
+    if (!several) return onpick(ch);
+    const next = crossingFrom(channels.includes(ch) ? channels.filter((c) => c !== ch) : [...channels, ch]);
+    chosen = next === undefined ? [] : channelsOf(next);
+    onpick(next, true);
+  }
 
   let box: HTMLDivElement | undefined = $state();
   let place = $state({ left: 0, top: 0 });
@@ -52,16 +69,26 @@
       <button
         type="button"
         style:--h={channelHue(ch)}
-        aria-pressed={value === ch}
+        aria-pressed={channels.includes(ch)}
         class:busy={busy.includes(ch)}
         title={busy.includes(ch) ? 'Another row already sends on this channel here' : undefined}
-        onclick={() => onpick(ch)}>{ch}</button
+        onclick={() => press(ch)}>{ch}</button
       >
     {/each}
   </div>
   <div class="row">
     {#if asPlayed}<button type="button" class="plain" aria-pressed={value === AS_PLAYED} onclick={() => onpick(AS_PLAYED)}>= As played</button>{/if}
     <button type="button" class="plain" onclick={() => onpick(undefined)}>Not sent</button>
+  </div>
+  <div class="row">
+    <button
+      type="button"
+      class="plain"
+      aria-pressed={several}
+      title="Press several channels: each toggles, and the crossing sends on all of them"
+      onclick={() => ((pressed = !several), (chosen = null))}>Several</button
+    >
+    {#if several}<button type="button" class="plain" onclick={onclose}>Done</button>{/if}
   </div>
   {#if busy.length}<p class="note">• another row already sends on it here</p>{/if}
 </div>
