@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EXAMPLE_MIXER, EXAMPLE_PLAY, instantiate, type Panel } from '../../core/panels/index';
+import { detachProblem, EXAMPLE_MIXER, EXAMPLE_PLAY, instantiate, renameParamProblem, renameTemplateProblem, templateProblem, type Panel } from '../../core/panels/index';
 import { drag, stepKey } from './drag';
 import Keys from './Keys.svelte';
 import PanelEditor from './PanelEditor.svelte';
@@ -790,6 +790,234 @@ describe('PanelEditor', () => {
       const height = [...source.matchAll(/max-height: (\d+)dvh/g)].map((m) => Number(m[1]));
       expect(height).toEqual([40]);
       expect(source).toMatch(/\.sheet-head \.close \{[^}]*min-height: 44px;[^}]*min-width: 44px;/);
+    });
+  });
+
+  describe('make a group a template, detach one, rename one and its parameters', () => {
+    const kind = () => one('.inspector .eyebrow').textContent;
+    const controls = (panel: Panel) => instantiate(panel).controls.map((c) => ({ key: c.key, bindings: c.bindings, value: c.value }));
+    const fieldOf = (label: string) =>
+      all('.inspector label.field')
+        .find((l) => l.querySelector('span')?.textContent?.startsWith(label))
+        ?.querySelector('input') as HTMLInputElement | undefined;
+    const strips = () => press(all('section[aria-label="1"]')[0]);
+    const wheels = () => press(one('section[aria-label="WHEELS"]'));
+    const key = (el: Element, k: string) => {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+      flushSync();
+    };
+    /** A name typed into the template name field, as a keyboard does (each keystroke is an input). */
+    const typeName = (text: string) => {
+      const el = one<HTMLInputElement>('input[aria-label="Template name"]');
+      el.value = text;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      flushSync();
+      return el;
+    };
+    const undone = () => (button('Undo') as HTMLButtonElement).disabled;
+    const names = (panel: Panel) => Object.keys(panel.templates ?? {});
+
+    it('offers Make a template… on a group with children, and nothing on a control, a panel or a group that uses a template', () => {
+      edit(EXAMPLE_MIXER);
+      expect(button('Make a template…')).toBeUndefined();
+      press(one('[aria-label="Edit Main"]'));
+      expect(button('Make a template…')).toBeUndefined();
+      expect(button('Detach')).toBeUndefined();
+      strips();
+      expect(button('Make a template…')).toBeUndefined();
+      press(one('.sheet-head .close'));
+      expect(button('Make a template…')).toBeUndefined();
+    });
+    it('offers Detach to none and Make a template… to a group with children inline', () => {
+      edit(EXAMPLE_PLAY);
+      wheels();
+      expect(button('Make a template…')).toBeDefined();
+      expect(button('Detach')).toBeUndefined();
+      expect(fieldOf('Template')).toBeUndefined();
+    });
+    it('asks a name in a field of its own, not a prompt: Escape cancels it and the panel is untouched', () => {
+      const props = edit(EXAMPLE_PLAY);
+      wheels();
+      press(button('Make a template…'));
+      const name = typeName('half typed');
+      expect(document.activeElement).toBe(name);
+      expect(button('Make')).toBeDefined();
+      key(name, 'Escape');
+      expect(document.querySelector('input[aria-label="Template name"]')).toBeNull();
+      expect(button('Make a template…')).toBeDefined();
+      expect(props.panel).toEqual(EXAMPLE_PLAY);
+      expect(undone()).toBe(true);
+    });
+    it('makes the group a template: the controls are identical, the group uses it, and one Undo restores the original exactly', () => {
+      const props = edit(EXAMPLE_PLAY);
+      wheels();
+      press(button('Make a template…'));
+      const name = typeName('pair');
+      key(name, 'Enter');
+      expect(names(props.panel)).toEqual(['pair']);
+      expect(controls(props.panel)).toEqual(controls(EXAMPLE_PLAY));
+      expect(kind()).toBe('Group');
+      expect(one('.sheet-head .what').textContent).toBe('wheels');
+      expect(fieldOf('Template')!.value).toBe('pair');
+      expect(button('Make a template…')).toBeUndefined();
+      press(button('Undo'));
+      expect(props.panel).toEqual(EXAMPLE_PLAY);
+      expect(undone()).toBe(true);
+    });
+    it('confirms with the Make button as well', () => {
+      const props = edit(EXAMPLE_PLAY);
+      wheels();
+      press(button('Make a template…'));
+      typeName('pair');
+      expect(names(props.panel)).toEqual([]);
+      press(button('Make'));
+      expect(names(props.panel)).toEqual(['pair']);
+    });
+    it('refuses a name the reader drops, in words, keeps the field’s text for editing and changes nothing', () => {
+      const props = edit(EXAMPLE_PLAY);
+      wheels();
+      press(button('Make a template…'));
+      const name = typeName('two words');
+      key(name, 'Enter');
+      expect(one('.note').textContent).toBe(templateProblem(EXAMPLE_PLAY, { at: [1] }, 'two words'));
+      expect(one('.note').textContent!.length).toBeGreaterThan(10);
+      expect(one<HTMLInputElement>('input[aria-label="Template name"]').value).toBe('two words');
+      expect(props.panel).toEqual(EXAMPLE_PLAY);
+      expect(undone()).toBe(true);
+      // edited, it goes through, and the reason is gone
+      typeName('two');
+      key(name, 'Enter');
+      expect(names(props.panel)).toEqual(['two']);
+      expect(document.querySelector('.note')).toBeNull();
+    });
+    it('refuses a name a template already has, and an empty one', () => {
+      const props = edit(EXAMPLE_MIXER);
+      press(button('Group'));
+      press(button('Knob'));
+      press(one('section[aria-label="group"], section[aria-label="group 1"]'));
+      press(button('Make a template…'));
+      key(typeName(''), 'Enter');
+      expect(one('.note').textContent).toBe('A template needs a name.');
+      key(typeName('strip'), 'Enter');
+      expect(one('.note').textContent).toBe('“strip” is already a template.');
+      expect(names(props.panel)).toEqual(['strip']);
+      expect(one<HTMLInputElement>('input[aria-label="Template name"]').value).toBe('strip');
+    });
+    it('leaves the stage as it is with Try on: a press plays and the choice stays', () => {
+      const sent: number[][] = [];
+      edit(EXAMPLE_PLAY, (d) => sent.push(d));
+      wheels();
+      press(button('Try'));
+      press(button('Make a template…'));
+      expect(one('input[aria-label="Template name"]')).toBeDefined();
+      expect(sent).toEqual([]);
+      expect(one('.sheet-head .what').textContent).toBe('wheels');
+    });
+
+    it('shows a group that uses a template its name, Detach and how many groups use it', () => {
+      edit(EXAMPLE_MIXER);
+      strips();
+      expect(fieldOf('Template')!.value).toBe('strip');
+      expect(button('Detach')).toBeDefined();
+      expect(one('.inspector .template').textContent).toContain('Only this group uses it');
+      expect(fieldOf('Gives “ch”')!.value).toBe('ch');
+      expect(fieldOf('Parameter “ch”')!.value).toBe('ch');
+    });
+    it('says the template is shared when more than one group uses it', () => {
+      const props = edit(EXAMPLE_MIXER);
+      strips();
+      press(button('Duplicate'));
+      expect(one('.inspector .template').textContent).toContain('Used by 2 groups: detaching copies it into this one');
+      expect(props.panel.children.length).toBe(3);
+    });
+    it('detaches the mixer’s strips: the group keeps its place, the controls stay, the unused template goes, one Undo restores', () => {
+      const props = edit(EXAMPLE_MIXER);
+      strips();
+      press(button('Detach'));
+      expect(names(props.panel)).toEqual([]);
+      expect('templates' in props.panel).toBe(false);
+      expect(props.panel.children.map((c) => (c as { group?: string }).group ?? 'main')).toEqual(['strips', 'main']);
+      expect(controls(props.panel)).toEqual(controls(EXAMPLE_MIXER));
+      expect(all('section[aria-label]').length).toBe(8);
+      expect(kind()).toBe('Group');
+      expect(button('Detach')).toBeUndefined();
+      expect(button('Make a template…')).toBeDefined();
+      press(button('Undo'));
+      expect(props.panel).toEqual(EXAMPLE_MIXER);
+      expect(undone()).toBe(true);
+      expect(fieldOf('Template')!.value).toBe('strip');
+    });
+    it('keeps the template when another group still uses it', () => {
+      const props = edit(EXAMPLE_MIXER);
+      strips();
+      press(button('Duplicate'));
+      press(button('Detach'));
+      expect(names(props.panel)).toEqual(['strip']);
+      expect(controls(props.panel).length).toBe(65);
+    });
+    it('refuses a detach the core refuses, with its reason at the group, and changes nothing', () => {
+      const props = edit(EXAMPLE_MIXER);
+      strips();
+      type(fieldOf('Gives “ch”')!, 'ch / 2');
+      const before = props.panel;
+      press(button('Detach'));
+      expect(one('.note').textContent).toBe(detachProblem(before, { at: [0] }));
+      expect(one('.note').textContent).toContain('division');
+      expect(props.panel).toBe(before);
+      expect(names(props.panel)).toEqual(['strip']);
+    });
+    it('renames the template: every use follows, instantiate is unchanged, one Undo step', () => {
+      const props = edit(EXAMPLE_MIXER);
+      strips();
+      type(fieldOf('Template')!, 'channel');
+      expect(names(props.panel)).toEqual(['channel']);
+      expect((props.panel.children[0] as { use?: string }).use).toBe('channel');
+      expect(controls(props.panel)).toEqual(controls(EXAMPLE_MIXER));
+      expect(kind()).toBe('Group');
+      expect(fieldOf('Template')!.value).toBe('channel');
+      press(button('Undo'));
+      expect(props.panel).toEqual(EXAMPLE_MIXER);
+      expect(undone()).toBe(true);
+    });
+    it('refuses a template name the reader drops or one that is taken, and puts the field back', () => {
+      const props = edit(EXAMPLE_MIXER);
+      strips();
+      type(fieldOf('Template')!, 'two words');
+      expect(one('.note').textContent).toBe(renameTemplateProblem(EXAMPLE_MIXER, 'strip', 'two words'));
+      expect(fieldOf('Template')!.value).toBe('strip');
+      expect(props.panel).toEqual(EXAMPLE_MIXER);
+      expect(undone()).toBe(true);
+    });
+    it('renames a parameter: the template’s expressions and the group’s with follow, instantiate is unchanged, one Undo step', () => {
+      const props = edit(EXAMPLE_MIXER);
+      strips();
+      type(fieldOf('Parameter “ch”')!, 'n');
+      expect(props.panel.templates!.strip!.params).toEqual(['n']);
+      expect((props.panel.children[0] as { with?: object }).with).toEqual({ n: 'ch' });
+      expect(controls(props.panel)).toEqual(controls(EXAMPLE_MIXER));
+      expect(fieldOf('Gives “n”')!.value).toBe('ch');
+      expect(fieldOf('Parameter “n”')!.value).toBe('n');
+      press(button('Undo'));
+      expect(props.panel).toEqual(EXAMPLE_MIXER);
+      expect(undone()).toBe(true);
+    });
+    it('refuses a parameter name that is taken or isn’t a name, in words, and puts the field back', () => {
+      const props = edit(EXAMPLE_MIXER);
+      strips();
+      type(fieldOf('Parameter “ch”')!, '3x');
+      expect(one('.note').textContent).toBe(renameParamProblem(EXAMPLE_MIXER, 'strip', 'ch', '3x'));
+      expect(fieldOf('Parameter “ch”')!.value).toBe('ch');
+      expect(props.panel).toEqual(EXAMPLE_MIXER);
+    });
+    it('has its controls as real inputs and buttons, in the sheet with the other fields', () => {
+      edit(EXAMPLE_MIXER);
+      strips();
+      const sheet = one('.inspector.sheet');
+      for (const el of [fieldOf('Template')!, fieldOf('Parameter “ch”')!, button('Detach')!]) {
+        expect(sheet.contains(el)).toBe(true);
+        expect(el.tabIndex).toBeGreaterThanOrEqual(0);
+      }
+      expect(button('Detach')!.tagName).toBe('BUTTON');
     });
   });
 

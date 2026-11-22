@@ -8,7 +8,10 @@
    * Given `onsend`, a Try toggle plays the panel as it stands (a press plays and chooses nothing) through it, and
    * only while it is on: with Try off nothing the stage does reaches `onsend`; without one there is nothing to try and the
    * editor only edits. A node moves into a group of its choice or out of its own
-   * (`moveNode`), refused in words where the move would change what it means. Where the two columns stack (a phone),
+   * (`moveNode`), refused in words where the move would change what it means. A group with its children inline is made
+   * a template (a name asked in a field beside its button, Enter or Make to confirm, Escape to cancel: `extractTemplate`); a
+   * group that uses one shows the template's name and its parameters as fields to rename, and Detach (`detachTemplate`),
+   * each refused in words through the same note, and each one step of Undo. Where the two columns stack (a phone),
    * what is chosen is edited in a sheet docked to the bottom, with its name and a close control, its bindings first, so
    * the control and its first binding are in view at once; the panel's own fields stay where they are.
    */

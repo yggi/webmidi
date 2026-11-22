@@ -9,7 +9,10 @@
    * Given `onsend`, a Try toggle plays the panel as it stands (a press plays and chooses nothing) through it, and
    * only while it is on: with Try off nothing the stage does reaches `onsend`; without one there is nothing to try and the
    * editor only edits. A node moves into a group of its choice or out of its own
-   * (`moveNode`), refused in words where the move would change what it means. Where the two columns stack (a phone),
+   * (`moveNode`), refused in words where the move would change what it means. A group with its children inline is made
+   * a template (a name asked in a field beside its button, Enter or Make to confirm, Escape to cancel: `extractTemplate`); a
+   * group that uses one shows the template's name and its parameters as fields to rename, and Detach (`detachTemplate`),
+   * each refused in words through the same note, and each one step of Undo. Where the two columns stack (a phone),
    * what is chosen is edited in a sheet docked to the bottom, with its name and a close control, its bindings first, so
    * the control and its first binding are in view at once; the panel's own fields stay where they are.
    */
@@ -18,7 +21,10 @@
     childrenAt,
     containerOf,
     CONTROL_TYPES,
+    detachProblem,
+    detachTemplate,
     duplicateNode,
+    extractTemplate,
     insertNode,
     instantiate,
     isGroup,
@@ -35,7 +41,12 @@
     ofKind,
     readPanel,
     removeNode,
+    renameParam,
+    renameParamProblem,
+    renameTemplate,
+    renameTemplateProblem,
     samePath,
+    templateProblem,
     updateNode,
     type Binding,
     type BindingKind,
@@ -86,6 +97,10 @@
   /** Why the last change asked for wasn't taken, and for which place: said at the top of the inspector until something is taken or another place is chosen. */
   let note = $state<{ at: NodePath; message: string } | null>(null);
 
+  /** A template's name being asked for, for the group at `at`: the text typed stays through a refusal, to be edited. */
+  let naming = $state<{ at: NodePath; text: string } | null>(null);
+  const asking = $derived(!!naming && samePath(naming.at, selected));
+  let makeButton: HTMLButtonElement | undefined = $state();
   const node = $derived(selected ? nodeAt(panel, selected) : undefined);
   /** A name refused is said only at the place it was asked for. */
   const here = $derived(!!note && samePath(note.at, selected));
@@ -101,6 +116,7 @@
   function close() {
     selected = null;
     note = null;
+    naming = null;
     editor?.focus();
   }
   // a thing chosen where the inspector is a sheet is kept clear of it: scrolled into view above it
@@ -140,6 +156,7 @@
     future = [];
     selected = select;
     note = null;
+    naming = null;
     onchange(read);
     return true;
   }
@@ -170,6 +187,7 @@
   const stepTo = (to: Panel) => {
     if (selected && !nodeAt(to, selected)) selected = null;
     note = null;
+    naming = null;
     onchange(to);
   };
   function undo() {
@@ -227,6 +245,42 @@
   const group = (field: string, value: unknown) => change((n) => (isGroup(n) ? set(n, field, value) : n));
   const binding = (i: number, to: (b: Binding) => Binding) => change((n) => (isGroup(n) ? n : { ...n, bind: (n.bind ?? []).map((b, j) => (j === i ? to(b) : b)) }));
 
+  /** A change that is a core operation: refused in words at the group chosen when the core has a reason, else one change (one step of Undo). */
+  function operate(problem: string | undefined, next: () => Panel): boolean {
+    if (!selected) return false;
+    if (problem) {
+      note = { at: selected, message: problem };
+      return false;
+    }
+    return commit(next());
+  }
+  /** The group chosen made a template of the name typed. */
+  function make() {
+    if (!selected || !naming) return;
+    const at = selected;
+    const wanted = naming.text.trim();
+    if (operate(templateProblem(panel, at, wanted), () => extractTemplate(panel, at, wanted))) editor?.focus();
+  }
+  function stopNaming() {
+    naming = null;
+    // (the button the field replaced takes focus back)
+    queueMicrotask(() => makeButton?.focus());
+  }
+  const detach = () => selected && operate(detachProblem(panel, selected), () => detachTemplate(panel, selected!));
+  /** A template given another name, every group that uses it following. */
+  const renamed = (from: string, wanted: string): boolean => {
+    const to = wanted.trim();
+    return to === from || operate(renameTemplateProblem(panel, from, to), () => renameTemplate(panel, from, to));
+  };
+  const renamedParam = (template: string, from: string, wanted: string): boolean => {
+    const to = wanted.trim();
+    return to === from || operate(renameParamProblem(panel, template, from, to), () => renameParam(panel, template, from, to));
+  };
+  /** How many groups use a template, in the panel and in templates. */
+  function usesOf(name: string): number {
+    const count = (nodes: readonly PanelNode[]): number => nodes.reduce((n, c) => n + (!isGroup(c) ? 0 : c.use !== undefined ? +(c.use === name) : count(c.children ?? [])), 0);
+    return count(panel.children) + Object.values(panel.templates ?? {}).reduce((n, t) => n + count(t.children), 0);
+  }
   /** Where something new goes: into the group chosen (its template, where it uses one), else beside the control chosen, else into the panel. */
   const target = $derived.by((): NodePath => {
     if (!selected || !node) return { at: [] };
@@ -365,7 +419,14 @@
           : 'New things go beside the control chosen.'
         : 'New things go into the panel. Press a control or a group to choose it.'}
     </p>
-    <PanelView bind:this={stage} {panel} onsend={stageSend} bar={false} {selected} onselect={trying ? undefined : (source) => ((selected = source), (note = null))} />
+    <PanelView
+      bind:this={stage}
+      {panel}
+      onsend={stageSend}
+      bar={false}
+      {selected}
+      onselect={trying ? undefined : (source) => ((selected = source), (note = null), (naming = null))}
+    />
   </div>
 
   <aside class="inspector" class:sheet={!!selected && !!node} aria-label="What is chosen" bind:this={sheet}>
@@ -555,6 +616,43 @@
         {#each panel.templates?.[g.use]?.params ?? [] as param (param)}
           {@render field(`Gives “${param}”`, g.with?.[param], (t) => group('with', set(g.with ?? {}, param, toNum(t))), 'A number, or an expression', true)}
         {/each}
+        {@render field('Template', g.use, (t) => renamed(g.use!, t), 'Its name; every group that uses it follows', true)}
+        {#each panel.templates?.[g.use]?.params ?? [] as param (param)}
+          {@render field(`Parameter “${param}”`, param, (t) => renamedParam(g.use!, param, t), 'Its name, in the template and in every group that uses it', true)}
+        {/each}
+        <div class="template">
+          <p class="comes">
+            {usesOf(g.use) > 1
+              ? `Used by ${usesOf(g.use)} groups: detaching copies it into this one, and the template stays for the others.`
+              : 'Only this group uses it: detaching copies it into the group and takes the template away.'}
+          </p>
+          <div class="actions"><button type="button" onclick={detach}>Detach</button></div>
+        </div>
+      {:else if g.children?.length}
+        <div class="template">
+          {#if asking}
+            <div class="line">
+              <input
+                class="mono"
+                aria-label="Template name"
+                placeholder="a name, e.g. strip"
+                autocomplete="off"
+                spellcheck="false"
+                value={naming?.text ?? ''}
+                oninput={(e) => naming && (naming.text = text(e))}
+                {@attach (el) => el.focus()}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') (e.preventDefault(), make());
+                  else if (e.key === 'Escape') (e.preventDefault(), e.stopPropagation(), stopNaming());
+                }}
+              />
+              <button type="button" onclick={make}>Make</button>
+              <button type="button" class="quiet" onclick={stopNaming}>Cancel</button>
+            </div>
+          {:else}
+            <div class="actions"><button type="button" bind:this={makeButton} onclick={() => (naming = { at: selected!, text: '' })}>Make a template…</button></div>
+          {/if}
+        </div>
       {/if}
     {:else}
       <p class="eyebrow">Panel</p>
@@ -633,7 +731,8 @@
   .sheet-head {
     display: none;
   }
-  .sends {
+  .sends,
+  .template {
     display: grid;
     gap: 10px;
   }
