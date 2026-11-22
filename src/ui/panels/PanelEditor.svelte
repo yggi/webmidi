@@ -419,7 +419,14 @@
           : 'New things go beside the control chosen.'
         : 'New things go into the panel. Press a control or a group to choose it.'}
     </p>
-    <PanelView bind:this={stage} {panel} onsend={stageSend} bar={false} {selected} onselect={trying ? undefined : (source) => ((selected = source), (note = null), (naming = null))} />
+    <PanelView
+      bind:this={stage}
+      {panel}
+      onsend={stageSend}
+      bar={false}
+      {selected}
+      onselect={trying ? undefined : (source) => ((selected = source), (note = null), (naming = null))}
+    />
   </div>
 
   <aside class="inspector" class:sheet={!!selected && !!node} aria-label="What is chosen" bind:this={sheet}>
