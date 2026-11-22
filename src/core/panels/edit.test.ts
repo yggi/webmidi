@@ -11,6 +11,7 @@ import {
   nameProblem,
   newControl,
   newGroup,
+  numberHint,
   numberProblem,
   nodeAt,
   ofKind,
@@ -20,7 +21,7 @@ import {
 } from './edit';
 import { EXAMPLE_MIXER, EXAMPLE_PLAY } from './examples';
 import { instantiate } from './instantiate';
-import { CONTROL_TYPES, isGroup, MAX_DEPTH, MAX_GRID, readPanel, type Control, type NodePath, type Panel, type PanelNode } from './model';
+import { BINDING_KINDS, CONTROL_TYPES, isGroup, MAX_DEPTH, MAX_GRID, readPanel, type Control, type NodePath, type Panel, type PanelNode } from './model';
 
 const ids = (panel: Panel, path = { at: [] as number[] }) => childrenAt(panel, path)!.map((n) => (isGroup(n) ? n.group : n.id));
 
@@ -423,5 +424,21 @@ describe('a node moved into a group or out of one', () => {
       }
     }
     expect(moves).toBeGreaterThan(20);
+  });
+});
+
+describe('what a binding’s number may be', () => {
+  it('is said for every kind from the limit the reader holds it to: the top is the last number instantiate takes, and a kind with no number says none', () => {
+    for (const kind of BINDING_KINDS) {
+      const hint = numberHint(kind);
+      const at = (number: number) => instantiate({ id: 'p', name: 'P', children: [{ type: 'knob', id: 'k', bind: [{ kind, number }] }] });
+      if (kind === 'program' || kind === 'bend' || kind === 'pressure') {
+        expect(hint, kind).toBeUndefined();
+        continue;
+      }
+      const top = Number(/0 to (\d+)/.exec(hint!)![1]);
+      expect(at(top).errors, kind).toEqual([]);
+      expect(at(top + 1).errors, kind).toHaveLength(1);
+    }
   });
 });

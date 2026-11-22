@@ -37,6 +37,7 @@
     newControl,
     newGroup,
     nodeAt,
+    numberHint,
     numberProblem,
     ofKind,
     readPanel,
@@ -328,9 +329,8 @@
   });
 
   /** What a binding comes to across the instances of the control chosen: "CC 11 … 18, channel 1", or why it isn't there. */
-  function resolved(i: number, b: Binding): string {
+  function resolved(b: Binding): string {
     const bound = instances.flatMap((c) => c.bindings.filter((x) => x.kind === b.kind && x.axis === (b.axis ?? 'x')).slice(0, 1));
-    void i;
     if (!bound.length) return 'Not resolved: see why, below.';
     const span = (values: number[]) => (values.every((v) => v === values[0]) ? String(values[0]) : `${values[0]} … ${values.at(-1)}`);
     const numbered = b.kind !== 'program' && b.kind !== 'bend' && b.kind !== 'pressure';
@@ -500,6 +500,8 @@
                   <input
                     class="mono"
                     aria-label="Number, or an expression"
+                    aria-describedby="{uid}-n{i}"
+                    title={numberHint(b.kind)}
                     placeholder="number"
                     value={b.number ?? ''}
                     spellcheck="false"
@@ -522,6 +524,7 @@
                     )}>×</button
                 >
               </div>
+              {#if numbered(b.kind)}<p class="range" id="{uid}-n{i}">{numberHint(b.kind)}</p>{/if}
               <div class="line">
                 <span class="small">sends</span>
                 <input
@@ -572,7 +575,7 @@
                   </select>
                 {/if}
               </div>
-              <p class="comes">{resolved(i, b)}</p>
+              <p class="comes">{resolved(b)}</p>
             </div>
           {/each}
           {#if why.length}
@@ -826,7 +829,8 @@
   }
   .where,
   .scope,
-  .comes {
+  .comes,
+  .range {
     margin: 0;
     color: var(--_muted);
     font-size: 12.5px;

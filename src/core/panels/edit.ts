@@ -7,6 +7,7 @@
  * wherever it would change what the node means or what the reader keeps.
  */
 import { BINDING_KINDS, isGroup, MAX_DEPTH, MAX_GRID, type Binding, type Control, type ControlType, type Group, type NodePath, type Panel, type PanelNode } from './model';
+import { MAX_NUMBER } from './instantiate';
 import { depthAt, freeNames, height, NAME, NAME_RULE, scopeOf, topChildren, usedBy } from './scope';
 
 export const samePath = (a: NodePath | null | undefined, b: NodePath | null | undefined): boolean =>
@@ -289,4 +290,10 @@ export function numberProblem(field: NumberField, text: string): string | undefi
     case 'span':
       return WHOLE.test(t) && Number(t) >= 1 && Number(t) <= MAX_GRID ? undefined : `A span is a whole number from 1 to ${MAX_GRID}.`;
   }
+}
+
+/** What a binding's number may be for its kind, in words, from the limit `instantiate` holds it to; undefined for a kind that has no number. */
+export function numberHint(kind: Binding['kind']): string | undefined {
+  const max = MAX_NUMBER[kind];
+  return max === null ? undefined : `0 to ${max}, or an expression`;
 }

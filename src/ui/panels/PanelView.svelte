@@ -114,19 +114,25 @@
 {#snippet control(c: ControlInstance)}
   {@const v = valueOf(c.key)}
   {@const name = c.label || c.key}
-  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_no_noninteractive_tabindex -->
   <div
     class="ctl {c.type}"
     class:picked={samePath(c.source, selected)}
     style={place(c.cell)}
     style:--whites={c.type === 'keyboard' ? c.notes.filter((n) => !isBlackKey(n)).length : undefined}
-    role={onselect ? 'button' : undefined}
-    tabindex={onselect ? 0 : undefined}
-    aria-label={onselect ? `Edit ${name}` : undefined}
-    aria-pressed={onselect ? samePath(c.source, selected) : undefined}
-    onclick={(e) => choose(e, c.source)}
-    onkeydown={(e) => onselect && byKey(e, c.source)}
+    role={onselect ? 'group' : undefined}
+    aria-label={onselect ? name : undefined}
   >
+    {#if onselect}
+      <!-- the choosing is a button of its own over the control, not a role on its wrapper: the widget under it is inert, and a button never holds a slider -->
+      <button
+        type="button"
+        class="pick"
+        aria-label="Edit {name}"
+        aria-pressed={samePath(c.source, selected)}
+        onclick={(e) => choose(e, c.source)}
+        onkeydown={(e) => byKey(e, c.source)}
+      ></button>
+    {/if}
     <div class="widget" inert={!!onselect}>
       {#if c.type === 'knob'}
         <Knob
@@ -394,6 +400,7 @@
     cursor: pointer;
   }
   .editing .ctl {
+    position: relative;
     min-height: 28px;
     padding: 3px;
     border-radius: 8px;
@@ -407,9 +414,23 @@
     outline: 2px solid var(--_accent);
     outline-offset: 1px;
   }
-  .editing :is(.ctl, .group):focus-visible {
+  .editing .group:focus-visible,
+  .pick:focus-visible {
     outline: 2px solid var(--_accent);
     outline-offset: 3px;
+  }
+  /* the button that chooses a control covers it: a press anywhere on the control chooses it, and it has no look of its own */
+  .pick {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
   }
   .name {
     max-width: 100%;

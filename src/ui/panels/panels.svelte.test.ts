@@ -470,6 +470,89 @@ describe('PanelEditor', () => {
     });
   });
 
+  describe('a control in the editor is no button around a slider', () => {
+    const KINDS_PANEL: Panel = {
+      id: 'roles',
+      name: 'Roles',
+      children: [
+        { type: 'knob', id: 'k', label: 'K', bind: [{ kind: 'cc', number: 20 }] },
+        { type: 'fader', id: 'f', label: 'F', bind: [{ kind: 'cc', number: 21 }] },
+        { type: 'xy', id: 'xy', label: 'XY', bind: [{ kind: 'cc', number: 22 }] },
+        { type: 'switch', id: 's', label: 'S', bind: [{ kind: 'cc', number: 25 }] },
+        { type: 'pads', id: 'p', label: 'P', notes: [36, 38] },
+        { type: 'keyboard', id: 'kb', label: 'KB', low: 48, high: 60 },
+      ],
+    };
+    /** Every element that has interactive content inside it, whatever it is: a button, or anything with the role. */
+    const nested = () => all('button, [role=button]').filter((b) => b.querySelector('[role=slider], [role=switch], button, input, select, [tabindex]'));
+    it('with Try off or on, no button holds a slider (or anything else to press), and the sliders are there to be found', () => {
+      edit(KINDS_PANEL, () => {});
+      expect(all('[role=slider]').length).toBeGreaterThan(0);
+      expect(nested()).toEqual([]);
+      expect(all('[role=button]').filter((b) => b.querySelector('[role=slider]'))).toEqual([]);
+      press(button('Try'));
+      expect(all('[role=slider]').length).toBeGreaterThan(0);
+      expect(nested()).toEqual([]);
+    });
+    it('each control is a group with a button of its own to choose it: by a pointer press, and by Enter or Space', () => {
+      edit(KINDS_PANEL, () => {});
+      const names = ['K', 'F', 'XY', 'S', 'P', 'KB'];
+      for (const n of names) {
+        const pick = one(`button[aria-label="Edit ${n}"]`);
+        expect(pick.closest('.ctl')!.getAttribute('role')).toBe('group');
+        expect(pick.closest('.ctl')!.getAttribute('aria-label')).toBe(n);
+      }
+      for (const n of names) {
+        press(one(`[aria-label="Edit ${n}"]`));
+        expect(one('.inspector label.field input').getAttribute('value') ?? (one('.inspector label.field input') as HTMLInputElement).value).toBe(n);
+        expect(one(`[aria-label="Edit ${n}"]`).getAttribute('aria-pressed')).toBe('true');
+        expect(all('.ctl.picked').length).toBe(1);
+      }
+      for (const [n, k] of [
+        ['K', 'Enter'],
+        ['F', ' '],
+      ] as const) {
+        press(one('.inspector .close'));
+        key(one(`[aria-label="Edit ${n}"]`), k);
+        expect((all('.inspector label.field input')[0] as HTMLInputElement).value).toBe(n);
+      }
+    });
+  });
+
+  describe('a binding’s number says how far it goes', () => {
+    const LIMITS: [string, string][] = [
+      ['cc', '0 to 127'],
+      ['cc14', '0 to 31'],
+      ['note', '0 to 127'],
+      ['nrpn', '0 to 16383'],
+      ['rpn', '0 to 16383'],
+    ];
+    it('names the range of each kind that has a number, in a hint the field is described by; a kind with none has no field and no hint', () => {
+      edit({ id: 'p', name: 'P', children: [{ type: 'knob', id: 'k', label: 'K', bind: [{ kind: 'cc', number: 1 }] }] });
+      press(one('[aria-label="Edit K"]'));
+      for (const [kind, range] of LIMITS) {
+        type(one('[aria-label="What it speaks"]'), kind);
+        const field = one('[aria-label="Number, or an expression"]');
+        const hint = document.getElementById(field.getAttribute('aria-describedby')!)!;
+        expect(hint.textContent, kind).toBe(`${range}, or an expression`);
+        expect(field.getAttribute('title'), kind).toBe(hint.textContent);
+      }
+      for (const kind of ['program', 'bend', 'pressure']) {
+        type(one('[aria-label="What it speaks"]'), kind);
+        expect(document.querySelector('[aria-label="Number, or an expression"]'), kind).toBeNull();
+        expect(document.querySelector('.binding .range'), kind).toBeNull();
+      }
+    });
+    it('takes each kind’s limit from the reader’s own: the last number it reads is the one the hint names', () => {
+      for (const [kind, range] of LIMITS) {
+        const top = Number(range.split(' ').at(-1));
+        const made = (n: number) => instantiate({ id: 'p', name: 'P', children: [{ type: 'knob', id: 'k', bind: [{ kind: kind as 'cc', number: n }] }] });
+        expect(made(top).errors, kind).toEqual([]);
+        expect(made(top + 1).errors[0], kind).toContain(`(0 to ${top})`);
+      }
+    });
+  });
+
   describe('try a control while editing', () => {
     it('shows no Try where the editor has nowhere to send, and is as it was: a press chooses', () => {
       edit(EXAMPLE_PLAY);
@@ -757,7 +840,7 @@ describe('PanelEditor', () => {
     });
     it('offers a panel with no group nothing to move into', () => {
       edit({ id: 'p', name: 'P', children: [{ type: 'knob', id: 'k' }] });
-      press(one('.ctl'));
+      press(one('.ctl .pick'));
       expect(kind()).toBe('Control');
       expect(document.querySelector('select[aria-label="Move into"]')).toBeNull();
     });

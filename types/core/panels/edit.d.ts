@@ -84,3 +84,5 @@ export type NumberField = 'start' | 'note' | 'notes' | 'span';
  * (it clears the field), and a pad's notes are a list, each held to a note's range.
  */
 export declare function numberProblem(field: NumberField, text: string): string | undefined;
+/** What a binding's number may be for its kind, in words, from the limit `instantiate` holds it to; undefined for a kind that has no number. */
+export declare function numberHint(kind: Binding['kind']): string | undefined;
