@@ -98,7 +98,7 @@
   let note = $state<{ at: NodePath; message: string } | null>(null);
 
   /** A template's name being asked for, for the group at `at`: the text typed stays through a refusal, to be edited. */
-  let naming: { at: NodePath; text: string } | null = $state(null);
+  let naming = $state<{ at: NodePath; text: string } | null>(null);
   const asking = $derived(!!naming && samePath(naming.at, selected));
   let makeButton: HTMLButtonElement | undefined = $state();
   const node = $derived(selected ? nodeAt(panel, selected) : undefined);
