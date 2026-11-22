@@ -139,7 +139,7 @@ const MAX_TEXT = 64;
 /** The most columns a grid has, and the furthest cell. */
 export const MAX_GRID = 64;
 /** The most overrides a repeated group keeps. */
-export const MAX_OVERRIDES = MAX_GRID;
+export const MAX_OVERRIDES = 64;
 
 // ---- reading ----
 
