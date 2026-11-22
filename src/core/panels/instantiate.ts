@@ -78,8 +78,8 @@ export interface PanelInstance {
   readonly truncated: boolean;
 }
 
-/** The largest `number` a kind takes; null for a kind that has none. */
-const MAX_NUMBER: Readonly<Record<BindingKind, number | null>> = { cc: 127, cc14: 31, note: 127, program: null, bend: null, pressure: null, nrpn: 16383, rpn: 16383 };
+/** The largest `number` a kind takes (from 0); null for a kind that has none. */
+export const MAX_NUMBER: Readonly<Record<BindingKind, number | null>> = { cc: 127, cc14: 31, note: 127, program: null, bend: null, pressure: null, nrpn: 16383, rpn: 16383 };
 /** The largest value a kind carries. */
 export const MAX_VALUE: Readonly<Record<BindingKind, number>> = { cc: 127, cc14: 16383, note: 127, program: 127, bend: 16383, pressure: 127, nrpn: 16383, rpn: 16383 };
 

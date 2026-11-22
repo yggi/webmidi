@@ -4,9 +4,11 @@
  * template's, so a change there is a change to every group that uses it; adding into a group that uses a template
  * adds to the template. An operation on a place that isn't there gives the panel as it was. A node moves among its
  * siblings, or into another group or out of its own, as one operation (`moveNode`), refused in words (`moveProblem`)
- * wherever it would change what the node means or what the reader keeps.
+ * wherever it would change what the node means or what the reader keeps. The label of one instance of a repeated group
+ * is set or cleared by its value (`setOverride`), refused in words where the repeat doesn't give it (`overrideProblem`).
  */
 import { type Binding, type Control, type ControlType, type Group, type NodePath, type Panel, type PanelNode } from './model';
+import { type PanelInstance } from './instantiate';
 export declare const samePath: (a: NodePath | null | undefined, b: NodePath | null | undefined) => boolean;
 /** The node at a place, or undefined: nothing there, or the empty path (which is the panel or the template itself). */
 export declare function nodeAt(panel: Panel, path: NodePath): PanelNode | undefined;
@@ -84,3 +86,17 @@ export type NumberField = 'start' | 'note' | 'notes' | 'span';
  * (it clears the field), and a pad's notes are a list, each held to a note's range.
  */
 export declare function numberProblem(field: NumberField, text: string): string | undefined;
+/** What a binding's number may be for its kind, in words, from the limit `instantiate` holds it to; undefined for a kind that has no number. */
+export declare function numberHint(kind: Binding['kind']): string | undefined;
+/** The value a repeated group's instance stands for, read from its key (`strips[3]`, `play/row[10]`); undefined for a key that isn't one. */
+export declare const repeatValueOf: (key: string) => number | undefined;
+/** The values the group defined at `source` is drawn for, ascending and each once (a group inside a repeat is drawn for each of its values in each outer one): what an override is by. Empty for a group that doesn't repeat. */
+export declare function repeatValues(made: PanelInstance, source: NodePath): number[];
+/**
+ * Why the label of one instance, of the group at `path`, can't be set, in words; undefined when it can: the group must
+ * repeat, the repeat must give that value, and a group keeps at most `MAX_OVERRIDES` (an empty text clears one, so it is
+ * never refused for the count).
+ */
+export declare function overrideProblem(panel: Panel, path: NodePath, value: number, label: string): string | undefined;
+/** The label of the instance of the group at `path` for `value` set, or removed by an empty text (the last one takes the field with it). As it was (the same panel) when `overrideProblem` has something to say, or when the group already has it so. */
+export declare function setOverride(panel: Panel, path: NodePath, value: number, label: string): Panel;

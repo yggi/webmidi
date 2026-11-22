@@ -470,6 +470,211 @@ describe('PanelEditor', () => {
     });
   });
 
+  describe('a control in the editor is no button around a slider', () => {
+    const KINDS_PANEL: Panel = {
+      id: 'roles',
+      name: 'Roles',
+      children: [
+        { type: 'knob', id: 'k', label: 'K', bind: [{ kind: 'cc', number: 20 }] },
+        { type: 'fader', id: 'f', label: 'F', bind: [{ kind: 'cc', number: 21 }] },
+        { type: 'xy', id: 'xy', label: 'XY', bind: [{ kind: 'cc', number: 22 }] },
+        { type: 'switch', id: 's', label: 'S', bind: [{ kind: 'cc', number: 25 }] },
+        { type: 'pads', id: 'p', label: 'P', notes: [36, 38] },
+        { type: 'keyboard', id: 'kb', label: 'KB', low: 48, high: 60 },
+      ],
+    };
+    /** Every element that has interactive content inside it, whatever it is: a button, or anything with the role. */
+    const nested = () => all('button, [role=button]').filter((b) => b.querySelector('[role=slider], [role=switch], button, input, select, [tabindex]'));
+    it('with Try off or on, no button holds a slider (or anything else to press), and the sliders are there to be found', () => {
+      edit(KINDS_PANEL, () => {});
+      expect(all('[role=slider]').length).toBeGreaterThan(0);
+      expect(nested()).toEqual([]);
+      expect(all('[role=button]').filter((b) => b.querySelector('[role=slider]'))).toEqual([]);
+      press(button('Try'));
+      expect(all('[role=slider]').length).toBeGreaterThan(0);
+      expect(nested()).toEqual([]);
+    });
+    it('each control is a group with a button of its own to choose it: by a pointer press, and by Enter or Space', () => {
+      edit(KINDS_PANEL, () => {});
+      const names = ['K', 'F', 'XY', 'S', 'P', 'KB'];
+      for (const n of names) {
+        const pick = one(`button[aria-label="Edit ${n}"]`);
+        expect(pick.closest('.ctl')!.getAttribute('role')).toBe('group');
+        expect(pick.closest('.ctl')!.getAttribute('aria-label')).toBe(n);
+      }
+      for (const n of names) {
+        press(one(`[aria-label="Edit ${n}"]`));
+        expect(one('.inspector label.field input').getAttribute('value') ?? (one('.inspector label.field input') as HTMLInputElement).value).toBe(n);
+        expect(one(`[aria-label="Edit ${n}"]`).getAttribute('aria-pressed')).toBe('true');
+        expect(all('.ctl.picked').length).toBe(1);
+      }
+      for (const [n, k] of [
+        ['K', 'Enter'],
+        ['F', ' '],
+      ] as const) {
+        press(one('.inspector .close'));
+        key(one(`[aria-label="Edit ${n}"]`), k);
+        expect((all('.inspector label.field input')[0] as HTMLInputElement).value).toBe(n);
+      }
+    });
+  });
+
+  describe('a binding’s number says how far it goes', () => {
+    const LIMITS: [string, string][] = [
+      ['cc', '0 to 127'],
+      ['cc14', '0 to 31'],
+      ['note', '0 to 127'],
+      ['nrpn', '0 to 16383'],
+      ['rpn', '0 to 16383'],
+    ];
+    it('names the range of each kind that has a number, in a hint the field is described by; a kind with none has no field and no hint', () => {
+      edit({ id: 'p', name: 'P', children: [{ type: 'knob', id: 'k', label: 'K', bind: [{ kind: 'cc', number: 1 }] }] });
+      press(one('[aria-label="Edit K"]'));
+      for (const [kind, range] of LIMITS) {
+        type(one('[aria-label="What it speaks"]'), kind);
+        const field = one('[aria-label="Number, or an expression"]');
+        const hint = document.getElementById(field.getAttribute('aria-describedby')!)!;
+        expect(hint.textContent, kind).toBe(`${range}, or an expression`);
+        expect(field.getAttribute('title'), kind).toBe(hint.textContent);
+      }
+      for (const kind of ['program', 'bend', 'pressure']) {
+        type(one('[aria-label="What it speaks"]'), kind);
+        expect(document.querySelector('[aria-label="Number, or an expression"]'), kind).toBeNull();
+        expect(document.querySelector('.binding .range'), kind).toBeNull();
+      }
+    });
+    it('takes each kind’s limit from the reader’s own: the last number it reads is the one the hint names', () => {
+      for (const [kind, range] of LIMITS) {
+        const top = Number(range.split(' ').at(-1));
+        const made = (n: number) => instantiate({ id: 'p', name: 'P', children: [{ type: 'knob', id: 'k', bind: [{ kind: kind as 'cc', number: n }] }] });
+        expect(made(top).errors, kind).toEqual([]);
+        expect(made(top + 1).errors[0], kind).toContain(`(0 to ${top})`);
+      }
+    });
+  });
+
+  describe('the label of one instance of a repeated group', () => {
+    const labels = () => all('.inspector .instances input[aria-label^="Label of instance"]') as HTMLInputElement[];
+    const row = (value: number) => one<HTMLInputElement>(`.inspector .instances input[aria-label="Label of instance ${value}"]`);
+    const stripped = (panel: Panel) => (panel.children[0] as { overrides?: Record<string, { label: string }> }).overrides;
+    const undo = () => press(button('Undo'));
+    /** The mixer with its strips group chosen. */
+    function mixer() {
+      const props = edit(EXAMPLE_MIXER);
+      press(one('section.group'));
+      return props;
+    }
+    const repeated = (to: number | string): Panel => ({
+      id: 'r',
+      name: 'R',
+      children: [{ group: 'g', label: 'S{n}', repeat: { name: 'n', from: 1, to }, children: [{ type: 'label', id: 'l', label: 'L' }] }],
+    });
+
+    it('lists one row for each value the repeat gives, under Repeat, each with its label as the field and an empty field for an instance with none', () => {
+      mixer();
+      expect(labels().map((i) => i.getAttribute('aria-label'))).toEqual(Array.from({ length: 8 }, (_, i) => `Label of instance ${i + 1}`));
+      expect(labels().map((i) => i.value)).toEqual(['', '', '', '', '', '', '', 'FX']);
+      expect(one('.inspector .instances').getAttribute('aria-label')).toBe('Instances, by ch');
+    });
+    it('shows nothing for a group that doesn’t repeat, and lists a repeat whose end is an expression', () => {
+      edit(EXAMPLE_PLAY);
+      press(one('section.group'));
+      expect(one('.inspector .eyebrow').textContent).toBe('Group');
+      expect(document.querySelector('.instances')).toBeNull();
+      mounted.pop();
+      document.body.replaceChildren();
+      edit(repeated('1 + 2'));
+      press(one('section.group'));
+      expect(labels().length).toBe(3);
+    });
+    it('sets the label of strip 3, and the drawn strip says it; one Undo takes it back and Redo sets it again', () => {
+      const props = mixer();
+      expect(all('section.group[aria-label="Drums"]')).toEqual([]);
+      type(row(3), 'Drums');
+      expect(stripped(props.panel)).toEqual({ '3': { label: 'Drums' }, '8': { label: 'FX' } });
+      expect(all('section.group[aria-label="Drums"] > h4').map((h) => h.textContent)).toEqual(['Drums']);
+      expect(row(3).value).toBe('Drums');
+      undo();
+      expect(stripped(props.panel)).toEqual({ '8': { label: 'FX' } });
+      expect(all('section.group[aria-label="Drums"]')).toEqual([]);
+      expect(row(3).value).toBe('');
+      press(button('Redo'));
+      expect(stripped(props.panel)).toEqual({ '3': { label: 'Drums' }, '8': { label: 'FX' } });
+    });
+    it('clears it with an empty field, as one step of Undo, and the last one takes the field with it', () => {
+      const props = mixer();
+      type(row(3), 'Drums');
+      type(row(3), '');
+      expect(stripped(props.panel)).toEqual({ '8': { label: 'FX' } });
+      type(row(8), '');
+      expect('overrides' in props.panel.children[0]!).toBe(false);
+      undo();
+      expect(stripped(props.panel)).toEqual({ '8': { label: 'FX' } });
+      undo();
+      expect(stripped(props.panel)).toEqual({ '3': { label: 'Drums' }, '8': { label: 'FX' } });
+      undo();
+      expect(stripped(props.panel)).toEqual({ '8': { label: 'FX' } });
+      expect(button('Undo')!.hasAttribute('disabled')).toBe(true);
+    });
+    it('changes nothing, and makes no step of Undo, for a field left as it was', () => {
+      const props = mixer();
+      type(row(8), 'FX');
+      type(row(2), '');
+      expect(props.panel).toEqual(EXAMPLE_MIXER);
+      expect(button('Undo')!.hasAttribute('disabled')).toBe(true);
+    });
+    it('refuses a label too long to keep, in words at the group, puts the field back and takes no step', () => {
+      const props = mixer();
+      type(row(3), 'x'.repeat(65));
+      expect(one('.note').textContent).toMatch(/can’t be kept as typed/);
+      expect(row(3).value).toBe('');
+      expect(props.panel).toEqual(EXAMPLE_MIXER);
+      expect(button('Undo')!.hasAttribute('disabled')).toBe(true);
+    });
+    it('marks the instance in the stage while its row is focused, one of the eight, and no instance when it isn’t', () => {
+      mixer();
+      expect(all('.group.marked')).toEqual([]);
+      row(3).dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      flushSync();
+      const marked = all('.group.marked');
+      expect(marked.length).toBe(1);
+      expect(marked[0]!.getAttribute('aria-label')).toBe('3');
+      row(8).dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      flushSync();
+      expect(all('.group.marked').map((g) => g.getAttribute('aria-label'))).toEqual(['FX']);
+      row(8).dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+      flushSync();
+      expect(all('.group.marked')).toEqual([]);
+      // (the group is still the one chosen: all eight are picked, as before)
+      expect(all('section.group.picked').length).toBe(8);
+    });
+    it('lists at most 64 rows of a large repeat, says how many there are, reaches the rest by “List from”, and sets one of those', () => {
+      const props = edit(repeated(100));
+      press(one('section.group'));
+      expect(labels().length).toBe(64);
+      expect(one('.inspector .more').textContent).toBe('Listing 64 of 100 instances, from 1.');
+      type(row(64), 'Last');
+      expect((props.panel.children[0] as { overrides: object }).overrides).toEqual({ '64': { label: 'Last' } });
+      type(one('[aria-label="List from"]'), '90');
+      expect(labels().map((i) => i.getAttribute('aria-label'))).toEqual(Array.from({ length: 11 }, (_, i) => `Label of instance ${90 + i}`));
+      expect(one('.inspector .more').textContent).toBe('Listing 11 of 100 instances, from 90.');
+      type(row(100), 'End');
+      expect((props.panel.children[0] as { overrides: object }).overrides).toEqual({ '64': { label: 'Last' }, '100': { label: 'End' } });
+    });
+    it('says no more of a repeat of 64 or fewer than its rows', () => {
+      edit(repeated(64));
+      press(one('section.group'));
+      expect([labels().length, document.querySelector('.more')]).toEqual([64, null]);
+    });
+    it('changes the instances’ rows as the repeat is changed', () => {
+      edit(repeated(4));
+      press(one('section.group'));
+      expect(labels().length).toBe(4);
+      type(one('[aria-label="Repeat to"]'), '6');
+      expect(labels().length).toBe(6);
+    });
+  });
+
   describe('try a control while editing', () => {
     it('shows no Try where the editor has nowhere to send, and is as it was: a press chooses', () => {
       edit(EXAMPLE_PLAY);
@@ -757,7 +962,7 @@ describe('PanelEditor', () => {
     });
     it('offers a panel with no group nothing to move into', () => {
       edit({ id: 'p', name: 'P', children: [{ type: 'knob', id: 'k' }] });
-      press(one('.ctl'));
+      press(one('.ctl .pick'));
       expect(kind()).toBe('Control');
       expect(document.querySelector('select[aria-label="Move into"]')).toBeNull();
     });

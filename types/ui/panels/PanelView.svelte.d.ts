@@ -29,6 +29,11 @@ interface Props {
     onselect?: (source: NodePath | null) => void;
     /** The place chosen: every instance of it is marked. */
     selected?: NodePath | null;
+    /** One instance of a repeated group, by its value: drawn as marked on top of the place chosen (the editor's, for the instance whose label is being edited). */
+    marked?: {
+        source: NodePath;
+        value: number;
+    } | null;
 }
 declare const PanelView: import("svelte").Component<Props, {
     receive: (data: ArrayLike<number>) => void;

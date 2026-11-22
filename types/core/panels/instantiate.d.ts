@@ -51,6 +51,8 @@ export interface PanelInstance {
     /** Whether it ran past `MAX_INSTANCES`, the rest left out. */
     readonly truncated: boolean;
 }
+/** The largest `number` a kind takes (from 0); null for a kind that has none. */
+export declare const MAX_NUMBER: Readonly<Record<BindingKind, number | null>>;
 /** The largest value a kind carries. */
 export declare const MAX_VALUE: Readonly<Record<BindingKind, number>>;
 export declare function instantiate(panel: Panel): PanelInstance;

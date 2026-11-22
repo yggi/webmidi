@@ -11,7 +11,9 @@
    * (`moveNode`), refused in words where the move would change what it means. A group with its children inline is made
    * a template (a name asked in a field beside its button, Enter or Make to confirm, Escape to cancel: `extractTemplate`); a
    * group that uses one shows the template's name and its parameters as fields to rename, and Detach (`detachTemplate`),
-   * each refused in words through the same note, and each one step of Undo. Where the two columns stack (a phone),
+   * each refused in words through the same note, and each one step of Undo. A group that repeats lists its instances
+   * (`repeatValues`), up to 64 rows from a value of the reader's choice, each with a label field that is its override
+   * (`setOverride`); the instance of the row focused is marked in the stage. Where the two columns stack (a phone),
    * what is chosen is edited in a sheet docked to the bottom, with its name and a close control, its bindings first, so
    * the control and its first binding are in view at once; the panel's own fields stay where they are.
    */
