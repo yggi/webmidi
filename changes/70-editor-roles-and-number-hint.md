@@ -1,8 +1,0 @@
-### Changed
-- **`PanelEditor` and `PanelView` (editing): a control is a `role=group` with a real `<button>` over it, not a `role=button` around a `role=slider`** ([#70](https://github.com/yggi/webmidi/issues/70)): each control drawn for choosing was `div.ctl role=button aria-label="Edit Volume"` holding the widget's `role=slider`, interactive content nested in a button, which a screen reader announces badly. It is now `div.ctl role=group aria-label="Volume"` holding the (inert) widget and `button.pick aria-label="Edit Volume" aria-pressed`, a sibling covering the control: a press anywhere on the control, Enter and Space choose it as before, and Try's gating and the phone sheet are as they were. A frontend's own test that finds the control by `role=button` and name "Edit …" still finds it (the button is the element with that role and name now); one that clicks or presses keys on the `.ctl` wrapper itself, or reads `aria-pressed` or `tabindex` from it, takes the `.ctl .pick` button instead. Nothing on the wire changes.
-
-### Added
-- **A binding's number field says its range** ([#70](https://github.com/yggi/webmidi/issues/70)): under the number, "0 to 127, or an expression" for `cc` and `note`, "0 to 31, or an expression" for `cc14`, "0 to 16383, or an expression" for `nrpn` and `rpn`, the field described by it (`aria-describedby`, and its `title`); `numberHint(kind)` and `MAX_NUMBER` in `@yggi/webmidi/panels` give the words and the limit `instantiate` holds a number to.
-
-### Repository
-- `PanelEditor` loses an index its `resolved` never used ([#70](https://github.com/yggi/webmidi/issues/70)).
