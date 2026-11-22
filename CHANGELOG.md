@@ -10,6 +10,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/), as cells' (lifted from 
 
 Entries not yet released are in [`changes/`](changes/), one file each; a release gathers them here (`npm run changelog -- gather`).
 
+## v0.11.0 — 2026-11-22
+
+Templates in the panel editor (yggi/webmidi#72, in two halves, #85 and this one): a group with its children inline is made a template, a group that uses one is detached from it, and a template and its parameters are renamed, in core operations that refuse in words what would change what plays, and in the editor's group inspector. Additive: core operations and an editor's fields in a surface outside what 1.0 promises; no prop changes, nothing on the wire changes and nothing breaks a frontend's code, so it is a minor version for what it adds.
+
+### Added
+- `@yggi/webmidi/panels` edits templates: `extractTemplate` (a group's children into a new template, its parameters the names they read that the group's scope gave), `detachTemplate` (a copy of a template's children in the group, the template removed when no group uses it), `renameTemplate` and `renameParam` (every use, `with` key and expression follows), each with a `…Problem` saying in words why not (`templateProblem`, `detachProblem`, `renameTemplateProblem`, `renameParamProblem`); what plays is unchanged by each. The editor's side follows ([#72](https://github.com/yggi/webmidi/issues/72)).
+- **`PanelEditor` makes a group a template, detaches one, and renames a template and its parameters** ([#72](https://github.com/yggi/webmidi/issues/72)): a group with its children inline has *Make a template…*, which asks a name in a field beside the button (Enter or *Make* confirms, Escape or *Cancel* leaves it); a group that uses a template shows the template's name as a field, each parameter's name as a field, and *Detach*, with a line saying how many groups use the template and that detaching copies it into this one. Each is one step of Undo, keeps the group chosen, and a refusal from the core (`templateProblem`, `detachProblem`, `renameTemplateProblem`, `renameParamProblem`) is said in words at the group, the text typed staying for editing. What plays is unchanged by each. In the phone's sheet they are fields and buttons like the others. Nothing on the wire changes.
+
 ## v0.10.1 — 2026-11-21
 
 A fix to the panel editor's Try, found by the Jambot agent wiring it (yggi/jambot#715; yggi/webmidi#83): with Try off, a key on a stage widget still sent to `onsend`, so an editor given the frontend's outputs could play real MIDI hardware. A frontend that passes `onsend` to `PanelEditor` should take this before showing the editor to anyone with hardware connected. Nothing on the wire changes for a panel played in `PanelView` and nothing breaks a frontend's code, so it is a patch.
