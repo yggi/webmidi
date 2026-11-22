@@ -12,7 +12,9 @@
    * (`moveNode`), refused in words where the move would change what it means. A group with its children inline is made
    * a template (a name asked in a field beside its button, Enter or Make to confirm, Escape to cancel: `extractTemplate`); a
    * group that uses one shows the template's name and its parameters as fields to rename, and Detach (`detachTemplate`),
-   * each refused in words through the same note, and each one step of Undo. Where the two columns stack (a phone),
+   * each refused in words through the same note, and each one step of Undo. A group that repeats lists its instances
+   * (`repeatValues`), up to 64 rows from a value of the reader's choice, each with a label field that is its override
+   * (`setOverride`); the instance of the row focused is marked in the stage. Where the two columns stack (a phone),
    * what is chosen is edited in a sheet docked to the bottom, with its name and a close control, its bindings first, so
    * the control and its first binding are in view at once; the panel's own fields stay where they are.
    */
@@ -33,6 +35,7 @@
     moveOutOf,
     moveProblem,
     moveTargets,
+    MAX_OVERRIDES,
     nameProblem,
     newControl,
     newGroup,
@@ -40,13 +43,16 @@
     numberHint,
     numberProblem,
     ofKind,
+    overrideProblem,
     readPanel,
     removeNode,
     renameParam,
     renameParamProblem,
     renameTemplate,
     renameTemplateProblem,
+    repeatValues,
     samePath,
+    setOverride,
     templateProblem,
     updateNode,
     type Binding,
@@ -113,6 +119,15 @@
   let sheet: HTMLElement | undefined = $state();
   /** What the sheet calls what is chosen. */
   const what = $derived(!node ? '' : isGroup(node) ? node.group : node.label || node.id || node.type);
+  /** The instance of the group chosen whose label is being edited (its row has focus): marked in the stage. */
+  let focused = $state<number | null>(null);
+  /** Where the list of a large repeat's instances starts (a value), or null for its first. */
+  let listFrom = $state<number | null>(null);
+  $effect.pre(() => {
+    void selected;
+    focused = null;
+    listFrom = null;
+  });
   /** Closed: nothing is chosen, and focus stays in the editor, so its keys still work. */
   function close() {
     selected = null;
@@ -254,6 +269,14 @@
       return false;
     }
     return commit(next());
+  }
+  /** The label of one instance of the group chosen set, or cleared by an empty text: one change, refused in words at the group. True when the text is as the panel holds it. */
+  function labelled(value: number, wanted: string): boolean {
+    if (!selected) return false;
+    const problem = overrideProblem(panel, selected, value, wanted);
+    if (problem) return operate(problem, () => panel);
+    const next = setOverride(panel, selected, value, wanted);
+    return next === panel || commit(next);
   }
   /** The group chosen made a template of the name typed. */
   function make() {
@@ -425,6 +448,7 @@
       onsend={stageSend}
       bar={false}
       {selected}
+      marked={selected && focused !== null ? { source: selected, value: focused } : null}
       onselect={trying ? undefined : (source) => ((selected = source), (note = null), (naming = null))}
     />
   </div>
@@ -614,6 +638,37 @@
           <input class="mono short" aria-label="Repeat to" value={r.to} spellcheck="false" onchange={(e) => group('repeat', { ...r, to: toNum(text(e)) ?? 1 })} />
         </div>
       {/if}
+      {#if g.repeat && selected}
+        {@const values = repeatValues(made, selected)}
+        {@const from = listFrom ?? values[0] ?? 0}
+        {@const rows = values.filter((v) => v >= from).slice(0, MAX_OVERRIDES)}
+        {#if rows.length}
+          <div class="instances" role="group" aria-label="Instances, by {g.repeat.name}">
+            <p class="comes">An instance may have a label of its own; an empty field leaves it the group’s.</p>
+            {#each rows as v (v)}
+              {@const held = g.overrides?.[String(v)]?.label ?? ''}
+              <label class="field" onfocusin={() => (focused = v)} onfocusout={() => (focused = null)}>
+                <span>{g.repeat.name} = {v}</span>
+                <input
+                  aria-label="Label of instance {v}"
+                  placeholder={g.label ?? ''}
+                  value={held}
+                  autocomplete="off"
+                  spellcheck="false"
+                  onchange={(e) => settle(e, labelled(v, text(e)), held)}
+                />
+              </label>
+            {/each}
+            {#if values.length > rows.length || from > (values[0] ?? from)}
+              <p class="more comes">Listing {rows.length} of {values.length} instances, from {rows[0]}.</p>
+              <label class="field">
+                <span>List from<small>The value its list starts at</small></span>
+                <input class="mono short" aria-label="List from" value={from} spellcheck="false" onchange={(e) => ((listFrom = Math.round(Number(text(e))) || null), true)} />
+              </label>
+            {/if}
+          </div>
+        {/if}
+      {/if}
       {#if g.use !== undefined}
         <p class="scope">Its children are the template “{g.use}”’s: a control pressed in it is the template’s, in every group that uses it.</p>
         {#each panel.templates?.[g.use]?.params ?? [] as param (param)}
@@ -735,7 +790,8 @@
     display: none;
   }
   .sends,
-  .template {
+  .template,
+  .instances {
     display: grid;
     gap: 10px;
   }

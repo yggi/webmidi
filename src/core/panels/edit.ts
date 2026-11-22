@@ -4,10 +4,24 @@
  * template's, so a change there is a change to every group that uses it; adding into a group that uses a template
  * adds to the template. An operation on a place that isn't there gives the panel as it was. A node moves among its
  * siblings, or into another group or out of its own, as one operation (`moveNode`), refused in words (`moveProblem`)
- * wherever it would change what the node means or what the reader keeps.
+ * wherever it would change what the node means or what the reader keeps. The label of one instance of a repeated group
+ * is set or cleared by its value (`setOverride`), refused in words where the repeat doesn't give it (`overrideProblem`).
  */
-import { BINDING_KINDS, isGroup, MAX_DEPTH, MAX_GRID, type Binding, type Control, type ControlType, type Group, type NodePath, type Panel, type PanelNode } from './model';
-import { MAX_NUMBER } from './instantiate';
+import {
+  BINDING_KINDS,
+  isGroup,
+  MAX_DEPTH,
+  MAX_GRID,
+  MAX_OVERRIDES,
+  type Binding,
+  type Control,
+  type ControlType,
+  type Group,
+  type NodePath,
+  type Panel,
+  type PanelNode,
+} from './model';
+import { instantiate, MAX_NUMBER, type InstanceNode, type PanelInstance } from './instantiate';
 import { depthAt, freeNames, height, NAME, NAME_RULE, scopeOf, topChildren, usedBy } from './scope';
 
 export const samePath = (a: NodePath | null | undefined, b: NodePath | null | undefined): boolean =>
@@ -296,4 +310,58 @@ export function numberProblem(field: NumberField, text: string): string | undefi
 export function numberHint(kind: Binding['kind']): string | undefined {
   const max = MAX_NUMBER[kind];
   return max === null ? undefined : `0 to ${max}, or an expression`;
+}
+
+/** The value a repeated group's instance stands for, read from its key (`strips[3]`, `play/row[10]`); undefined for a key that isn't one. */
+export const repeatValueOf = (key: string): number | undefined => {
+  const at = /\[(-?\d+)\]$/.exec(key);
+  return at ? Number(at[1]) : undefined;
+};
+
+/** The values the group defined at `source` is drawn for, ascending and each once (a group inside a repeat is drawn for each of its values in each outer one): what an override is by. Empty for a group that doesn't repeat. */
+export function repeatValues(made: PanelInstance, source: NodePath): number[] {
+  const values = new Set<number>();
+  const walk = (nodes: readonly InstanceNode[]) => {
+    for (const n of nodes) {
+      if (n.kind !== 'group') continue;
+      const value = repeatValueOf(n.key);
+      if (samePath(n.source, source) && value !== undefined) values.add(value);
+      walk(n.children);
+    }
+  };
+  walk(made.children);
+  return [...values].sort((a, b) => a - b);
+}
+
+/**
+ * Why the label of one instance, of the group at `path`, can't be set, in words; undefined when it can: the group must
+ * repeat, the repeat must give that value, and a group keeps at most `MAX_OVERRIDES` (an empty text clears one, so it is
+ * never refused for the count).
+ */
+export function overrideProblem(panel: Panel, path: NodePath, value: number, label: string): string | undefined {
+  const node = nodeAt(panel, path);
+  if (!node || !isGroup(node)) return undefined;
+  if (!node.repeat) return 'Only a group that repeats has instances.';
+  const values = repeatValues(instantiate(panel), path);
+  if (!values.length) return 'The repeat gives nothing.';
+  if (!values.includes(value)) return `The repeat doesn’t give ${value}: it gives ${values[0]} to ${values.at(-1)}.`;
+  const held = node.overrides ?? {};
+  if (label.trim() !== '' && !Object.hasOwn(held, String(value)) && Object.keys(held).length >= MAX_OVERRIDES) return `A group keeps at most ${MAX_OVERRIDES} overrides.`;
+  return undefined;
+}
+
+/** The label of the instance of the group at `path` for `value` set, or removed by an empty text (the last one takes the field with it). As it was (the same panel) when `overrideProblem` has something to say, or when the group already has it so. */
+export function setOverride(panel: Panel, path: NodePath, value: number, label: string): Panel {
+  if (overrideProblem(panel, path, value, label) !== undefined) return panel;
+  const at = String(value);
+  const node = nodeAt(panel, path);
+  const held = node && isGroup(node) && node.overrides && Object.hasOwn(node.overrides, at) ? node.overrides[at]!.label : undefined;
+  if (label.trim() === '' ? held === undefined : held === label) return panel;
+  return updateNode(panel, path, (n) => {
+    if (!isGroup(n)) return n;
+    const { overrides, ...rest } = n;
+    const { [at]: _old, ...others } = overrides ?? {};
+    const next = label.trim() === '' ? others : { ...others, [at]: { label } };
+    return Object.keys(next).length ? { ...rest, overrides: next } : rest;
+  });
 }

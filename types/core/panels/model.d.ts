@@ -65,7 +65,10 @@ export interface Group {
     readonly cell?: Cell;
     /** 1–16, for everything in it. */
     readonly channel?: Num;
-    /** What one instance of a repeated group has of its own, by its parameter's value. */
+    /**
+     * What one instance of a repeated group has of its own, by its parameter's value (a whole number as written by
+     * `String`). The reader keeps one only for a value the repeat produces, and at most `MAX_OVERRIDES` of them.
+     */
     readonly overrides?: Readonly<Record<string, {
         readonly label?: string;
     }>>;
@@ -106,5 +109,7 @@ export declare const isGroup: (node: PanelNode) => node is Group;
 export declare const MAX_DEPTH = 16;
 /** The most columns a grid has, and the furthest cell. */
 export declare const MAX_GRID = 64;
+/** The most overrides a repeated group keeps. */
+export declare const MAX_OVERRIDES = 64;
 /** A panel from what was kept: anything. Junk is dropped field by field; what has no id is no panel. */
 export declare function readPanel(v: unknown): Panel | null;

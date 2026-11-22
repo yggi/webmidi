@@ -10,7 +10,7 @@
    * other a grid; a child's `cell` places it. What the panel couldn't resolve is said under its name.
    */
   import { PanelRuntime, type ControlInstance, type InstanceNode } from '../../core/panels/index';
-  import { samePath, type Cell, type NodePath, type Panel } from '../../core/panels/index';
+  import { repeatValueOf, samePath, type Cell, type NodePath, type Panel } from '../../core/panels/index';
   import { isBlackKey } from '../../core/keyboard';
   import Fader from './Fader.svelte';
   import Keys from './Keys.svelte';
@@ -38,9 +38,11 @@
     onselect?: (source: NodePath | null) => void;
     /** The place chosen: every instance of it is marked. */
     selected?: NodePath | null;
+    /** One instance of a repeated group, by its value: drawn as marked on top of the place chosen (the editor's, for the instance whose label is being edited). */
+    marked?: { source: NodePath; value: number } | null;
   }
 
-  let { panel, runtime: given, onsend, bar = true, onselect, selected = null }: Props = $props();
+  let { panel, runtime: given, onsend, bar = true, onselect, selected = null, marked = null }: Props = $props();
 
   /** A press that chooses, in an editor: it goes no further, so a control in a group chooses the control. */
   const choose = (e: Event, source: NodePath | null) => {
@@ -182,6 +184,7 @@
     <section
       class="group {shape(n.columns)}"
       class:picked={samePath(n.source, selected)}
+      class:marked={!!marked && samePath(n.source, marked.source) && repeatValueOf(n.key) === marked.value}
       style={place(n.cell)}
       aria-label={n.label || n.key}
       tabindex={onselect ? 0 : undefined}
@@ -413,6 +416,12 @@
   .editing :is(.ctl, .group).picked {
     outline: 2px solid var(--_accent);
     outline-offset: 1px;
+  }
+  /* one instance of the group chosen, while its row in the inspector is focused: filled as well as outlined, so it stands out from the others that are chosen with it */
+  .editing .group.marked {
+    outline: 3px solid var(--_accent);
+    outline-offset: 2px;
+    background: color-mix(in srgb, var(--_accent) 14%, transparent);
   }
   .editing .group:focus-visible,
   .pick:focus-visible {

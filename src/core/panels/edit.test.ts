@@ -16,12 +16,16 @@ import {
   nodeAt,
   ofKind,
   removeNode,
+  overrideProblem,
+  repeatValueOf,
+  repeatValues,
   samePath,
+  setOverride,
   updateNode,
 } from './edit';
 import { EXAMPLE_MIXER, EXAMPLE_PLAY } from './examples';
 import { instantiate } from './instantiate';
-import { BINDING_KINDS, CONTROL_TYPES, isGroup, MAX_DEPTH, MAX_GRID, readPanel, type Control, type NodePath, type Panel, type PanelNode } from './model';
+import { BINDING_KINDS, CONTROL_TYPES, isGroup, MAX_DEPTH, MAX_GRID, MAX_OVERRIDES, readPanel, type Control, type Group, type NodePath, type Panel, type PanelNode } from './model';
 
 const ids = (panel: Panel, path = { at: [] as number[] }) => childrenAt(panel, path)!.map((n) => (isGroup(n) ? n.group : n.id));
 
@@ -440,5 +444,88 @@ describe('what a binding’s number may be', () => {
       expect(at(top).errors, kind).toEqual([]);
       expect(at(top + 1).errors, kind).toHaveLength(1);
     }
+  });
+});
+
+describe('the instances of a repeated group, and the label each may have of its own', () => {
+  const strips: NodePath = { at: [0] };
+  const label = (panel: Panel, value: number) => (instantiate(panel).children[value - 1] as { label: string }).label;
+  const overrides = (panel: Panel) => (nodeAt(panel, strips) as Group).overrides;
+  /** A panel with one group repeated from 1 to `to`. */
+  const repeated = (to: number | string, extra: Partial<Group> = {}): Panel => ({
+    id: 'p',
+    name: 'P',
+    children: [{ group: 'g', label: 'S{n}', repeat: { name: 'n', from: 1, to }, children: [{ type: 'label', id: 'l', label: 'L' }], ...extra }],
+  });
+
+  it('lists the values the repeat gives, from the instances: an end that is an expression too, and a group inside another repeat once for each value', () => {
+    expect(repeatValues(instantiate(EXAMPLE_MIXER), strips)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(repeatValues(instantiate(repeated('2 + 1')), strips)).toEqual([1, 2, 3]);
+    expect(repeatValues(instantiate(repeated(0)), strips)).toEqual([]);
+    const nested: Panel = {
+      id: 'p',
+      name: 'P',
+      children: [{ group: 'outer', repeat: { name: 'o', from: 1, to: 3 }, children: [{ group: 'row', repeat: { name: 'r', from: 5, to: 6 }, children: [] }] }],
+    };
+    expect(repeatValues(instantiate(nested), { at: [0, 0] })).toEqual([5, 6]);
+    expect(repeatValues(instantiate(EXAMPLE_PLAY), { at: [1] })).toEqual([]);
+  });
+  it('reads the value out of an instance’s key: the number in the last brackets, none for a key without them', () => {
+    expect([repeatValueOf('strips[3]'), repeatValueOf('strips[3]/row[10]'), repeatValueOf('play/row[-2]'), repeatValueOf('tone'), repeatValueOf('a[1]/b')]).toEqual([
+      3,
+      10,
+      -2,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('sets the label of one instance, and the drawn strip says it; the others and the panel given are as they were', () => {
+    const named = setOverride(EXAMPLE_MIXER, strips, 3, 'Drums');
+    expect(overrides(named)).toEqual({ '3': { label: 'Drums' }, '8': { label: 'FX' } });
+    expect([label(named, 3), label(named, 4), label(named, 8)]).toEqual(['Drums', '4', 'FX']);
+    expect(overrides(EXAMPLE_MIXER)).toEqual({ '8': { label: 'FX' } });
+    expect(overrideProblem(EXAMPLE_MIXER, strips, 3, 'Drums')).toBeUndefined();
+    expect(readPanel(JSON.parse(JSON.stringify(named)))).toEqual(named);
+  });
+  it('changes one that is there, and an empty text removes it: the last one takes the field with it, and an empty text where there is none is no change', () => {
+    const once = setOverride(repeated(4), strips, 2, 'Two');
+    expect(overrides(setOverride(once, strips, 2, 'Deux'))).toEqual({ '2': { label: 'Deux' } });
+    expect(overrides(setOverride(setOverride(once, strips, 3, 'Three'), strips, 2, ''))).toEqual({ '3': { label: 'Three' } });
+    expect(Object.keys(nodeAt(setOverride(once, strips, 2, '  '), strips)!)).not.toContain('overrides');
+    const none = repeated(4);
+    expect(setOverride(none, strips, 2, '')).toBe(none);
+    expect(setOverride(once, strips, 2, 'Two')).toBe(once);
+  });
+  it(
+    'is refused in words for a value the repeat doesn’t give, a group that doesn’t repeat, a place that is no group, and a ' +
+      MAX_OVERRIDES +
+      'th override; the panel is left as it was',
+    () => {
+      const panel = repeated(4);
+      expect(overrideProblem(panel, strips, 9, 'x')).toBe('The repeat doesn’t give 9: it gives 1 to 4.');
+      expect(overrideProblem(panel, strips, 0, 'x')).toBe('The repeat doesn’t give 0: it gives 1 to 4.');
+      expect(overrideProblem(repeated(0), strips, 1, 'x')).toBe('The repeat gives nothing.');
+      expect(overrideProblem(EXAMPLE_PLAY, { at: [1] }, 1, 'x')).toBe('Only a group that repeats has instances.');
+      expect(overrideProblem(EXAMPLE_PLAY, { at: [1, 0] }, 1, 'x')).toBeUndefined();
+      expect(setOverride(panel, strips, 9, 'x')).toBe(panel);
+      expect(setOverride(EXAMPLE_PLAY, { at: [1] }, 1, 'x')).toBe(EXAMPLE_PLAY);
+      const full = repeated(MAX_OVERRIDES + 6, { overrides: Object.fromEntries(Array.from({ length: MAX_OVERRIDES }, (_, i) => [String(i + 1), { label: `L${i + 1}` }])) });
+      expect(overrideProblem(full, strips, MAX_OVERRIDES + 1, 'x')).toBe(`A group keeps at most ${MAX_OVERRIDES} overrides.`);
+      expect(setOverride(full, strips, MAX_OVERRIDES + 1, 'x')).toBe(full);
+      // (one already there is changed or cleared at the limit, and clearing makes room)
+      expect(overrideProblem(full, strips, 5, 'changed')).toBeUndefined();
+      expect(overrideProblem(setOverride(full, strips, 5, ''), strips, MAX_OVERRIDES + 1, 'x')).toBeUndefined();
+    },
+  );
+  it('leaves instantiate as it was for a panel with no override: the two examples draw the labels they did', () => {
+    expect(instantiate(EXAMPLE_PLAY).children.map((c) => c.label)).toEqual(['TONE', 'WHEELS', 'PLAY']);
+    expect(
+      instantiate(EXAMPLE_MIXER)
+        .children.slice(0, 8)
+        .map((c) => (c as { label: string }).label),
+    ).toEqual(['1', '2', '3', '4', '5', '6', '7', 'FX']);
+    const bare = repeated(3);
+    expect(instantiate(setOverride(bare, strips, 2, '')).children.map((c) => (c as { label: string }).label)).toEqual(['S1', 'S2', 'S3']);
   });
 });

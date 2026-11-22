@@ -4,7 +4,54 @@ import { EXAMPLE_MIXER } from './examples';
 import { MAX_EXPRESSION } from './expr';
 import { instantiate } from './instantiate';
 import { exportPanel, importPanel, loadLibrary, MAX_FILE, memoryPanelStore, newLibrary, panelOf, readLibrary, removePanel, withPanel } from './library';
-import { isGroup, MAX_DEPTH, readPanel, type Group, type PanelNode } from './model';
+import { isGroup, MAX_DEPTH, MAX_GRID, readPanel, type Group, type PanelNode } from './model';
+
+describe('an override of a repeated group', () => {
+  const over = (repeat: unknown, overrides: unknown) => (readPanel({ id: 'a', children: [{ group: 'g', repeat, overrides, children: [] }] })!.children[0] as Group).overrides;
+  const L = (label: string) => ({ label });
+  const mixer = { name: 'ch', from: 1, to: 8 };
+
+  it('is kept for each value the repeat produces, the ends included, and for no other: a stale one is dropped', () => {
+    expect(over(mixer, { '1': L('A'), '4': L('D'), '8': L('H') })).toEqual({ '1': L('A'), '4': L('D'), '8': L('H') });
+    expect(over(mixer, { '0': L('x'), '9': L('y'), '-1': L('z'), '2': L('kept') })).toEqual({ '2': L('kept') });
+    expect(over(mixer, { '0': L('x'), '9': L('y') })).toBeUndefined();
+  });
+  it('follows the values instantiate gives the repeat: its ends rounded, and none for a repeat that runs backwards', () => {
+    expect(over({ name: 'n', from: 0.6, to: 2.4 }, { '0': L('a'), '1': L('b'), '2': L('c'), '3': L('d') })).toEqual({ '1': L('b'), '2': L('c') });
+    expect(over({ name: 'n', from: 5, to: 1 }, { '1': L('a'), '5': L('b') })).toBeUndefined();
+    const g = (overrides: Record<string, { label: string }>): Group => ({
+      group: 'g',
+      repeat: { name: 'n', from: 0.6, to: 2.4 },
+      children: [{ type: 'label', label: '{n}' }],
+      overrides,
+    });
+    const labels = (panel: { id: string; name: string; children: Group[] }) => instantiate(panel).children.map((c) => (c as { label: string }).label);
+    expect(labels({ id: 'p', name: 'P', children: [g({ '1': L('b') })] })).toEqual(['b', '']);
+  });
+  it('is dropped where a key is not a whole number as the repeat names it: a word, a fraction, a leading zero, a plus', () => {
+    expect(over(mixer, { a: L('a'), '2.5': L('b'), '02': L('c'), '+3': L('d'), ' 4': L('e'), '1e0': L('f'), '5': L('ok') })).toEqual({ '5': L('ok') });
+  });
+  it('is dropped by a group that does not repeat: nothing would ever read it', () => {
+    expect(over(undefined, { '1': L('A') })).toBeUndefined();
+  });
+  it('is kept where a repeat’s end is an expression, whose values are not known here, and only for a whole number', () => {
+    expect(over({ name: 'ch', from: 1, to: 'n * 2' }, { '3': L('c'), '40': L('d'), x: L('e') })).toEqual({ '3': L('c'), '40': L('d') });
+    expect(over({ name: 'ch', from: 'a', to: 8 }, { '9': L('c') })).toEqual({ '9': L('c') });
+  });
+  it(`is at most ${MAX_GRID} to a group, the lowest values kept`, () => {
+    const many = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [String(i + 1), L(`L${i + 1}`)]));
+    const kept = over({ name: 'n', from: 1, to: 100 }, many)!;
+    expect(Object.keys(kept)).toHaveLength(MAX_GRID);
+    expect(Object.keys(kept)[0]).toBe('1');
+    expect(kept[String(MAX_GRID)]).toEqual(L(`L${MAX_GRID}`));
+    expect(kept[String(MAX_GRID + 1)]).toBeUndefined();
+  });
+  it('is read as written: a panel written is a panel read, and the example’s override stays', () => {
+    const written = { id: 'a', name: 'a', children: [{ group: 'g', repeat: mixer, overrides: { '3': L('Drums') }, children: [] }] };
+    expect(readPanel(JSON.parse(JSON.stringify(written)))).toEqual(written);
+    expect(readPanel(JSON.parse(JSON.stringify(EXAMPLE_MIXER)))).toEqual(EXAMPLE_MIXER);
+  });
+});
 
 describe('readPanel', () => {
   it('reads a panel written as it was', () => {
@@ -39,7 +86,7 @@ describe('readPanel', () => {
         { type: 'pads', notes: [36, 200, 'x', 38] },
         { type: 'keyboard', low: -1, high: 72 },
         { group: 'not a name', children: [{ type: 'knob' }] },
-        { group: 'g', repeat: { name: 'i', from: 1 }, columns: 4, overrides: { '1': { label: 'One' }, '2': 'Two' }, children: [{ type: 'label', label: 'L' }] },
+        { group: 'g', repeat: { name: 'i', from: 1, to: 3 }, columns: 4, overrides: { '1': { label: 'One' }, '2': 'Two' }, children: [{ type: 'label', label: 'L' }] },
         { group: 'u', use: 't', with: { ok: 1, 'not ok': 2, bad: {} }, children: [{ type: 'knob' }] },
       ],
     });
@@ -50,7 +97,7 @@ describe('readPanel', () => {
         { type: 'knob', cell: { row: 3 }, bind: [{ kind: 'cc' }] },
         { type: 'pads', notes: [36, 38] },
         { type: 'keyboard', high: 72 },
-        { group: 'g', columns: 4, overrides: { '1': { label: 'One' } }, children: [{ type: 'label', label: 'L' }] },
+        { group: 'g', repeat: { name: 'i', from: 1, to: 3 }, columns: 4, overrides: { '1': { label: 'One' } }, children: [{ type: 'label', label: 'L' }] },
         { group: 'u', use: 't', with: { ok: 1 } },
       ],
     });
@@ -61,7 +108,9 @@ describe('readPanel', () => {
       JSON.parse('{"id":"a","templates":{"__proto__":{"params":["n"],"children":[]}},"children":[{"group":"g","overrides":{"__proto__":{"label":"P"}},"children":[]}]}'),
     );
     expect(Object.keys(read!.templates!)).toEqual(['__proto__']);
-    expect(Object.keys((read!.children[0] as Group).overrides!)).toEqual(['__proto__']);
+    // (an override is kept by a whole number the repeat gives, so a key `__proto__` there is dropped, not made the object's prototype)
+    expect((read!.children[0] as Group).overrides).toBeUndefined();
+    expect(({} as { label?: unknown }).label).toBeUndefined();
     expect(({} as { params?: unknown }).params).toBeUndefined();
   });
 

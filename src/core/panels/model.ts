@@ -85,7 +85,10 @@ export interface Group {
   readonly cell?: Cell;
   /** 1–16, for everything in it. */
   readonly channel?: Num;
-  /** What one instance of a repeated group has of its own, by its parameter's value. */
+  /**
+   * What one instance of a repeated group has of its own, by its parameter's value (a whole number as written by
+   * `String`). The reader keeps one only for a value the repeat produces, and at most `MAX_OVERRIDES` of them.
+   */
   readonly overrides?: Readonly<Record<string, { readonly label?: string }>>;
   /** Its children, inline: they see the scope the group stands in, and its parameter. */
   readonly children?: readonly PanelNode[];
@@ -135,6 +138,8 @@ export const MAX_DEPTH = 16;
 const MAX_TEXT = 64;
 /** The most columns a grid has, and the furthest cell. */
 export const MAX_GRID = 64;
+/** The most overrides a repeated group keeps. */
+export const MAX_OVERRIDES = MAX_GRID;
 
 // ---- reading ----
 
@@ -193,23 +198,40 @@ const record = <T>(v: unknown, key: (k: string) => boolean, value: (x: unknown) 
   return entries.length ? Object.fromEntries(entries) : undefined;
 };
 
+/**
+ * The overrides of a repeated group that the repeat can reach: a key is a whole number as `String` writes it, and where
+ * both ends of the repeat are plain numbers, one of the values `instantiate` gives it (its ends rounded); where an end is
+ * an expression its values aren't known here, so any whole number stays. Past `MAX_OVERRIDES` the lowest values are kept.
+ */
+function overridesOf(v: unknown, repeat: Repeat): Group['overrides'] {
+  const { from, to } = repeat;
+  const reach = typeof from === 'number' && typeof to === 'number' ? ([Math.round(from), Math.round(to)] as const) : null;
+  const read = record(
+    v,
+    (k) => k.length <= MAX_TEXT && Number.isSafeInteger(Number(k)) && String(Number(k)) === k && (!reach || (Number(k) >= reach[0] && Number(k) <= reach[1])),
+    (o) => (isRecord(o) && text(o.label) !== undefined ? { label: text(o.label)! } : undefined),
+  );
+  if (!read) return undefined;
+  const lowest = Object.entries(read)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .slice(0, MAX_OVERRIDES);
+  return Object.fromEntries(lowest);
+}
+
 function group(v: Record<string, unknown>, depth: number): Group {
   const param = isRecord(v.repeat) ? name(v.repeat.name) : undefined;
   const from = isRecord(v.repeat) ? num(v.repeat.from) : undefined;
   const to = isRecord(v.repeat) ? num(v.repeat.to) : undefined;
   const use = name(v.use);
+  const repeat = param !== undefined && from !== undefined && to !== undefined ? { name: param, from, to } : undefined;
   return kept({
     group: v.group as string,
     label: text(v.label),
-    repeat: param !== undefined && from !== undefined && to !== undefined ? { name: param, from, to } : undefined,
+    repeat,
     columns: isInt(v.columns, 1, MAX_GRID) ? v.columns : undefined,
     cell: cell(v.cell),
     channel: num(v.channel),
-    overrides: record(
-      v.overrides,
-      (k) => k.length <= MAX_TEXT,
-      (o) => (isRecord(o) && text(o.label) !== undefined ? { label: text(o.label)! } : undefined),
-    ),
+    overrides: repeat ? overridesOf(v.overrides, repeat) : undefined,
     children: use === undefined ? nodes(v.children, depth + 1) : undefined,
     use,
     with: use === undefined ? undefined : record(v.with, (k) => name(k) !== undefined, num),
