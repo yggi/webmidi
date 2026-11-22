@@ -1,0 +1,3 @@
+### Added
+
+- `@yggi/webmidi/panels` edits templates: `extractTemplate` (a group's children into a new template, its parameters the names they read that the group's scope gave), `detachTemplate` (a copy of a template's children in the group, the template removed when no group uses it), `renameTemplate` and `renameParam` (every use, `with` key and expression follows), each with a `…Problem` saying in words why not (`templateProblem`, `detachProblem`, `renameTemplateProblem`, `renameParamProblem`); what plays is unchanged by each. The editor's side follows ([#72](https://github.com/yggi/webmidi/issues/72)).

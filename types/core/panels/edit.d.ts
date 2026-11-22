@@ -1,3 +1,11 @@
+/**
+ * A panel edited (decision 005, the editor's pure part): each operation takes a panel and a place (`NodePath`) and
+ * gives a new panel, so an editor keeps nothing of its own but what is selected. A place inside a template is the
+ * template's, so a change there is a change to every group that uses it; adding into a group that uses a template
+ * adds to the template. An operation on a place that isn't there gives the panel as it was. A node moves among its
+ * siblings, or into another group or out of its own, as one operation (`moveNode`), refused in words (`moveProblem`)
+ * wherever it would change what the node means or what the reader keeps.
+ */
 import { type Binding, type Control, type ControlType, type Group, type NodePath, type Panel, type PanelNode } from './model';
 export declare const samePath: (a: NodePath | null | undefined, b: NodePath | null | undefined) => boolean;
 /** The node at a place, or undefined: nothing there, or the empty path (which is the panel or the template itself). */
